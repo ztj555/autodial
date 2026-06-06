@@ -244,6 +244,15 @@ class ConnectFragment : Fragment() {
             channelStatusRow = view.findViewById(R.id.channelStatusRow)
             channelStatusText = view.findViewById(R.id.channelStatusText)
 
+            // 使用说明书
+            val guideView = view.findViewById<TextView>(R.id.usageGuideText)
+            guideView.text = "① 电脑端打开 AutoDial，获取 4 位配对码\n" +
+                "② 输入配对码，点击「连接」\n" +
+                "③ 连接成功后在电脑上点号码即可拨号\n\n" +
+                "💡 不在同一WiFi？高级设置→连接策略→自动\n" +
+                "💡 切换SIM卡？设置→拨号模式\n" +
+                "💡 连不上？检查电脑防火墙放行端口 35432"
+
             // v7: 云服务器内联列表（纯配置UI，无连接动作）
             cloudServerListContainer = view.findViewById(R.id.cloudServerListContainer)
             cloudServerAddBtn = view.findViewById(R.id.cloudServerAddBtn)
@@ -258,6 +267,7 @@ class ConnectFragment : Fragment() {
             cloudServerTestBtn.setOnClickListener { testAllServers() }
             cloudServerSyncBtn.setOnClickListener { syncFromPC() }
             refreshCloudServerList()
+            autoTestServersOnStart()
 
             // 拨号自动复制号码开关
             autoCopySwitch = view.findViewById(R.id.autoCopySwitch)
@@ -292,20 +302,7 @@ class ConnectFragment : Fragment() {
             dialAnimationTextPreview.text = prefCtrl.getDialAnimationText()
 
             view.findViewById<View>(R.id.dialAnimationRow).setOnClickListener {
-                val current = prefCtrl.getDialAnimationMode()
-                val nextMode = when (current) {
-                    DialAnimationOverlay.MODE_OFF -> DialAnimationOverlay.MODE_BOUNCE
-                    DialAnimationOverlay.MODE_BOUNCE -> DialAnimationOverlay.MODE_FIREWORK
-                    DialAnimationOverlay.MODE_FIREWORK -> DialAnimationOverlay.MODE_COMBINE
-                    DialAnimationOverlay.MODE_COMBINE -> DialAnimationOverlay.MODE_PULSE
-                    DialAnimationOverlay.MODE_PULSE -> DialAnimationOverlay.MODE_SPARKLE
-                    else -> DialAnimationOverlay.MODE_OFF
-                }
-                prefCtrl.setDialAnimationMode(nextMode)
-                updateDialAnimationUI(nextMode)
-                if (nextMode != DialAnimationOverlay.MODE_OFF) {
-                    DialAnimationOverlay.show(requireActivity())
-                }
+                showAnimationListDialog()
             }
 
             view.findViewById<View>(R.id.dialAnimationTextRow).setOnClickListener {
@@ -645,46 +642,61 @@ class ConnectFragment : Fragment() {
         }
     }
 
+    /** 弹窗列表选择动画效果 */
+    private fun showAnimationListDialog() {
+        if (!isAdded) return
+        val currentMode = prefCtrl.getDialAnimationMode()
+        val modes = listOf(
+            DialAnimationOverlay.MODE_OFF, DialAnimationOverlay.MODE_BOUNCE,
+            DialAnimationOverlay.MODE_FIREWORK, DialAnimationOverlay.MODE_COMBINE,
+            DialAnimationOverlay.MODE_PULSE, DialAnimationOverlay.MODE_SPARKLE,
+            DialAnimationOverlay.MODE_SLIDE_UP, DialAnimationOverlay.MODE_FADE_SCALE,
+            DialAnimationOverlay.MODE_SHAKE, DialAnimationOverlay.MODE_FLIP_IN,
+            DialAnimationOverlay.MODE_HEARTBEAT
+        )
+        val labels = modes.map { DialAnimationOverlay.MODE_LABELS[it] ?: "未知" }.toTypedArray()
+        val currentIdx = modes.indexOf(currentMode).coerceAtLeast(0)
+
+        AlertDialog.Builder(requireActivity())
+            .setTitle("拨号动画效果")
+            .setSingleChoiceItems(labels, currentIdx) { dialog, which ->
+                val selected = modes[which]
+                prefCtrl.setDialAnimationMode(selected)
+                updateDialAnimationUI(selected)
+                if (selected != DialAnimationOverlay.MODE_OFF) {
+                    DialAnimationOverlay.show(requireActivity())
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
     private fun updateDialAnimationUI(mode: Int) {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
-        when (mode) {
-            DialAnimationOverlay.MODE_OFF -> {
-                dialAnimationSwitch.text = "关"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
-                dialAnimationSwitch.setTextColor(Color.parseColor("#888888"))
-                dialAnimationDesc.text = "拨通电话时显示动画"
-            }
-            DialAnimationOverlay.MODE_FIREWORK -> {
-                dialAnimationSwitch.text = "效果1"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
-                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
-                dialAnimationDesc.text = "烟花绽放 - 文字弹出+粒子火花"
-            }
-            DialAnimationOverlay.MODE_BOUNCE -> {
-                dialAnimationSwitch.text = "效果2"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
-                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
-                dialAnimationDesc.text = "弹性弹跳 - 文字飞入+跳动"
-            }
-            DialAnimationOverlay.MODE_COMBINE -> {
-                dialAnimationSwitch.text = "效果3"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
-                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
-                dialAnimationDesc.text = "弹性飞入 + 烟花绽放"
-            }
-            DialAnimationOverlay.MODE_PULSE -> {
-                dialAnimationSwitch.text = "效果4"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
-                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
-                dialAnimationDesc.text = "脉冲扩散 - 同心圆波纹"
-            }
-            DialAnimationOverlay.MODE_SPARKLE -> {
-                dialAnimationSwitch.text = "效果5"
-                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
-                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
-                dialAnimationDesc.text = "闪烁星光 - 文字光晕+星点"
-            }
+        val label = DialAnimationOverlay.MODE_LABELS[mode] ?: "未知"
+        dialAnimationSwitch.text = label
+        if (mode == DialAnimationOverlay.MODE_OFF) {
+            dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
+            dialAnimationSwitch.setTextColor(Color.parseColor("#888888"))
+        } else {
+            dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+            dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
+        }
+        dialAnimationDesc.text = when (mode) {
+            DialAnimationOverlay.MODE_OFF -> "拨通电话时显示动画"
+            DialAnimationOverlay.MODE_BOUNCE -> "弹跳飞入 - 文字飞入+跳动"
+            DialAnimationOverlay.MODE_FIREWORK -> "烟花绽放 - 文字弹出+粒子"
+            DialAnimationOverlay.MODE_COMBINE -> "弹跳飞入 + 烟花绽放"
+            DialAnimationOverlay.MODE_PULSE -> "脉冲扩散 - 同心圆波纹"
+            DialAnimationOverlay.MODE_SPARKLE -> "闪烁星光 - 光晕+星点"
+            DialAnimationOverlay.MODE_SLIDE_UP -> "向上滑入 - 底部升起"
+            DialAnimationOverlay.MODE_FADE_SCALE -> "缩放淡入 - 由小变大"
+            DialAnimationOverlay.MODE_SHAKE -> "左右抖动 - 趣味抖动"
+            DialAnimationOverlay.MODE_FLIP_IN -> "翻转进入 - 水平翻转"
+            DialAnimationOverlay.MODE_HEARTBEAT -> "心跳脉冲 - 缩放心跳"
+            else -> "拨通电话时显示动画"
         }
     }
 
@@ -877,12 +889,30 @@ class ConnectFragment : Fragment() {
         cloudServerCurrentText.text = if (list.isEmpty()) "未配置" else "${list.size} 台 · ${cloudCtrl.stripCloudPrefix(list.first())}"
     }
 
-    /** 渲染服务器内联列表，每行带连通状态 */
+    /** 服务器标签: A/B/C/D/E/... */
+    private fun serverLabel(i: Int) = ('A' + i).toString()
+
+    /** 排序：上次连接的服务器排到第一 */
+    private fun sortServers(servers: MutableList<String>) {
+        val lastServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            .getString("cloud_server", "") ?: ""
+        if (lastServer.isNotEmpty()) {
+            val idx = servers.indexOf(lastServer)
+            if (idx > 0) {
+                servers.removeAt(idx)
+                servers.add(0, lastServer)
+                cloudCtrl.saveServerList(servers)
+            }
+        }
+    }
+
+    /** 渲染服务器内联列表，每行带连通状态和测试结果 */
     private fun refreshCloudServerList() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
         val servers = cloudCtrl.getServerList()
+        sortServers(servers)  // 上次用的排到第一
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
         val isCloudOk = DialService.isCloudConnected
@@ -890,7 +920,7 @@ class ConnectFragment : Fragment() {
         if (servers.isEmpty()) {
             cloudServerListContainer.addView(TextView(requireContext()).apply {
                 text = "未配置服务器，点击「+ 添加」"
-                textSize = 12f; setTextColor(Color.parseColor(colors.text2))
+                textSize = 13f; setTextColor(Color.parseColor(colors.text2))
                 setPadding(0, 8, 0, 8)
             })
             return
@@ -912,10 +942,10 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.text2))
             })
 
-            // 序号
+            // 序号 (A/B/C/D/E...)
             row.addView(TextView(requireContext()).apply {
-                text = listOf("\u2460","\u2461","\u2462","\u2463","\u2464").getOrElse(i) { "${i+1}" }
-                textSize = 11f; setPadding(0, 0, 8, 0)
+                text = serverLabel(i)
+                textSize = 13f; setPadding(0, 0, 8, 0)
                 setTextColor(Color.parseColor(if (i == 0) colors.gold else colors.text2))
             })
 
@@ -1078,6 +1108,22 @@ class ConnectFragment : Fragment() {
         }
     }
 
+    /** 打开app自动测试服务器，仅在服务器列表有变化时执行 */
+    private var lastTestedServerCount = 0
+
+    private fun autoTestServersOnStart() {
+        val servers = cloudCtrl.getServerList()
+        if (servers.isEmpty()) return
+        if (servers.size == lastTestedServerCount) return
+        lastTestedServerCount = servers.size
+        lifecycleScope.launch {
+            if (!isAdded) return@launch
+            val results = cloudCtrl.testAllServers(servers)
+            if (!isAdded) return@launch
+            refreshCloudServerListWithResults(results.toMap())
+        }
+    }
+
     /** 从PC/Gist同步服务器列表 */
     private fun syncFromPC() {
         if (!isAdded) return
@@ -1089,6 +1135,8 @@ class ConnectFragment : Fragment() {
                 cloudCtrl.saveServerList(list)
                 updateCloudServerCurrentText()
                 refreshCloudServerList()
+                lastTestedServerCount = 0  // 重置标记，下次会自动测试
+                autoTestServersOnStart()
                 Toast.makeText(requireActivity(), "已同步 ${list.size} 台服务器", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(requireActivity(), "同步失败或PC端未配置", Toast.LENGTH_SHORT).show()
@@ -1290,7 +1338,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val currentKey = prefCtrl.getDialModeKey()
         val modes = DialMode.entries
-        val labels = modes.map { it.label }.toTypedArray()
+        val labels = modes.map { "${it.label}  —  ${it.desc}" }.toTypedArray()
         val currentIndex = modes.indexOfFirst { it.key == currentKey }
 
         AlertDialog.Builder(requireActivity())
@@ -1299,6 +1347,10 @@ class ConnectFragment : Fragment() {
                 val selected = modes[which]
                 prefCtrl.setDialModeKey(selected.key)
                 dialModeCurrent.text = selected.label
+                // 同步到CallLogFragment顶栏
+                try {
+                    (requireActivity() as MainActivity).syncDialModeUI()
+                } catch (_: Exception) {}
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)

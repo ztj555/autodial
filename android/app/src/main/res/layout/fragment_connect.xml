@@ -239,7 +239,7 @@
                     android:layout_marginStart="8dp"
                     android:text="局域网"
                     android:tag="text"
-                    android:textSize="15sp" />
+                    android:textSize="16sp" />
 
                 <TextView
                     android:id="@+id/lanStatusText"
@@ -286,7 +286,7 @@
                     android:layout_marginStart="8dp"
                     android:text="云中转"
                     android:tag="text"
-                    android:textSize="15sp" />
+                    android:textSize="16sp" />
 
                 <TextView
                     android:id="@+id/cloudStatusText"
@@ -329,7 +329,7 @@
                 android:layout_weight="1"
                 android:text="▶ 高级设置"
                 android:tag="text"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/advancedArrow"
@@ -372,7 +372,7 @@
                         android:layout_height="wrap_content"
                         android:text="连接策略"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/connectionStrategyDesc"
@@ -381,7 +381,7 @@
                         android:layout_marginTop="2dp"
                         android:text="自动(LAN优先，云端备份)"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -421,7 +421,7 @@
                         android:layout_height="wrap_content"
                         android:text="通道状态"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/channelStatusText"
@@ -430,7 +430,7 @@
                         android:layout_marginTop="2dp"
                         android:text="未连接"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
             </LinearLayout>
@@ -462,7 +462,7 @@
                         android:layout_height="wrap_content"
                         android:text="自动连接"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -470,7 +470,7 @@
                         android:layout_marginTop="2dp"
                         android:text="断开后自动重连电脑"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -514,7 +514,7 @@
                         android:layout_height="wrap_content"
                         android:text="云服务器"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/cloudServerCurrentText"
@@ -523,7 +523,7 @@
                         android:layout_marginTop="2dp"
                         android:text="未配置"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
             </LinearLayout>
@@ -613,7 +613,7 @@
                 android:layout_weight="1"
                 android:text="▶ 其他设置"
                 android:tag="text"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/otherArrow"
@@ -656,7 +656,7 @@
                         android:layout_height="wrap_content"
                         android:text="电池优化"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/batteryOptStatus"
@@ -665,7 +665,7 @@
                         android:layout_marginTop="2dp"
                         android:text="检测中..."
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -725,7 +725,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号模式"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/dialModeCurrent"
@@ -734,7 +734,7 @@
                         android:layout_marginTop="2dp"
                         android:text="弹窗"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -777,7 +777,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号自动复制号码"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -785,7 +785,7 @@
                         android:layout_marginTop="2dp"
                         android:text="拨号成功后自动复制号码到剪贴板"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -829,7 +829,7 @@
                         android:layout_height="wrap_content"
                         android:text="复制号码弹窗提醒"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -837,7 +837,7 @@
                         android:layout_marginTop="2dp"
                         android:text="复制号码后弹出已复制提示"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -881,7 +881,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号动画效果"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/dialAnimationDesc"
@@ -890,7 +890,7 @@
                         android:layout_marginTop="2dp"
                         android:text="拨通电话时显示动画"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -937,7 +937,7 @@
                         android:layout_height="wrap_content"
                         android:text="动画显示文字"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/dialAnimationTextPreview"
@@ -946,7 +946,7 @@
                         android:layout_marginTop="2dp"
                         android:text="财运+1"
                         android:textColor="#C9A84C"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -991,7 +991,7 @@
                         android:layout_height="wrap_content"
                         android:text="导出日志"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/exportLogInfo"
@@ -1000,7 +1000,7 @@
                         android:layout_marginTop="2dp"
                         android:text="导出调试日志"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -1045,7 +1045,7 @@
                         android:layout_height="wrap_content"
                         android:text="主题"
                         android:tag="text"
-                        android:textSize="15sp" />
+                        android:textSize="16sp" />
 
                     <TextView
                         android:id="@+id/themeCurrentName"
@@ -1054,7 +1054,7 @@
                         android:layout_marginTop="2dp"
                         android:text="暗金 · 暗夜"
                         android:tag="text2"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
 
@@ -1100,6 +1100,35 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- 使用说明书 -->
+        <LinearLayout
+            android:id="@+id/usageGuideCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:tag="bg2"
+            android:background="#1A1D24"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📖 使用说明"
+                android:textColor="#C9A84C"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:paddingBottom="10dp" />
+
+            <TextView
+                android:id="@+id/usageGuideText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#A09070"
+                android:textSize="12sp"
+                android:lineSpacingExtra="4dp" />
+        </LinearLayout>
+
         <!-- 底部版本 -->
         <TextView
             android:id="@+id/aboutText"
@@ -1107,8 +1136,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="20dp"
-            android:text="AutoDial v4.0\n统一连接管道 · 策略驱动"
-            android:textSize="11sp"
+            android:text="融鑫汇跨屏拨号"
+            android:textSize="12sp"
             android:letterSpacing="0.02"
             android:tag="text2"
             android:gravity="center" />

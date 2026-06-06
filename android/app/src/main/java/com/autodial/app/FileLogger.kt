@@ -25,7 +25,7 @@ import java.util.*
 object FileLogger {
 
     private const val TAG = "FileLogger"
-    private const val MAX_LOG_DAYS = 7
+    private const val MAX_LOG_DAYS = 1
     private const val MAX_LOG_SIZE = 10 * 1024 * 1024L  // v6: 10MB 单文件上限
     private const val FLUSH_INTERVAL_MS = 3000L
     private const val MEMORY_BUFFER_MAX = 1000         // v6: 内存降级环形缓冲区上限

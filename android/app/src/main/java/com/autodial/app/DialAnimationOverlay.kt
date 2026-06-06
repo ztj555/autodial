@@ -35,6 +35,26 @@ object DialAnimationOverlay {
     const val MODE_COMBINE = 3
     const val MODE_PULSE = 4
     const val MODE_SPARKLE = 5
+    const val MODE_SLIDE_UP = 6
+    const val MODE_FADE_SCALE = 7
+    const val MODE_SHAKE = 8
+    const val MODE_FLIP_IN = 9
+    const val MODE_HEARTBEAT = 10
+
+    /** 所有效果标签 */
+    val MODE_LABELS = mapOf(
+        MODE_OFF to "关闭",
+        MODE_BOUNCE to "弹跳飞入",
+        MODE_FIREWORK to "烟花绽放",
+        MODE_COMBINE to "弹跳+烟花",
+        MODE_PULSE to "脉冲扩散",
+        MODE_SPARKLE to "闪烁星光",
+        MODE_SLIDE_UP to "向上滑入",
+        MODE_FADE_SCALE to "缩放淡入",
+        MODE_SHAKE to "左右抖动",
+        MODE_FLIP_IN to "翻转进入",
+        MODE_HEARTBEAT to "心跳脉冲"
+    )
 
     /** 从 SharedPreferences 读取动画模式 */
     fun loadMode(context: Context): Int {
@@ -76,7 +96,7 @@ object DialAnimationOverlay {
                 val params = WindowManager.LayoutParams().apply {
                     width = WindowManager.LayoutParams.MATCH_PARENT
                     height = WindowManager.LayoutParams.MATCH_PARENT
-                    gravity = Gravity.CENTER
+                    gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
                     flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -194,7 +214,7 @@ object DialAnimationOverlay {
             val w = width.toFloat()
             val h = height.toFloat()
             val cx = w / 2f
-            val cy = h / 2f
+            val cy = h * 2f / 3f  // 屏幕从下往上2/3处
 
             canvas.save()
 
@@ -204,6 +224,11 @@ object DialAnimationOverlay {
                 MODE_COMBINE -> drawCombined(canvas, cx, cy, w, progress)
                 MODE_PULSE -> drawPulse(canvas, cx, cy, w, h, progress)
                 MODE_SPARKLE -> drawSparkle(canvas, cx, cy, w, h, progress)
+                MODE_SLIDE_UP -> drawSlideUp(canvas, cx, cy, h, progress)
+                MODE_FADE_SCALE -> drawFadeScale(canvas, cx, cy, progress)
+                MODE_SHAKE -> drawShake(canvas, cx, cy, progress)
+                MODE_FLIP_IN -> drawFlipIn(canvas, cx, cy, progress)
+                MODE_HEARTBEAT -> drawHeartbeat(canvas, cx, cy, progress)
             }
 
             canvas.restore()
@@ -458,7 +483,68 @@ object DialAnimationOverlay {
             }
         }
 
-        // ==================== 粒子绘制 ====================
+        // ==================== 上滑淡入 ====================
+        private fun drawSlideUp(canvas: Canvas, cx: Float, cy: Float, h: Float, progress: Float) {
+            val textAlpha = ((progress / 0.2f).coerceIn(0f, 1f) * 255).toInt()
+            val textY = cy + h * 0.3f * (1f - easeOutCubic((progress / 0.6f).coerceIn(0f, 1f)))
+            if (progress > 0.7f) textPaint.alpha = ((1f - (progress - 0.7f) / 0.3f) * 255).toInt().coerceIn(0, 255)
+            else textPaint.alpha = textAlpha.coerceIn(0, 255)
+            val yOff = textY - (textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, cx, yOff, textPaint)
+        }
+
+        // ==================== 缩放淡入 ====================
+        private fun drawFadeScale(canvas: Canvas, cx: Float, cy: Float, progress: Float) {
+            val t = (progress / 0.4f).coerceIn(0f, 1f)
+            val scale = 0.3f + 0.7f * easeOutBack(t)
+            val alpha = if (progress > 0.7f) ((1f - (progress - 0.7f) / 0.3f) * 255).toInt() else (t * 255).toInt()
+            textPaint.alpha = alpha.coerceIn(0, 255)
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(scale, scale)
+            val yOff = -(textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, 0f, yOff, textPaint)
+            canvas.restore()
+        }
+
+        // ==================== 左右抖动 ====================
+        private fun drawShake(canvas: Canvas, cx: Float, cy: Float, progress: Float) {
+            val shakeAmplitude = (20 * dp * (1f - (progress / 0.5f).coerceIn(0f, 1f)))
+            val shakeX = cx + shakeAmplitude * Math.sin(progress * 30).toFloat()
+            val shakeY = cy + shakeAmplitude * 0.3f * Math.cos(progress * 35).toFloat()
+            val alpha = if (progress > 0.7f) ((1f - (progress - 0.7f) / 0.3f) * 255).toInt() else 255
+            textPaint.alpha = alpha.coerceIn(0, 255)
+            val yOff = shakeY - (textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, shakeX, yOff, textPaint)
+        }
+
+        // ==================== 翻转进入 ====================
+        private fun drawFlipIn(canvas: Canvas, cx: Float, cy: Float, progress: Float) {
+            val t = (progress / 0.5f).coerceIn(0f, 1f)
+            val scaleX = Math.cos((1f - t) * Math.PI).toFloat().let { if (it < 0) -it else it }.coerceIn(0.1f, 1f)
+            val alpha = if (progress > 0.7f) ((1f - (progress - 0.7f) / 0.3f) * 255).toInt() else (t * 255).toInt()
+            textPaint.alpha = alpha.coerceIn(0, 255)
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(scaleX, 1f)
+            val yOff = -(textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, 0f, yOff, textPaint)
+            canvas.restore()
+        }
+
+        // ==================== 心跳脉冲 ====================
+        private fun drawHeartbeat(canvas: Canvas, cx: Float, cy: Float, progress: Float) {
+            val beat = 0.7f + 0.3f * Math.sin(progress * Math.PI * 4).toFloat()
+            val scale = 1f + 0.2f * beat * (1f - (progress / 0.8f).coerceIn(0f, 1f))
+            val alpha = if (progress > 0.7f) ((1f - (progress - 0.7f) / 0.3f) * 255).toInt() else 255
+            textPaint.alpha = alpha.coerceIn(0, 255)
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(scale, scale)
+            val yOff = -(textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, 0f, yOff, textPaint)
+            canvas.restore()
+        }
         private fun drawParticles(canvas: Canvas, cx: Float, cy: Float, progress: Float, delayOffset: Float = 0f) {
             val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 

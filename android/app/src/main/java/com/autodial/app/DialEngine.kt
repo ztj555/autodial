@@ -101,7 +101,11 @@ class DialEngine(
             DialMode.ALTERNATE -> { val l = callLogDb.getLastSimSlotGlobal(); if (l >= 0) 1 - l else 0 }
             DialMode.OPPOSITE -> {
                 val d = callLogDb.getLastDialInfo(number, service)
-                if (d != null && d.first >= 0) 1 - d.first
+                if (d != null && d.first >= 0) {
+                    // 仅在2天内的通话记录才用相反模式，超过的弹窗让用户选
+                    val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
+                    if (d.second >= twoDaysAgo) 1 - d.first else -1
+                }
                 else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
             }
             DialMode.ROUND_SELECT -> {

@@ -160,6 +160,11 @@ class MainActivity : AppCompatActivity() {
         // Fragment 各自有 ThemeManager 监听器，无需手动通知
     }
 
+    /** 同步拨号模式UI（ConnectFragment修改后通知CallLogFragment顶栏） */
+    fun syncDialModeUI() {
+        (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ThemeManager.removeOnThemeChangedListener(themeListener)
@@ -199,6 +204,7 @@ class MainActivity : AppCompatActivity() {
             1 -> {
                 tabCallLogLabel.setTextColor(activeColor)
                 (fragments.getOrNull(1) as? CallLogFragment)?.refreshIfNeeded()
+                (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
             }
             2 -> {
                 tabStatsLabel.setTextColor(activeColor)

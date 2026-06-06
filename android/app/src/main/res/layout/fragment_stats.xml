@@ -36,14 +36,12 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 今日数据双列 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:layout_marginBottom="10dp">
 
-                <!-- 今日拨号次数 -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -59,9 +57,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日拨号(财运)"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTodayCount"
@@ -69,7 +66,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="0"
-                        android:textColor="#FF4D4F"
+                        android:textColor="#E8DCC8"
                         android:textSize="44sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -83,7 +80,6 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <!-- 今日通时 -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -99,9 +95,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日通时(财气)"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTodayDuration"
@@ -109,7 +104,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="0.0"
-                        android:textColor="#A78BFA"
+                        android:textColor="#E8DCC8"
                         android:textSize="44sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -124,7 +119,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 累计数据双列 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -146,9 +140,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周拨号(财运)"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalCount"
@@ -186,9 +179,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周通时(财气)"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalDuration"
@@ -212,7 +204,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- 财运卡片 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -233,10 +224,9 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="💰 本月财运"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:text="本月财运"
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTodayLuck"
@@ -244,14 +234,12 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0"
-                        android:tag="goldLight"
-                        android:textColor="#F0C040"
+                        android:textColor="#E8DCC8"
                         android:textSize="36sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
 
                 </LinearLayout>
-
 
                 <View
                     android:layout_width="1dp"
@@ -270,10 +258,9 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🪙 本月财气"
-                        android:tag="text2"
-                        android:textColor="#A09070"
-                        android:textSize="12sp" />
+                        android:text="本月财气"
+                        android:textColor="#C9A84C"
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalLuck"
@@ -281,8 +268,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0"
-                        android:tag="goldLight"
-                        android:textColor="#F0C040"
+                        android:textColor="#E8DCC8"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -301,7 +287,6 @@
                 android:textColor="#605040"
                 android:textSize="11sp" />
 
-            <!-- 近7天趋势标题 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
