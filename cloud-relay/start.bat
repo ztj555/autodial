@@ -1,33 +1,32 @@
 @echo off
 chcp 65001 >nul
-title AutoDial 云中转服务器
+title AutoDial Cloud Relay v2
 
-REM === 获取当前目录 ===
+REM === Get current directory ===
 set "EXE_DIR=%~dp0"
 cd /d "%EXE_DIR%"
 
-REM === 检查 node.exe ===
-if not exist "%EXE_DIR%\node.exe" (
-    echo [错误] 未找到 node.exe！
-    echo.
-    echo 请按照以下步骤操作：
-    echo 1. 访问 https://nodejs.org/dist/v18.20.0/
-    echo 2. 下载 node-v18.20.0-win-x64.zip
-    echo 3. 解压后将 node.exe 放到此目录下
-    echo.
-    pause
-    start https://nodejs.org/dist/v18.20.0/
-    exit /b 1
+REM === Check python ===
+set "PYTHON="
+for /f "delims=" %%p in ('where python 2^>nul') do set "PYTHON=%%p"
+if "%PYTHON%"=="" (
+    for /f "delims=" %%p in ('where python3 2^>nul') do set "PYTHON=%%p"
 )
-
-REM === 检查 server.js ===
-if not exist "%EXE_DIR%\server.js" (
-    echo [错误] 未找到 server.js！
+if "%PYTHON%"=="" (
+    echo [Error] Python not found. Please install Python 3.8+ and add to PATH.
+    echo Visit: https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-REM === 解析命令行参数 ===
+REM === Check cloud_relay.py ===
+if not exist "%EXE_DIR%\python\cloud_relay.py" (
+    echo [Error] python\cloud_relay.py not found.
+    pause
+    exit /b 1
+)
+
+REM === Parse args ===
 set PORT=35430
 :parse_args
 if "%~1"=="" goto :start
@@ -47,21 +46,9 @@ shift
 goto :parse_args
 
 :start
-REM === 显示启动信息 ===
-echo.
-echo ================================
-echo  AutoDial 云中转服务器
-echo ================================
-echo.
-echo  监听端口：%PORT%
-echo.
-echo  请确保防火墙已放行此端口
-echo  按 Ctrl+C 停止服务器
-echo.
-echo ================================
-echo.
+REM === Start server (no console output — quiet mode) ===
+set PYTHONUNBUFFERED=1
+"%PYTHON%" -B "%EXE_DIR%\python\cloud_relay.py" --port %PORT%
 
-REM === 启动服务器 ===
-"%EXE_DIR%\node.exe" "%EXE_DIR%\server.js" --port %PORT%
-
+REM If python exits unexpectedly, pause for error reading
 pause

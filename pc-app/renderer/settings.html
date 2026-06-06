@@ -270,6 +270,42 @@
     margin-left: 0;
   }
 
+  /* 连接策略选择器 — 纵向大卡片 */
+  .select-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+  .select-row .select-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 14px;
+    margin-left: 0;
+    font-size: 13px;
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .select-row .select-option .so-icon {
+    font-size: 18px;
+    margin-bottom: 2px;
+  }
+  .select-row .select-option .so-label {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .select-row .select-option .so-desc {
+    font-size: 11px;
+    opacity: 0.7;
+    font-weight: 400;
+  }
+  .select-row .select-option.active .so-desc {
+    color: inherit;
+  }
+
   .footer {
     text-align: center;
     padding: 10px;
@@ -350,23 +386,39 @@
 
     <div class="spacer"></div>
 
-    <!-- 云中转 -->
-    <div class="section-title">云中转</div>
+    <!-- v7: 连接策略 -->
+    <div class="section-title">连接策略</div>
 
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">启用云中转</div>
-        <div class="setting-desc">手机不在同一局域网时通过云服务器中转</div>
+    <div class="setting-item column">
+      <div class="setting-info" style="width:100%">
+        <div class="setting-label">连接方式</div>
+        <div class="setting-desc">控制 PC 端如何与手机建立连接通道</div>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="cloudEnabled">
-        <span class="sw-track"></span>
-      </label>
+      <div class="select-row" id="strategySelect" style="margin-top:10px;">
+        <div class="select-option active" data-value="auto">
+          <span class="so-icon">🔀</span>
+          <span class="so-label">自动 (LAN优先)</span>
+          <span class="so-desc">局域网可用时优先LAN，不可用时自动走云端</span>
+        </div>
+        <div class="select-option" data-value="lan_only">
+          <span class="so-icon">🏠</span>
+          <span class="so-label">仅局域网</span>
+          <span class="so-desc">只在同一WiFi下连接，不使用云端中转</span>
+        </div>
+        <div class="select-option" data-value="cloud_only">
+          <span class="so-icon">☁️</span>
+          <span class="so-label">仅云中转</span>
+          <span class="so-desc">始终通过云服务器中转，不使用局域网</span>
+        </div>
+      </div>
     </div>
+
+    <!-- 云中转 -->
+    <div class="section-title">云中转服务器</div>
 
     <div class="setting-item column" id="cloudServerSection">
       <div class="setting-info" style="width:100%">
-        <div class="setting-label">云服务器管理</div>
+        <div class="setting-label">服务器管理</div>
         <div class="setting-desc">支持多个云服务器，自动遍历连接，成功即停</div>
       </div>
       <div id="cloudServerSummary" style="margin-top:8px;font-size:12px;color:var(--gold-light);">未配置服务器</div>
@@ -490,6 +542,19 @@ document.querySelectorAll('#modeSelect .select-option').forEach(opt => {
   });
 });
 
+// ==================== 连接策略 ====================
+let currentStrategy = 'auto';
+
+document.querySelectorAll('#strategySelect .select-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#strategySelect .select-option').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    currentStrategy = opt.dataset.value;
+    saveSetting('connectionStrategy', currentStrategy);
+    window.api.send('update-cloud-config', { strategy: currentStrategy, servers: cloudServers });
+  });
+});
+
 // ==================== 云服务器管理 ====================
 let cloudServers = [];
 
@@ -509,7 +574,7 @@ function updateCloudSummary() {
 }
 
 function saveCloudServers(servers) {
-  // 去重：保留第一个出现的，基于规范化地址（去掉 ws:// 前缀）
+  // 去重：基于规范化地址
   const seen = new Set();
   cloudServers = servers.filter(s => {
     const key = stripCloudPrefix(s);
@@ -518,8 +583,7 @@ function saveCloudServers(servers) {
     return true;
   });
   updateCloudSummary();
-  const enabled = document.getElementById('cloudEnabled').checked;
-  window.api.send('update-cloud-config', { enabled, servers: cloudServers });
+  window.api.send('update-cloud-config', { strategy: currentStrategy, servers: cloudServers });
 }
 
 function renderServerList() {
@@ -548,11 +612,10 @@ function renderServerList() {
     connBtn.textContent = '连接';
     connBtn.style.cssText = 'padding:4px 10px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;';
     connBtn.addEventListener('click', () => {
-      const enabled = document.getElementById('cloudEnabled').checked;
-      window.api.send('connect-cloud-specific', addr);
       document.getElementById('cloudStatus').textContent = '正在连接 ' + stripCloudPrefix(addr) + ' ...';
       document.getElementById('cloudStatus').style.color = 'var(--gold)';
       document.getElementById('serverModal').style.display = 'none';
+      window.api.send('connect-cloud-specific', addr);
     });
 
     // 上移按钮
@@ -664,13 +727,14 @@ async function loadSettings() {
     document.getElementById('autoStart').checked = s.autoStart || false;
     // 隐藏界面启动
     document.getElementById('silentStart').checked = s.silentStart || false;
-    // 云中转
-    document.getElementById('cloudEnabled').checked = s.cloudEnabled || false;
-    // 加载多云服务器列表
-    cloudServers = Array.isArray(s.cloudServers) ? s.cloudServers :
-      (s.cloudServer ? [s.cloudServer] : []);
+    // 云中转策略
+    currentStrategy = s.connectionStrategy || 'auto';
+    cloudServers = Array.isArray(s.cloudServers) ? s.cloudServers : [];
     updateCloudSummary();
-    document.getElementById('cloudServerSection').style.opacity = (s.cloudEnabled ? '1' : '0.5');
+    // 连接策略选择器
+    document.querySelectorAll('#strategySelect .select-option').forEach(o =>
+      o.classList.toggle('active', o.dataset.value === currentStrategy)
+    );
     // 主题设置
     currentTheme = s.theme || 'dark-gold';
     currentMode = s.mode || 'dark';
@@ -717,18 +781,6 @@ document.getElementById('silentStart').addEventListener('change', function() {
   saveSetting('silentStart', this.checked);
 });
 
-// ==================== 云中转开关 ====================
-document.getElementById('cloudEnabled').addEventListener('change', function() {
-  const enabled = this.checked;
-  saveCloudServers(cloudServers);
-  window.api.send('update-cloud-config', { enabled, servers: cloudServers });
-  document.getElementById('cloudServerSection').style.opacity = enabled ? '1' : '0.5';
-  if (enabled && cloudServers.length === 0) {
-    document.getElementById('cloudStatus').textContent = '请先添加云服务器地址';
-    document.getElementById('cloudStatus').style.color = 'var(--red)';
-  }
-});
-
 // 监听云端状态
 if (typeof window !== 'undefined' && window.api) {
   window.api.on('cloud-status', (data) => {
@@ -737,11 +789,9 @@ if (typeof window !== 'undefined' && window.api) {
     if (data.connected) {
       statusEl.textContent = '✅ 已连接: ' + stripCloudPrefix(data.server || '');
       statusEl.style.color = 'var(--green)';
-    } else if (data.enabled && data.servers && data.servers.length > 0) {
+    } else if (data.strategy !== 'lan_only' && data.servers && data.servers.length > 0) {
       statusEl.textContent = '遍历连接中...';
       statusEl.style.color = 'var(--gold)';
-    } else if (data.enabled) {
-      statusEl.textContent = '';
     } else {
       statusEl.textContent = '';
     }

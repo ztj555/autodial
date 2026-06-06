@@ -11,8 +11,8 @@ android {
         applicationId "com.autodial.app"
         minSdk 24
         targetSdk 34
-        versionCode 428
-        versionName "4.37"
+        versionCode 430
+        versionName "4.39"
     }
 
     signingConfigs {

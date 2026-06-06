@@ -212,7 +212,6 @@ class ConnectFragment : Fragment() {
             }
             // v8: 每日励志语
             motivationalText.text = getDailyMotivationalQuote()
-            }
 
             // 主题设置入口
             themeSettingRow.setOnClickListener {
