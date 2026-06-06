@@ -510,8 +510,8 @@ object DialAnimationOverlay {
         // ==================== 左右抖动 ====================
         private fun drawShake(canvas: Canvas, cx: Float, cy: Float, progress: Float) {
             val shakeAmplitude = (20 * dp * (1f - (progress / 0.5f).coerceIn(0f, 1f)))
-            val shakeX = cx + shakeAmplitude * Math.sin(progress * 30).toFloat()
-            val shakeY = cy + shakeAmplitude * 0.3f * Math.cos(progress * 35).toFloat()
+            val shakeX = cx + shakeAmplitude * Math.sin(progress * 30.0).toFloat()
+            val shakeY = cy + shakeAmplitude * 0.3f * Math.cos(progress * 35.0).toFloat()
             val alpha = if (progress > 0.7f) ((1f - (progress - 0.7f) / 0.3f) * 255).toInt() else 255
             textPaint.alpha = alpha.coerceIn(0, 255)
             val yOff = shakeY - (textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
