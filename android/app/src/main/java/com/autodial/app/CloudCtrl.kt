@@ -99,9 +99,17 @@ class CloudCtrl(private val context: Context) {
     // ==================== Gist 同步 ====================
 
     suspend fun fetchServerListFromGist(): List<String>? = withContext(Dispatchers.IO) {
-        try {
-            URL("https://gist.githubusercontent.com/raw/autodial-servers/main/list.txt")
-                .readText().lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-        } catch (_: Exception) { null }
+        val sources = listOf(
+            "https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt",
+            "https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt"
+        )
+        val allServers = mutableSetOf<String>()
+        for (url in sources) {
+            try {
+                val lines = URL(url).readText().lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+                allServers.addAll(lines)
+            } catch (_: Exception) { }
+        }
+        if (allServers.isEmpty()) null else allServers.toList()
     }
 }

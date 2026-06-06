@@ -58,6 +58,7 @@ class ConnectFragment : Fragment() {
     private lateinit var cloudServerAddBtn: TextView
     private lateinit var cloudServerTestBtn: TextView
     private lateinit var cloudServerSyncBtn: TextView
+    private lateinit var cloudServerFetchBtn: TextView
     private lateinit var cloudStatusText: TextView
     private lateinit var connectionStrategyRow: View
     private lateinit var connectionStrategyDesc: TextView
@@ -246,7 +247,7 @@ class ConnectFragment : Fragment() {
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
-            guideView.text = "① 电脑端打开 AutoDial，获取 4 位配对码\n" +
+            guideView.text = "① 电脑端打开 跨屏拨号.exe，获取 4 位配对码\n" +
                 "② 输入配对码，点击「连接」\n" +
                 "③ 连接成功后在电脑上点号码即可拨号\n\n" +
                 "💡 不在同一WiFi？高级设置→连接策略→自动\n" +
@@ -258,6 +259,7 @@ class ConnectFragment : Fragment() {
             cloudServerAddBtn = view.findViewById(R.id.cloudServerAddBtn)
             cloudServerTestBtn = view.findViewById(R.id.cloudServerTestBtn)
             cloudServerSyncBtn = view.findViewById(R.id.cloudServerSyncBtn)
+            cloudServerFetchBtn = view.findViewById(R.id.cloudServerFetchBtn)
             cloudServerCurrentText = view.findViewById(R.id.cloudServerCurrentText)
             cloudStatusText = view.findViewById(R.id.cloudStatusText)
             cloudStatusDot = view.findViewById(R.id.cloudStatusDot)
@@ -266,6 +268,7 @@ class ConnectFragment : Fragment() {
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
             cloudServerTestBtn.setOnClickListener { testAllServers() }
             cloudServerSyncBtn.setOnClickListener { syncFromPC() }
+            cloudServerFetchBtn.setOnClickListener { fetchServersFromNetwork() }
             refreshCloudServerList()
             autoTestServersOnStart()
 
@@ -1135,11 +1138,31 @@ class ConnectFragment : Fragment() {
                 cloudCtrl.saveServerList(list)
                 updateCloudServerCurrentText()
                 refreshCloudServerList()
-                lastTestedServerCount = 0  // 重置标记，下次会自动测试
+                lastTestedServerCount = 0
                 autoTestServersOnStart()
                 Toast.makeText(requireActivity(), "已同步 ${list.size} 台服务器", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(requireActivity(), "同步失败或PC端未配置", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** 网络获取：从 GitHub/Gitee 拉取云服务器列表 */
+    private fun fetchServersFromNetwork() {
+        if (!isAdded) return
+        Toast.makeText(requireActivity(), "正在从网络获取...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val list = cloudCtrl.fetchServerListFromGist()
+            if (!isAdded) return@launch
+            if (list != null && list.isNotEmpty()) {
+                cloudCtrl.saveServerList(list)
+                updateCloudServerCurrentText()
+                refreshCloudServerList()
+                lastTestedServerCount = 0
+                autoTestServersOnStart()
+                Toast.makeText(requireActivity(), "已获取 ${list.size} 台服务器", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(requireActivity(), "获取失败，请检查网络", Toast.LENGTH_SHORT).show()
             }
         }
     }

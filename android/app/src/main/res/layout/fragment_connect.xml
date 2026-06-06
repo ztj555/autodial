@@ -589,6 +589,19 @@
                     android:text="从PC同步"
                     android:textColor="#C9A84C"
                     android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/cloudServerFetchBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:layout_marginStart="6dp"
+                    android:tag="goldBtnText"
+                    android:gravity="center"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="网络获取"
+                    android:textColor="#C9A84C"
+                    android:textSize="11sp" />
             </LinearLayout>
         </LinearLayout>
 
