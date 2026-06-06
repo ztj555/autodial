@@ -22,7 +22,13 @@ import java.util.Random
  * 使用 WindowManager 全屏悬浮窗
  */
 object DialAnimationOverlay {
-    // ...
+
+    private const val TAG = "DialAnimation"
+    private var windowManager: WindowManager? = null
+    private var overlayView: OverlayView? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private val dismissRunnable = Runnable { dismissInternal() }
+
     const val MODE_OFF = 0
     const val MODE_FIREWORK = 1
     const val MODE_BOUNCE = 2
@@ -436,10 +442,12 @@ object DialAnimationOverlay {
             val baseSeed = (startTime / 50).toInt()
             for (i in 0 until 12) {
                 val angle = ((baseSeed + i * 31) % 360).toFloat() * Math.PI.toFloat() / 180f
-                val dist = 50 * dp + 120 * dp * Math.sin((baseSeed + i * 17) * 0.3).toFloat().absoluteValue
-                val sx = cx + Math.cos(angle.toDouble()).toFloat() * dist
-                val sy = cy + Math.sin(angle.toDouble()).toFloat() * dist
-                val sparkAlpha = (150 + 105 * Math.sin((baseSeed + i * 7) * 0.5)).toInt().coerceIn(30, 255)
+                val dist = (50f * dp + 120f * dp * Math.sin((baseSeed + i * 17) * 0.3).toFloat()).let {
+                    if (it < 0) -it else it
+                }
+                val sx = cx + Math.cos((angle.toDouble())).toFloat() * dist
+                val sy = cy + Math.sin((angle.toDouble())).toFloat() * dist
+                val sparkAlpha = (150 + (105 * Math.sin((baseSeed + i * 7) * 0.5)).toInt()).coerceIn(30, 255)
                 sparkPaint.color = when (i % 3) {
                     0 -> Color.parseColor("#FFD700")
                     1 -> Color.parseColor("#FFA500")
