@@ -12,30 +12,28 @@ import java.util.Random
 /**
  * 拨号成功后的视觉反馈动画悬浮窗
  *
- * 支持三种模式：
- * - MODE_FIREWORK (1): 烟花绽放 - 文字从中心放大弹出，伴随粒子火花四溅，淡出
- * - MODE_BOUNCE (2): 弹性弹跳 - 文字从左侧弹性飞入，跳动两下后稳定居中
+ * 五种模式：
+ * - MODE_BOUNCE (2): 弹性弹跳 - 文字从左侧弹性飞入，跳动两下后稳定居中 [默认]
+ * - MODE_FIREWORK (1): 烟花绽放 - 文字从中心放大弹出，粒子火花四溅
  * - MODE_COMBINE (3): 结合 - 弹性飞入 + 烟花绽放
+ * - MODE_PULSE (4): 脉冲扩散 - 多层同心圆向外扩散
+ * - MODE_SPARKLE (5): 闪烁星光 - 文字亮起，星点随机闪烁
  *
- * 使用 WindowManager 全屏悬浮窗，可在任何界面显示（通话界面/桌面/其他APP）
+ * 使用 WindowManager 全屏悬浮窗
  */
 object DialAnimationOverlay {
-
-    private const val TAG = "DialAnimation"
-    private var windowManager: WindowManager? = null
-    private var overlayView: OverlayView? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private val dismissRunnable = Runnable { dismissInternal() }
-
+    // ...
     const val MODE_OFF = 0
     const val MODE_FIREWORK = 1
     const val MODE_BOUNCE = 2
     const val MODE_COMBINE = 3
+    const val MODE_PULSE = 4
+    const val MODE_SPARKLE = 5
 
     /** 从 SharedPreferences 读取动画模式 */
     fun loadMode(context: Context): Int {
         return context.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-            .getInt("dial_animation_mode", MODE_OFF)
+            .getInt("dial_animation_mode", MODE_BOUNCE)
     }
 
     /** 从 SharedPreferences 读取自定义文字 */
@@ -198,6 +196,8 @@ object DialAnimationOverlay {
                 MODE_FIREWORK -> drawFirework(canvas, cx, cy, progress)
                 MODE_BOUNCE -> drawBounce(canvas, cx, cy, w, progress)
                 MODE_COMBINE -> drawCombined(canvas, cx, cy, w, progress)
+                MODE_PULSE -> drawPulse(canvas, cx, cy, w, h, progress)
+                MODE_SPARKLE -> drawSparkle(canvas, cx, cy, w, h, progress)
             }
 
             canvas.restore()
@@ -373,6 +373,80 @@ object DialAnimationOverlay {
             // 粒子（延迟到 40% 后才出现）
             if (progress > 0.40f) {
                 drawParticles(canvas, cx, cy, progress, delayOffset = 0.40f)
+            }
+        }
+
+        // ==================== 脉冲扩散效果 ====================
+        private fun drawPulse(canvas: Canvas, cx: Float, cy: Float, w: Float, h: Float, progress: Float) {
+            // 3层同心圆向外扩散，文字居中缩放
+            val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3 * dp }
+            val maxRadius = maxOf(w, h) * 0.6f
+
+            for (layer in 0 until 3) {
+                val delay = layer * 0.12f
+                val adj = ((progress - delay) / 0.6f).coerceIn(0f, 1f)
+                val radius = maxRadius * easeOutCubic(adj)
+                val alpha = (80 * (1f - adj)).toInt().coerceIn(0, 80)
+                pulsePaint.color = when (layer) {
+                    0 -> Color.parseColor("#FFD700")
+                    1 -> Color.parseColor("#FF8C00")
+                    else -> Color.parseColor("#FF6347")
+                }
+                pulsePaint.alpha = alpha.coerceIn(0, 255)
+                canvas.drawCircle(cx, cy, radius, pulsePaint)
+            }
+
+            // 文字居中，轻微缩放
+            val textScale = 1.0f + 0.15f * ((progress / 0.3f).coerceIn(0f, 1f) * (1f - progress / 0.8f).coerceIn(0f, 1f))
+            val textAlpha = if (progress > 0.7f) (255 * (1f - (progress - 0.7f) / 0.3f)).toInt() else 255
+            textPaint.alpha = textAlpha.coerceIn(0, 255)
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(textScale, textScale, 0f, 0f)
+            val yOff = -(textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, 0f, yOff, textPaint)
+            canvas.restore()
+        }
+
+        // ==================== 闪烁星光效果 ====================
+        private fun drawSparkle(canvas: Canvas, cx: Float, cy: Float, w: Float, h: Float, progress: Float) {
+            // 文字从暗到亮渐入，周围随机星点闪烁
+            val textAlpha = ((progress / 0.25f).coerceIn(0f, 1f) * 255).toInt().coerceIn(30, 255)
+            val textScale = 0.6f + 0.4f * ((progress / 0.3f).coerceIn(0f, 1f))
+
+            // 光晕背景
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val glowRadius = 80 * dp * (0.5f + 0.5f * Math.sin(progress * Math.PI * 3).toFloat())
+            bgPaint.shader = RadialGradient(cx, cy, glowRadius,
+                intArrayOf(Color.parseColor("#88FFD700"), Color.parseColor("#00FFD700")),
+                floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, glowRadius, bgPaint)
+
+            // 文字
+            textPaint.alpha = textAlpha.coerceIn(0, 255)
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(textScale, textScale, 0f, 0f)
+            val yOff = -(textPaint.fontMetrics.ascent + textPaint.fontMetrics.descent) / 2f
+            canvas.drawText(text, 0f, yOff, textPaint)
+            canvas.restore()
+
+            // 随机星点（用时间做伪随机种子）
+            val sparkPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val baseSeed = (startTime / 50).toInt()
+            for (i in 0 until 12) {
+                val angle = ((baseSeed + i * 31) % 360).toFloat() * Math.PI.toFloat() / 180f
+                val dist = 50 * dp + 120 * dp * Math.sin((baseSeed + i * 17) * 0.3).toFloat().absoluteValue
+                val sx = cx + Math.cos(angle.toDouble()).toFloat() * dist
+                val sy = cy + Math.sin(angle.toDouble()).toFloat() * dist
+                val sparkAlpha = (150 + 105 * Math.sin((baseSeed + i * 7) * 0.5)).toInt().coerceIn(30, 255)
+                sparkPaint.color = when (i % 3) {
+                    0 -> Color.parseColor("#FFD700")
+                    1 -> Color.parseColor("#FFA500")
+                    else -> Color.parseColor("#FFEC8B")
+                }
+                sparkPaint.alpha = sparkAlpha.coerceIn(0, 255)
+                canvas.drawCircle(sx, sy, 3 * dp, sparkPaint)
             }
         }
 

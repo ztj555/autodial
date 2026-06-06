@@ -215,6 +215,7 @@ class ConnectFragment : Fragment() {
 
             // 电池优化检测
             updateBatteryOptUI()
+            checkBatteryOptFirstTime()
             view.findViewById<View>(R.id.batteryOptRow).setOnClickListener {
                 requestIgnoreBatteryOptimization()
             }
@@ -293,9 +294,11 @@ class ConnectFragment : Fragment() {
             view.findViewById<View>(R.id.dialAnimationRow).setOnClickListener {
                 val current = prefCtrl.getDialAnimationMode()
                 val nextMode = when (current) {
-                    DialAnimationOverlay.MODE_OFF -> DialAnimationOverlay.MODE_FIREWORK
-                    DialAnimationOverlay.MODE_FIREWORK -> DialAnimationOverlay.MODE_BOUNCE
-                    DialAnimationOverlay.MODE_BOUNCE -> DialAnimationOverlay.MODE_COMBINE
+                    DialAnimationOverlay.MODE_OFF -> DialAnimationOverlay.MODE_BOUNCE
+                    DialAnimationOverlay.MODE_BOUNCE -> DialAnimationOverlay.MODE_FIREWORK
+                    DialAnimationOverlay.MODE_FIREWORK -> DialAnimationOverlay.MODE_COMBINE
+                    DialAnimationOverlay.MODE_COMBINE -> DialAnimationOverlay.MODE_PULSE
+                    DialAnimationOverlay.MODE_PULSE -> DialAnimationOverlay.MODE_SPARKLE
                     else -> DialAnimationOverlay.MODE_OFF
                 }
                 prefCtrl.setDialAnimationMode(nextMode)
@@ -665,12 +668,41 @@ class ConnectFragment : Fragment() {
                 dialAnimationDesc.text = "弹性弹跳 - 文字飞入+跳动"
             }
             DialAnimationOverlay.MODE_COMBINE -> {
-                dialAnimationSwitch.text = "结合"
+                dialAnimationSwitch.text = "效果3"
                 dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
                 dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
                 dialAnimationDesc.text = "弹性飞入 + 烟花绽放"
             }
+            DialAnimationOverlay.MODE_PULSE -> {
+                dialAnimationSwitch.text = "效果4"
+                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
+                dialAnimationDesc.text = "脉冲扩散 - 同心圆波纹"
+            }
+            DialAnimationOverlay.MODE_SPARKLE -> {
+                dialAnimationSwitch.text = "效果5"
+                dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+                dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
+                dialAnimationDesc.text = "闪烁星光 - 文字光晕+星点"
+            }
         }
+    }
+
+    /** 首次启动时如未设置电池优化，弹窗引导 */
+    private fun checkBatteryOptFirstTime() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (!isAdded) return
+        val prefs = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("battery_opt_prompted", false)) return // 已提示过
+        prefs.edit().putBoolean("battery_opt_prompted", true).apply()
+        val pm = requireActivity().getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(requireActivity().packageName)) return
+        AlertDialog.Builder(requireActivity())
+            .setTitle("电池优化建议")
+            .setMessage("建议将电池优化设为「无限制」，避免后台连接被系统中断。\n\n是否现在设置？")
+            .setPositiveButton("去设置") { _, _ -> requestIgnoreBatteryOptimization() }
+            .setNegativeButton("稍后", null)
+            .show()
     }
 
     private fun updateBatteryOptUI() {
@@ -780,7 +812,6 @@ class ConnectFragment : Fragment() {
                     "disconnected" -> {
                         statusText.text = "连接已断开"
                         statusText.setTextColor(Color.parseColor(colors.gold))
-                        Toast.makeText(requireActivity(), "与电脑的连接已断开", Toast.LENGTH_SHORT).show()
                     }
                     else -> {
                         statusText.text = "未连接电脑"

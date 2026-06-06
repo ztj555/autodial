@@ -58,7 +58,7 @@ class PrefCtrl(private val context: Context) {
     fun isCopyToastEnabled() = prefs.getBoolean("copy_toast", true)
     fun setCopyToast(enabled: Boolean) = prefs.edit().putBoolean("copy_toast", enabled).apply()
 
-    fun getDialAnimationMode() = prefs.getInt("dial_animation_mode", DialAnimationOverlay.MODE_OFF)
+    fun getDialAnimationMode() = prefs.getInt("dial_animation_mode", DialAnimationOverlay.MODE_BOUNCE)
     fun setDialAnimationMode(mode: Int) = prefs.edit().putInt("dial_animation_mode", mode).apply()
     fun getDialAnimationText() = prefs.getString("dial_animation_text", "财运+1") ?: "财运+1"
     fun setDialAnimationText(text: String) = prefs.edit().putString("dial_animation_text", text).apply()
@@ -71,7 +71,7 @@ class PrefCtrl(private val context: Context) {
 
     fun isCloudEnabled() = prefs.getBoolean("cloud_enabled", false)
 
-    fun getCardOpacity(): Int = prefs.getInt("card_opacity", 0)
+    fun getCardOpacity(): Int = prefs.getInt("card_opacity", 50)
     fun setCardOpacity(value: Int) = prefs.edit().putInt("card_opacity", value).apply()
 
     fun isManuallyDisconnected() = prefs.getBoolean("manual_disconnect", false)

@@ -1107,7 +1107,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="20dp"
-            android:text="跨屏拨号 v3.3\n局域网优先，云中转自动切换"
+            android:text="AutoDial v4.0\n统一连接管道 · 策略驱动"
             android:textSize="11sp"
             android:letterSpacing="0.02"
             android:tag="text2"
