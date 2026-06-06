@@ -243,25 +243,19 @@ class ConnectFragment : Fragment() {
             channelStatusRow = view.findViewById(R.id.channelStatusRow)
             channelStatusText = view.findViewById(R.id.channelStatusText)
 
-            // v6: 云服务器内联操作（始终可见）
+            // v7: 云服务器内联列表（纯配置UI，无连接动作）
             cloudServerListContainer = view.findViewById(R.id.cloudServerListContainer)
             cloudServerAddBtn = view.findViewById(R.id.cloudServerAddBtn)
             cloudServerTestBtn = view.findViewById(R.id.cloudServerTestBtn)
             cloudServerSyncBtn = view.findViewById(R.id.cloudServerSyncBtn)
             cloudServerCurrentText = view.findViewById(R.id.cloudServerCurrentText)
-            // 通道面板中的cloud文字和圆点
             cloudStatusText = view.findViewById(R.id.cloudStatusText)
             cloudStatusDot = view.findViewById(R.id.cloudStatusDot)
 
             updateCloudServerCurrentText()
-
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
-            cloudServerTestBtn.setOnClickListener {
-                val list = cloudCtrl.getServerList()
-                if (list.isEmpty()) Toast.makeText(requireActivity(), "暂无服务器", Toast.LENGTH_SHORT).show()
-                else cloudCtrl.showManagementDialog(requireActivity())
-            }
-            cloudServerSyncBtn.setOnClickListener { fetchServerList() }
+            cloudServerTestBtn.setOnClickListener { testAllServers() }
+            cloudServerSyncBtn.setOnClickListener { syncFromPC() }
             refreshCloudServerList()
 
             // 拨号自动复制号码开关
@@ -846,170 +840,229 @@ class ConnectFragment : Fragment() {
 
     // ==================== 云服务器管理 ====================
 
-    /** 获取已保存的云服务器列表 */
-    private fun getCloudServerList(): MutableList<String> {
-        val prefs = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        val json = prefs.getString("cloud_servers", null)
-        return if (json != null) {
-            try {
-                org.json.JSONArray(json).let { arr ->
-                    val list = mutableListOf<String>()
-                    for (i in 0 until arr.length()) {
-                        list.add(arr.getString(i))
-                    }
-                    list
-                }
-            } catch (_: Exception) {
-                // 向后兼容：从旧的 cloud_server 单值迁移
-                val oldServer = prefs.getString("cloud_server", "") ?: ""
-                if (oldServer.isNotEmpty()) mutableListOf(oldServer) else mutableListOf()
-            }
-        } else {
-            // 向后兼容
-            val oldServer = prefs.getString("cloud_server", "") ?: ""
-            if (oldServer.isNotEmpty()) {
-                val list = mutableListOf(oldServer)
-                saveCloudServerList(list)
-                list
-            } else {
-                mutableListOf()
-            }
-        }
-    }
-
-    /** 去掉 ws:// / wss:// 前缀，用于规范化比较 */
-    private fun stripCloudPrefix(addr: String): String {
-        return when {
-            addr.startsWith("ws://") -> addr.substring(5)
-            addr.startsWith("wss://") -> addr.substring(6)
-            else -> addr
-        }
-    }
-
-    /** 保存云服务器列表到 SharedPreferences（自动去重） */
-    private fun saveCloudServerList(list: List<String>) {
-        // 去重：保留第一个出现的，基于规范化地址
-        val seen = mutableSetOf<String>()
-        val deduped = list.filter { s ->
-            val key = stripCloudPrefix(s)
-            if (seen.contains(key)) false else {
-                seen.add(key)
-                true
-            }
-        }
-        val json = org.json.JSONArray().apply {
-            deduped.forEach { put(it) }
-        }.toString()
-        requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE).edit()
-            .putString("cloud_servers", json)
-            // 同时更新 cloud_server 为列表第一个
-            .putString("cloud_server", if (deduped.isNotEmpty()) deduped[0] else "")
-            .apply()
-    }
-
-    /** 更新当前服务器显示文字 */
     private fun updateCloudServerCurrentText() {
         if (!isAdded) return
-        val list = getCloudServerList()
-        cloudServerCurrentText.text = if (list.isEmpty()) "未配置服务器" else "${list.size} 台服务器 · ${list.first()}"
+        val list = cloudCtrl.getServerList()
+        cloudServerCurrentText.text = if (list.isEmpty()) "未配置" else "${list.size} 台 · ${cloudCtrl.stripCloudPrefix(list.first())}"
     }
 
-    /** v6: 内联渲染云服务器列表 */
+    /** 渲染服务器内联列表，每行带连通状态 */
     private fun refreshCloudServerList() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
         val servers = cloudCtrl.getServerList()
-        val connected = DialService.isCloudConnected
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
+        val isCloudOk = DialService.isCloudConnected
 
         if (servers.isEmpty()) {
             cloudServerListContainer.addView(TextView(requireContext()).apply {
-                text = "暂无服务器，点击下方「+ 添加」"
-                textSize = 12f; setTextColor(Color.parseColor("#605040"))
+                text = "未配置服务器，点击「+ 添加」"
+                textSize = 12f; setTextColor(Color.parseColor(colors.text2))
                 setPadding(0, 8, 0, 8)
             })
             return
         }
 
         servers.forEachIndexed { i, server ->
-            val isCurrent = server == connectedServer && connected && connectedServer.isNotEmpty()
+            val isCurrent = server == connectedServer && isCloudOk
+
             val row = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 6, 0, 6)
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 7, 0, 7)
             }
 
-            // 状态圆点
+            // 连接状态指示灯
             row.addView(TextView(requireContext()).apply {
                 text = if (isCurrent) "\u25CF" else "\u25CB"
-                textSize = 11f; setPadding(0, 0, 6, 0)
-                setTextColor(Color.parseColor(if (isCurrent) colors.green else "#605040"))
+                textSize = 10f; setPadding(0, 0, 6, 0)
+                setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.text2))
             })
 
             // 序号
             row.addView(TextView(requireContext()).apply {
-                text = listOf("①","②","③","④","⑤").getOrElse(i) { "${i+1}" }
-                textSize = 12f; setPadding(0, 0, 8, 0)
-                setTextColor(Color.parseColor(if (i == 0) colors.gold else "#605040"))
+                text = listOf("\u2460","\u2461","\u2462","\u2463","\u2464").getOrElse(i) { "${i+1}" }
+                textSize = 11f; setPadding(0, 0, 8, 0)
+                setTextColor(Color.parseColor(if (i == 0) colors.gold else colors.text2))
             })
 
-            // 地址
-            row.addView(TextView(requireContext()).apply {
-                text = if (isCurrent) "$server \u25C0" else server
-                textSize = 12f; isSingleLine = true
+            // 地址（可长按复制）
+            val disp = cloudCtrl.stripCloudPrefix(server)
+            val addrView = TextView(requireContext()).apply {
+                text = disp; textSize = 12f; isSingleLine = true
                 setTextColor(Color.parseColor(if (isCurrent) colors.gold else colors.text))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            })
+                setOnLongClickListener {
+                    val clip = requireActivity().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clip.setPrimaryClip(android.content.ClipData.newPlainText("server", server))
+                    Toast.makeText(requireActivity(), "已复制: $server", Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+            row.addView(addrView)
 
-            // 上移按钮
+            // 测试按钮（单台）
+            val testBtn = TextView(requireContext()).apply {
+                text = "\u26A1"; textSize = 12f; setPadding(6, 0, 6, 0)
+                setTextColor(Color.parseColor(colors.text2))
+                setOnClickListener { testSingleServer(server, this) }
+            }
+            row.addView(testBtn)
+
+            // 上移
             if (i > 0) row.addView(TextView(requireContext()).apply {
-                text = "\u2191"; textSize = 14f; setPadding(6, 0, 6, 0)
-                setTextColor(Color.parseColor("#A09070"))
+                text = "\u2191"; textSize = 13f; setPadding(4, 0, 4, 0)
+                setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i); servers.add(i - 1, server)
-                    cloudCtrl.saveServerList(servers); refreshCloudServerList()
-                    updateCloudServerCurrentText()
+                    cloudCtrl.saveServerList(servers)
+                    refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
 
-            // 删除按钮
+            // 删除
             row.addView(TextView(requireContext()).apply {
-                text = "\u2715"; textSize = 13f; setPadding(4, 0, 2, 0)
+                text = "\u2715"; textSize = 12f; setPadding(4, 0, 2, 0)
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.saveServerList(servers); refreshCloudServerList()
-                    updateCloudServerCurrentText()
+                    cloudCtrl.saveServerList(servers)
+                    refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
             cloudServerListContainer.addView(row)
         }
     }
 
-    /** v6: 添加云服务器 */
+    /** 添加服务器：提示 ws://1.2.3.4:35430 */
     private fun addCloudServer() {
         if (!isAdded) return
         val input = EditText(requireActivity()).apply {
-            hint = "如: 1.2.3.4:35430"; textSize = 15f
+            hint = "如: ws://1.2.3.4:35430"; textSize = 15f
             setTextColor(Color.parseColor("#E8DCC8")); isSingleLine = true
             setPadding(48, 24, 48, 24)
         }
-        AlertDialog.Builder(requireActivity()).setTitle("添加云服务器")
+        AlertDialog.Builder(requireActivity())
+            .setTitle("添加云服务器")
+            .setMessage("支持 ws:// 或 wss:// 开头\n不写协议默认为 ws://")
             .setView(input)
             .setPositiveButton("添加") { _, _ ->
-                val addr = input.text.toString().trim()
-                if (addr.isNotEmpty()) {
-                    val list = cloudCtrl.getServerList()
-                    if (!list.contains(addr)) {
-                        list.add(addr); cloudCtrl.saveServerList(list)
-                        refreshCloudServerList(); updateCloudServerCurrentText()
-                    } else {
-                        Toast.makeText(requireActivity(), "该地址已存在", Toast.LENGTH_SHORT).show()
-                    }
+                val raw = input.text.toString().trim()
+                if (raw.isEmpty()) return@setPositiveButton
+                val addr = cloudCtrl.normalizeServer(raw)
+                val list = cloudCtrl.getServerList()
+                val normSet = list.map { cloudCtrl.stripCloudPrefix(it) }.toSet()
+                if (normSet.contains(cloudCtrl.stripCloudPrefix(addr))) {
+                    Toast.makeText(requireActivity(), "该地址已存在", Toast.LENGTH_SHORT).show()
+                } else {
+                    list.add(addr); cloudCtrl.saveServerList(list)
+                    refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             }
             .setNegativeButton("取消", null).show()
+    }
+
+    /** 测试全部服务器，在内联列表中更新状态 */
+    private fun testAllServers() {
+        if (!isAdded) return
+        val servers = cloudCtrl.getServerList()
+        if (servers.isEmpty()) {
+            Toast.makeText(requireActivity(), "暂无服务器", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(requireActivity(), "正在测试 ${servers.size} 台...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val results = cloudCtrl.testAllServers(servers)
+            if (!isAdded) return@launch
+            refreshCloudServerListWithResults(results.toMap())
+        }
+    }
+
+    /** 单台测试 */
+    private fun testSingleServer(server: String, indicator: TextView) {
+        indicator.text = "\u23F3"
+        lifecycleScope.launch {
+            val ok = cloudCtrl.testServer(server)
+            if (!isAdded) return@launch
+            indicator.text = if (ok) "\u2705" else "\u274C"
+            indicator.setTextColor(Color.parseColor(if (ok) "#2ECC71" else "#E74C3C"))
+        }
+    }
+
+    /** 带测试结果刷新列表 */
+    private fun refreshCloudServerListWithResults(results: Map<String, Boolean>) {
+        if (!isAdded) return
+        val colors = ThemeManager.getColors(requireContext())
+        cloudServerListContainer.removeAllViews()
+        val servers = cloudCtrl.getServerList()
+        val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            .getString("cloud_server", "") ?: ""
+        val isCloudOk = DialService.isCloudConnected
+
+        servers.forEachIndexed { i, server ->
+            val isCurrent = server == connectedServer && isCloudOk
+            val testOk = results[server]
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 7, 0, 7)
+            }
+
+            row.addView(TextView(requireContext()).apply {
+                text = if (isCurrent) "\u25CF" else "\u25CB"; textSize = 10f; setPadding(0, 0, 6, 0)
+                setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.text2))
+            })
+
+            row.addView(TextView(requireContext()).apply {
+                text = when (testOk) {
+                    true -> "\u2705"
+                    false -> "\u274C"
+                    null -> "\u23F3"
+                }
+                textSize = 11f; setPadding(0, 0, 6, 0)
+            })
+
+            row.addView(TextView(requireContext()).apply {
+                text = cloudCtrl.stripCloudPrefix(server); textSize = 12f; isSingleLine = true
+                setTextColor(Color.parseColor(when {
+                    testOk == true -> colors.green
+                    testOk == false -> colors.red
+                    else -> colors.text
+                }))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+
+            // 删除
+            row.addView(TextView(requireContext()).apply {
+                text = "\u2715"; textSize = 12f; setPadding(4, 0, 2, 0)
+                setTextColor(Color.parseColor(colors.text2))
+                setOnClickListener {
+                    servers.removeAt(i)
+                    cloudCtrl.saveServerList(servers)
+                    refreshCloudServerList(); updateCloudServerCurrentText()
+                }
+            })
+            cloudServerListContainer.addView(row)
+        }
+    }
+
+    /** 从PC/Gist同步服务器列表 */
+    private fun syncFromPC() {
+        if (!isAdded) return
+        Toast.makeText(requireActivity(), "正在同步...", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val list = cloudCtrl.fetchServerListFromGist()
+            if (!isAdded) return@launch
+            if (list != null && list.isNotEmpty()) {
+                cloudCtrl.saveServerList(list)
+                updateCloudServerCurrentText()
+                refreshCloudServerList()
+                Toast.makeText(requireActivity(), "已同步 ${list.size} 台服务器", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(requireActivity(), "同步失败或PC端未配置", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // ==================== 主题 ====================
@@ -1091,13 +1144,6 @@ class ConnectFragment : Fragment() {
                 updateConnectionUI(DialService.isConnected, null)
                 updateAutoConnectUI(prefCtrl.isAutoConnectEnabled())
             }
-        }
-    }
-
-    private fun fetchServerList() {
-        lifecycleScope.launch {
-            val list = cloudCtrl.fetchServerListFromGist()
-            if (list != null) { saveCloudServerList(list); updateCloudServerCurrentText() }
         }
     }
 
