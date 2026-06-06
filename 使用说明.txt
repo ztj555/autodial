@@ -1,0 +1,117 @@
+AutoDial 一键拨号系统使用说明
+================================
+
+一、项目概述
+AutoDial是一套专为电销场景设计的跨屏一键拨号系统，包含4个端：
+1. 手机端 (Android): Kotlin原生APP，接收指令执行拨号/发短信
+2. 电脑端 (PC): Electron桌面程序，WebSocket服务端 + 拨号UI
+3. 云端 (云中继): Python服务，跨网络WebSocket中转
+4. 插件端 (浏览器扩展): Chrome扩展，CRM网页检测手机号
+
+二、快速启动指南
+
+1. 手机端 (无需本地构建，GitHub Actions自动构建)
+   - 访问 GitHub: https://github.com/ztj555/bug
+   - 在仓库设置中配置Secrets:
+     * KEYSTORE_BASE64: 运行 `base64 android/app/autodial-release.p12` 获取
+     * KEYSTORE_PASSWORD: autodial2024
+     * KEY_ALIAS: autodial
+     * KEY_PASSWORD: autodial2024
+   - 推送代码后，GitHub Actions会自动构建APK
+   - 在Actions页面下载APK安装到手机
+
+2. 云端 (本地构建为exe)
+   - 方法1: 直接运行已构建的exe
+     * 位置: cloud-relay/python/dist/cloud_relay_v2.exe
+     * 启动: 运行 "启动云端中继服务.bat" (需要管理员权限)
+   - 方法2: 重新构建exe
+     * 进入 cloud-relay/python 目录
+     * 运行 build.bat 或手动: pyinstaller --onefile cloud_relay_v2.py
+   - 服务启动后:
+     * WebSocket端口: 35430
+     * Web管理界面: http://localhost:35431
+
+3. 电脑端 (一键启动)
+   - 运行 "启动电脑端.bat" (需要管理员权限)
+   - 首次运行会自动安装依赖
+   - 服务启动后:
+     * WebSocket/HTTP端口: 35432
+     * UDP广播发现: 35433
+     * 浏览器扩展API: http://127.0.0.1:35432
+
+4. 一键启动所有服务
+   - 运行 "一键启动所有服务.bat"
+   - 可选择启动所有服务或单独启动
+
+三、首次使用步骤
+
+1. 确保手机和电脑在同一局域网
+2. 手机端安装APK，授予所有必要权限
+3. 电脑端启动后，查看显示的4位配对码
+4. 手机端输入配对码进行连接
+5. 连接成功后，在CRM网页上可看到拨号悬浮按钮
+
+四、连接方式说明
+
+系统支持双通道连接，优先使用局域网直连:
+1. 局域网直连 (优先):
+   - UDP广播发现同一配对码的设备
+   - WebSocket直连，延迟低
+   - 断开后自动尝试重新连接
+
+2. 云端中继 (备选):
+   - 通过云服务器中转，支持跨网络
+   - 适合手机和电脑不在同一网络的情况
+   - 需要云服务器正常运行
+
+五、端口配置
+
+| 端口 | 协议 | 用途 | 需要放行防火墙 |
+|------|------|------|----------------|
+| 35430 | WebSocket | 云中继服务器 | 是 |
+| 35431 | HTTP | 云中继Web管理界面 | 是 |
+| 35432 | WebSocket+HTTP | 电脑端主服务 | 是 |
+| 35433 | UDP | 局域网设备发现 | 是 |
+
+六、GitHub Actions配置
+
+项目已配置自动构建流水线:
+- 触发条件: push到main/master分支
+- 自动构建: Debug APK和Release APK
+- 下载位置: GitHub Actions页面Artifacts区域
+
+七、故障排除
+
+1. 手机端无法连接:
+   - 检查防火墙是否放行35432和35433端口
+   - 检查手机和电脑是否在同一局域网
+   - 尝试重启电脑端和手机端
+
+2. 云中继服务无法启动:
+   - 检查35430和35431端口是否被占用
+   - 检查是否以管理员权限运行
+   - 查看cloud-relay/python/dist/cloud_relay_v2.exe是否存在
+
+3. 电脑端启动失败:
+   - 检查Node.js是否安装
+   - 检查依赖是否安装完成
+   - 查看是否有其他程序占用35432端口
+
+八、开发说明
+
+1. 代码已推送到GitHub: https://github.com/ztj555/bug
+2. 需要设置 GitHub Actions Secrets 才能自动构建（详见 README.md）
+3. 项目结构:
+   - android/: 手机端代码
+   - pc-app/: 电脑端代码
+   - cloud-relay/: 云端代码
+   - AutoDial-Extension/: 浏览器扩展代码
+
+九、注意事项
+
+1. MIUI系统需设置电池白名单避免后台被杀
+2. Android 13+需要动态申请通知权限
+3. Windows防火墙需放行相关端口
+4. 首次连接必须在同一局域网内完成配对
+
+如有问题，请查阅README.md或项目分析报告。
