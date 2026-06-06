@@ -63,7 +63,7 @@ class PrefCtrl(private val context: Context) {
     fun getDialAnimationText() = prefs.getString("dial_animation_text", "财运+1") ?: "财运+1"
     fun setDialAnimationText(text: String) = prefs.edit().putString("dial_animation_text", text).apply()
 
-    fun getDialModeKey() = prefs.getString("dial_mode", DialMode.POPUP.key) ?: DialMode.POPUP.key
+    fun getDialModeKey() = prefs.getString("dial_mode", DialMode.ROUND_SELECT.key) ?: DialMode.ROUND_SELECT.key
     fun setDialModeKey(key: String) = prefs.edit().putString("dial_mode", key).apply()
 
     fun getPin() = prefs.getString("pin", "") ?: ""

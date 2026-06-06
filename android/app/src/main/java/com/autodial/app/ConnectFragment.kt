@@ -64,6 +64,11 @@ class ConnectFragment : Fragment() {
     private lateinit var connectionStrategyDesc: TextView
     private lateinit var channelStatusRow: View
     private lateinit var channelStatusText: TextView
+    // v7.1: 通道详情（延迟 + URL）
+    private lateinit var channelDetailRow: View
+    private lateinit var lanLatencyText: TextView
+    private lateinit var cloudLatencyText: TextView
+    private lateinit var cloudUrlText: TextView
     private lateinit var autoCopySwitch: TextView
     private lateinit var copyToastSwitch: TextView
     private lateinit var dialAnimationSwitch: TextView
@@ -81,6 +86,11 @@ class ConnectFragment : Fragment() {
     private lateinit var otherHeader: View
     private lateinit var otherContent: View
     private lateinit var otherArrow: TextView
+    // v8: 使用说明折叠 + 励志语
+    private lateinit var usageGuideHeader: View
+    private lateinit var usageGuideContent: View
+    private lateinit var usageGuideArrow: TextView
+    private lateinit var motivationalText: TextView
     // v7: 拨号模式
     private lateinit var dialModeRow: View
     private lateinit var dialModeCurrent: TextView
@@ -169,6 +179,15 @@ class ConnectFragment : Fragment() {
             otherHeader = view.findViewById(R.id.otherSectionHeader)
             otherContent = view.findViewById(R.id.otherSectionContent)
             otherArrow = view.findViewById(R.id.otherArrow)
+            // v8: 通道详情 + 使用说明折叠 + 励志语
+            channelDetailRow = view.findViewById(R.id.channelDetailRow)
+            lanLatencyText = view.findViewById(R.id.lanLatencyText)
+            cloudLatencyText = view.findViewById(R.id.cloudLatencyText)
+            cloudUrlText = view.findViewById(R.id.cloudUrlText)
+            usageGuideHeader = view.findViewById(R.id.usageGuideHeader)
+            usageGuideContent = view.findViewById(R.id.usageGuideContent)
+            usageGuideArrow = view.findViewById(R.id.usageGuideArrow)
+            motivationalText = view.findViewById(R.id.motivationalText)
             dialModeRow = view.findViewById(R.id.dialModeRow)
             dialModeCurrent = view.findViewById(R.id.dialModeCurrent)
 
@@ -182,6 +201,17 @@ class ConnectFragment : Fragment() {
                 val show = otherContent.visibility != View.VISIBLE
                 otherContent.visibility = if (show) View.VISIBLE else View.GONE
                 otherArrow.text = if (show) "▾" else "▸"
+            }
+            // v8: 使用说明折叠（默认折叠）
+            usageGuideContent.visibility = View.GONE
+            usageGuideArrow.text = "▸"
+            usageGuideHeader.setOnClickListener {
+                val show = usageGuideContent.visibility != View.VISIBLE
+                usageGuideContent.visibility = if (show) View.VISIBLE else View.GONE
+                usageGuideArrow.text = if (show) "▾" else "▸"
+            }
+            // v8: 每日励志语
+            motivationalText.text = getDailyMotivationalQuote()
             }
 
             // 主题设置入口
@@ -1351,6 +1381,21 @@ class ConnectFragment : Fragment() {
             cloudStatusText.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
             cloudStatusDot.setImageResource(if (cloudOk) R.drawable.dot_green else R.drawable.dot_gray)
 
+            // v8: 延迟 + 服务器URL显示
+            val mgr = DialService._instance?.connectionManager
+            val showDetail = lanOk || cloudOk
+            channelDetailRow.visibility = if (showDetail) View.VISIBLE else View.GONE
+            if (showDetail) {
+                val lanLat = mgr?.lanLatencyMs ?: -1
+                val cloudLat = mgr?.cloudLatencyMs ?: -1
+                lanLatencyText.text = if (lanOk && lanLat >= 0) "📶 局域网  ${lanLat}ms" else "📶 局域网  --"
+                lanLatencyText.setTextColor(Color.parseColor(if (lanOk) colors.green else "#605040"))
+                cloudLatencyText.text = if (cloudOk && cloudLat >= 0) "☁ 云中转  ${cloudLat}ms" else "☁ 云中转  --"
+                cloudLatencyText.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
+                val cloudUrl = mgr?.currentCloudUrl ?: ""
+                cloudUrlText.text = if (cloudUrl.isNotEmpty()) cloudUrl else ""
+            }
+
             // 更新策略下通道状态摘要
             updateChannelStatus()
         } catch (_: Exception) {}
@@ -1378,5 +1423,34 @@ class ConnectFragment : Fragment() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    // ==================== 每日励志语 ====================
+
+    private val motivationalQuotes = arrayOf(
+        "☎ 今天的每一通电话，都是明天的每一个客户。",
+        "💪 拒绝不可怕，可怕的是你不敢拨出下一通。",
+        "🎯 销售不是说服别人，是帮别人发现问题。",
+        "🚀 别人休息时你拨出的电话，就是你超车的弯道。",
+        "⏰ 你的电话打得比别人多一秒，机会就比别人多一分。",
+        "💰 客户说「贵」的时候，恰恰是你展示价值的最佳时机。",
+        "🔥 电销是一场马拉松，坚持到最后的人才能看到终点的风景。",
+        "📞 每一通电话都是一次面试——你在面试你的下一个客户。",
+        "🎪 人生如戏，全靠演技。电销如战场，全靠毅力。",
+        "🍀 幸运不过是努力的另一个名字。",
+        "🎤 客户：「我不需要」 你：「让我告诉你为什么需要」",
+        "⚡ 被挂电话不可怕，可怕的是你挂了客户的希望。",
+        "☕ 如果你觉得电销累，那是因为你在走上坡路。",
+        "🏆 销冠和普通销售的区别：一个用心听，一个用嘴说。",
+        "🐸 每天先吃那只最丑的青蛙——最难打的电话先打！",
+        "💡 客户不买不是因为不需要，是因为你还没让他觉得需要。",
+        "🎢 电销就像过山车，有起有落，但别在中途下车。",
+        "🌅 每一通电话都是一个新的开始，别让上一通影响你。"
+    )
+
+    private fun getDailyMotivationalQuote(): String {
+        val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+        val index = dayOfYear % motivationalQuotes.size
+        return motivationalQuotes[index]
     }
 }

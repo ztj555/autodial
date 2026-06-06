@@ -80,8 +80,14 @@ class ConnectionManager(private val context: Context) {
     private var heartbeatRunnable: Runnable? = null
     private var lastLanPongTime = 0L
     private var lastCloudPongTime = 0L
+    private var lanPingSentTime = 0L
+    private var cloudPingSentTime = 0L
     private var lanPingInFlight = false
     private var cloudPingInFlight = false
+    var lanLatencyMs: Long = -1
+        private set
+    var cloudLatencyMs: Long = -1
+        private set
 
     // NetworkMonitor
     private var networkDebounceRunnable: Runnable? = null
@@ -146,6 +152,7 @@ class ConnectionManager(private val context: Context) {
         }
     val connectionMode: String get() = transportMode
     val isCloudConnected: Boolean get() = cloudWebSocket != null && transportMode.contains("cloud")
+    val currentCloudUrl: String get() = currentCloudServer
     fun getState(): ConnectionState = state
     fun getTransportMode(): String = transportMode
 
@@ -686,7 +693,7 @@ class ConnectionManager(private val context: Context) {
                             handler.post { notifyError(ConnectionError.AuthFailed(msg.optString("reason", ""))) }
                             ws.close(1000, "auth_fail")
                         }
-                        "pong" -> { lastLanPongTime = System.currentTimeMillis(); lanPingInFlight = false }
+                        "pong" -> { lastLanPongTime = System.currentTimeMillis(); lanPingInFlight = false; lanLatencyMs = lastLanPongTime - lanPingSentTime }
                         "kicked" -> {
                             v6LogW(TAG, pin, "被 PC 踢出")
                             manualConnecting = false; setState(ConnectionState.DISCONNECTED)
@@ -815,7 +822,7 @@ class ConnectionManager(private val context: Context) {
                                 ws.close(1000, "auth_fail")
                                 tryConnectCloudAtIndex(servers, pin, index + 1)
                             }
-                            "pong" -> { lastCloudPongTime = System.currentTimeMillis(); cloudPingInFlight = false }
+                            "pong" -> { lastCloudPongTime = System.currentTimeMillis(); cloudPingInFlight = false; cloudLatencyMs = lastCloudPongTime - cloudPingSentTime }
                             "reconnect_request" -> {
                                 v6LogI(TAG, pin, "收到 PC 端云端唤醒指令 (via Cloud)")
                                 onReconnectRequest()
@@ -980,14 +987,14 @@ class ConnectionManager(private val context: Context) {
                     if (lanPingInFlight && (now - lastLanPongTime) > PONG_TIMEOUT_MS) {
                         lanPingInFlight = false; handleLanPongTimeout()
                     } else {
-                        try { lanWebSocket?.send(pingMsg.toString()); lanPingInFlight = true } catch (_: Exception) { lanPingInFlight = false }
+                        try { lanPingSentTime = now; lanWebSocket?.send(pingMsg.toString()); lanPingInFlight = true } catch (_: Exception) { lanPingInFlight = false }
                     }
                 }
                 if (cloudWebSocket != null && transportMode.contains("cloud")) {
                     if (cloudPingInFlight && (now - lastCloudPongTime) > PONG_TIMEOUT_MS) {
                         cloudPingInFlight = false; handleCloudPongTimeout()
                     } else {
-                        try { cloudWebSocket?.send(pingMsg.toString()); cloudPingInFlight = true } catch (_: Exception) { cloudPingInFlight = false }
+                        try { cloudPingSentTime = now; cloudWebSocket?.send(pingMsg.toString()); cloudPingInFlight = true } catch (_: Exception) { cloudPingInFlight = false }
                     }
                 }
                 handler.postDelayed(heartbeatRunnable!!, HEARTBEAT_INTERVAL_MS)
