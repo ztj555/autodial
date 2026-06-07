@@ -113,8 +113,9 @@ class DialEngine(
                 }
                 DialMode.ROUND_SELECT -> {
                     val d = callLogDb.getLastDialInfo(number, service)
-                    // 有记录就用上次同一张卡（智能记忆），不弹窗；没记录就用轮询
-                    if (d != null && d.first >= 0) d.first
+                    val tenDaysAgo = System.currentTimeMillis() - 10 * 24 * 60 * 60 * 1000L
+                    // 10天内打过 → 弹窗让用户选；10天外或没打过 → 循环轮选
+                    if (d != null && d.first >= 0 && d.second >= tenDaysAgo) -1
                     else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
                 }
             }
