@@ -57,7 +57,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日拨号(财运)"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
@@ -66,7 +66,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="0"
-                        android:textColor="#E74C3C"
+                        android:textColor="#FF4444"
                         android:textSize="44sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -95,7 +95,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="今日通时(财气)"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
@@ -140,7 +140,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周拨号(财运)"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
@@ -178,7 +178,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周通时(财气)"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
@@ -223,7 +223,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="本月财运"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
@@ -256,7 +256,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="本月财气"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="14sp" />
 
                     <TextView
