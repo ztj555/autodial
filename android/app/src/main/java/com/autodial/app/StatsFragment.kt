@@ -188,13 +188,13 @@ class StatsFragment : Fragment() {
         val maxCount = (stats.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
 
         val barColors = intArrayOf(
-            Color.parseColor(colors.gold),
-            Color.parseColor(colors.goldLight),
-            Color.parseColor(colors.gold),
-            Color.parseColor(colors.green),
-            Color.parseColor(colors.gold),
-            Color.parseColor(colors.goldLight),
-            Color.parseColor("#4F8EF7")   // 今日用蓝色突出
+            Color.parseColor("#FF4444"),   // 红
+            Color.parseColor("#FF8C00"),   // 橙
+            Color.parseColor("#FFD700"),   // 黄
+            Color.parseColor("#4CAF50"),   // 绿
+            Color.parseColor("#00BCD4"),   // 青
+            Color.parseColor("#2196F3"),   // 蓝
+            Color.parseColor("#9C27B0")    // 紫
         )
 
         val maxBarHeightPx = TypedValue.applyDimension(
@@ -280,5 +280,9 @@ class StatsFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         ThemeManager.applyToView(requireView(), colors)
+
+        // 卡片 5（本月财运/财气）value 跟随系统主题
+        todayLuck.setTextColor(Color.parseColor(colors.text))
+        totalLuck.setTextColor(Color.parseColor(colors.text))
     }
 }
