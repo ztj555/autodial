@@ -165,7 +165,7 @@ class DialService : Service() {
                     "dial" -> {
                         val number = msg.optString("number", "")
                         FileLogger.i("DialService", "收到拨号请求: $number")
-                        if (number.isNotEmpty()) {
+                        if (number.isNotEmpty() && ::dialEngine.isInitialized) {
                             Log.d(TAG, "拨号请求: $number")
                             dialEngine.dialNumber(number)
                         }
@@ -193,7 +193,7 @@ class DialService : Service() {
                     "hangup" -> {
                         FileLogger.i("DialService", "收到挂断指令")
                         Log.d(TAG, "收到挂断指令")
-                        dialEngine.endCall()
+                        if (::dialEngine.isInitialized) dialEngine.endCall()
                     }
                 }
             } catch (e: Exception) { Log.e(TAG, "消息处理失败: ${e.message}") }
@@ -269,6 +269,9 @@ class DialService : Service() {
 
             // 监听通话状态，通话结束时通知UI刷新通话记录
             registerCallStateListener()
+
+            // ==================== 初始化 DialEngine ====================
+            dialEngine = DialEngine(this, callLogDb)
 
             // ==================== 初始化 ConnectionManager ====================
             connectionManager = ConnectionManager(this)
