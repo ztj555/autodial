@@ -688,8 +688,8 @@ class CallLogFragment : Fragment() {
                 btn.setBackgroundColor(android.graphics.Color.parseColor(colors.gold))
                 btn.setTextColor(android.graphics.Color.parseColor(colors.bg))
             } else {
-                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.bg3))
-                btn.setTextColor(android.graphics.Color.parseColor(colors.text2))
+                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.bg))
+                btn.setTextColor(android.graphics.Color.parseColor(colors.text))
             }
         }
     }

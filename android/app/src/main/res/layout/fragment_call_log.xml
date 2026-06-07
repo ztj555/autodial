@@ -147,11 +147,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="弹窗"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -160,11 +157,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="轮选"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -173,11 +167,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="相反"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -186,11 +177,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="卡1"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -199,11 +187,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="卡2"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -212,11 +197,8 @@
             android:layout_height="32dp"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="循环"
-            android:textColor="#A09070"
             android:textSize="13sp" />
 
         <TextView
@@ -224,11 +206,8 @@
             android:layout_width="0dp"
             android:layout_height="32dp"
             android:layout_weight="1"
-            android:tag="bg3"
-            android:background="#22252E"
             android:gravity="center"
             android:text="系统"
-            android:textColor="#A09070"
             android:textSize="13sp" />
     </LinearLayout>
 
