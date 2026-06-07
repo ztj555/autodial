@@ -1343,8 +1343,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         try {
             val colors = ThemeManager.getColors(requireContext())
-            val mode = DialService.transportMode
-            val lanOk = mode.contains("lan")
+            val lanOk = DialService.isLanConnected
             val cloudOk = DialService.isCloudConnected
 
             lanStatusText.text = if (lanOk) "已连接" else "未连接"

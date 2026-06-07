@@ -151,7 +151,8 @@ class ConnectionManager(private val context: Context) {
             return lanOk || cloudOk
         }
     val connectionMode: String get() = transportMode
-    val isCloudConnected: Boolean get() = cloudWebSocket != null && transportMode.contains("cloud")
+    val isLanConnected: Boolean get() = lanWebSocket != null
+    val isCloudConnected: Boolean get() = cloudWebSocket != null
     val currentCloudUrl: String get() = currentCloudServer
     fun getState(): ConnectionState = state
     fun getTransportMode(): String = transportMode

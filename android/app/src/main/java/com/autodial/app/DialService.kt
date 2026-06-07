@@ -55,6 +55,7 @@ class DialService : Service() {
         val isConnected: Boolean get() = _instance?.connectionManager?.isConnected ?: false
         val serverAddress: String get() = "" // 不再单独追踪，由 ConnectionManager 管理
         val isCloudConnected: Boolean get() = _instance?.connectionManager?.isCloudConnected ?: false
+        val isLanConnected: Boolean get() = _instance?.connectionManager?.isLanConnected ?: false
         val transportMode: String get() = _instance?.connectionManager?.getTransportMode() ?: ""
         val currentCloudServer: String get() = "" // 不再单独追踪
         val currentPin: String get() = _instance?.let { it.lastPin } ?: ""
