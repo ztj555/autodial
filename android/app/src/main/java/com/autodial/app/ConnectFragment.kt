@@ -40,6 +40,7 @@ class ConnectFragment : Fragment() {
     private lateinit var connectBtn: View
     private lateinit var connectBtnText: TextView
     private lateinit var disconnectBtn: TextView
+    private lateinit var connectSectionTitle: TextView
     private lateinit var discoveryHint: TextView
     private lateinit var foundPCInfo: LinearLayout
     private lateinit var foundPCText: TextView
@@ -165,6 +166,8 @@ class ConnectFragment : Fragment() {
                 setColor(Color.TRANSPARENT)
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
+
+            connectSectionTitle = view.findViewById(R.id.connectSectionTitle)
 
             // v7: 新UI元素绑定（必须在所有使用前完成）
             lanStatusText = view.findViewById(R.id.lanStatusText)
@@ -812,6 +815,15 @@ class ConnectFragment : Fragment() {
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
                 connectBtn.visibility = View.GONE
+                connectSectionTitle.text = "已连接 ${
+                    when {
+                        DialService.transportMode.contains("lan") && DialService.transportMode.contains("cloud") -> "(LAN+Cloud)"
+                        DialService.transportMode.contains("lan") -> "(局域网)"
+                        DialService.transportMode.contains("cloud") -> "(云中转)"
+                        else -> ""
+                    }
+                }"
+                disconnectBtn.visibility = View.VISIBLE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
                 val manual = prefCtrl.isManuallyDisconnected()
@@ -822,6 +834,8 @@ class ConnectFragment : Fragment() {
                 foundPCInfo.visibility = View.GONE
                 updateBtnState(if (manual) "manual_disconnect" else "disconnected")
                 connectBtn.visibility = View.GONE
+                connectSectionTitle.text = "未连接"
+                disconnectBtn.visibility = View.GONE
 
                 when (reason) {
                     "pin_wrong" -> {

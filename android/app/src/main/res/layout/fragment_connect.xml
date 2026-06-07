@@ -96,14 +96,35 @@
         </LinearLayout>
 
         <!-- ═══════════════ 配对码 ═══════════════ -->
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
-            android:text="配对码"
-            android:tag="text"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="配对码"
+                android:tag="text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/disconnectBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minWidth="60dp"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="断开"
+                android:textColor="#FF4D4F"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
 
         <EditText
             android:id="@+id/pinInput"
@@ -187,25 +208,14 @@
             android:orientation="horizontal">
 
             <TextView
+                android:id="@+id/connectSectionTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="连接通道"
+                android:text=""
                 android:tag="text"
                 android:textSize="14sp"
                 android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/disconnectBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:minWidth="60dp"
-                android:gravity="center"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:text="断开"
-                android:textColor="#FF4D4F"
-                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -349,7 +359,7 @@
             android:id="@+id/advancedSectionHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="40dp"
             android:tag="bg2"
             android:background="#1A1D24"
             android:gravity="center_vertical"
