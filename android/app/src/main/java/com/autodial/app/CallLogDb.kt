@@ -231,32 +231,37 @@ class CallLogDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_
      * @return 0=卡1, 1=卡2, -1=无记录
      */
     fun getLastSimSlotGlobal(): Int {
-        // 1. 优先查 APP 自身的拨号记录（最新一条成功的）
-        val db = readableDatabase
-        val cursor = db.query(
-            TABLE_DIAL,
-            arrayOf(COL_SIM_SLOT),
-            "$COL_STATUS = 'ok'",
-            null,
-            null, null, "$COL_TIME DESC", "1"
-        )
-        if (cursor.moveToFirst()) {
-            val slot = cursor.getInt(0)
+        return try {
+            // 1. 优先查 APP 自身的拨号记录（最新一条成功的）
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_DIAL,
+                arrayOf(COL_SIM_SLOT),
+                "$COL_STATUS = 'ok'",
+                null,
+                null, null, "$COL_TIME DESC", "1"
+            )
+            if (cursor.moveToFirst()) {
+                val slot = cursor.getInt(0)
+                cursor.close()
+                return slot
+            }
             cursor.close()
-            return slot
-        }
-        cursor.close()
 
-        // 2. fallback 查 sim_cache（最新的一条）
-        val cacheCursor = db.query(
-            TABLE_SIM_CACHE,
-            arrayOf(CACHE_COL_SIM_SLOT),
-            null, null,
-            null, null, "$CACHE_COL_TIME DESC", "1"
-        )
-        val cachedSlot = if (cacheCursor.moveToFirst()) cacheCursor.getInt(0) else -1
-        cacheCursor.close()
-        return cachedSlot
+            // 2. fallback 查 sim_cache（最新的一条）
+            val cacheCursor = db.query(
+                TABLE_SIM_CACHE,
+                arrayOf(CACHE_COL_SIM_SLOT),
+                null, null,
+                null, null, "$CACHE_COL_TIME DESC", "1"
+            )
+            val cachedSlot = if (cacheCursor.moveToFirst()) cacheCursor.getInt(0) else -1
+            cacheCursor.close()
+            cachedSlot
+        } catch (e: Exception) {
+            Log.e(TAG, "getLastSimSlotGlobal 异常: ${e.message}")
+            -1
+        }
     }
 
     /**
@@ -303,39 +308,43 @@ class CallLogDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_
      * 三级查询：APP内部表 → SIM缓存 → 系统通话记录（传Context时）
      */
     fun getLastDialInfo(number: String, context: Context? = null): Pair<Int, Long>? {
-        // 1. 优先查 APP 自身记录
-        val db = readableDatabase
-        val cursor = db.query(
-            TABLE_DIAL,
-            arrayOf(COL_SIM_SLOT, COL_TIME),
-            "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
-            arrayOf(number),
-            null, null, "$COL_TIME DESC", "1"
-        )
-        if (cursor.moveToFirst()) {
-            val result = Pair(cursor.getInt(0), cursor.getLong(1))
+        return try {
+            // 1. 优先查 APP 自身记录
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_DIAL,
+                arrayOf(COL_SIM_SLOT, COL_TIME),
+                "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
+                arrayOf(number),
+                null, null, "$COL_TIME DESC", "1"
+            )
+            if (cursor.moveToFirst()) {
+                val result = Pair(cursor.getInt(0), cursor.getLong(1))
+                cursor.close()
+                return result
+            }
             cursor.close()
-            return result
+
+            // 2. 查 SIM 缓存
+            val cacheCursor = db.query(
+                TABLE_SIM_CACHE,
+                arrayOf(CACHE_COL_SIM_SLOT, CACHE_COL_TIME),
+                "$CACHE_COL_NUMBER = ?",
+                arrayOf(number),
+                null, null, null, "1"
+            )
+            val cachedResult = if (cacheCursor.moveToFirst()) {
+                Pair(cacheCursor.getInt(0), cacheCursor.getLong(1))
+            } else null
+            cacheCursor.close()
+            if (cachedResult != null) return cachedResult
+
+            // 3. 查系统通话记录（需传Context，任意方式拨出的通话都识别，不限时间）
+            if (context != null) getLastDialFromSystem(context, number) else null
+        } catch (e: Exception) {
+            Log.e(TAG, "getLastDialInfo($number) 异常: ${e.message}")
+            null
         }
-        cursor.close()
-
-        // 2. 查 SIM 缓存
-        val cacheCursor = db.query(
-            TABLE_SIM_CACHE,
-            arrayOf(CACHE_COL_SIM_SLOT, CACHE_COL_TIME),
-            "$CACHE_COL_NUMBER = ?",
-            arrayOf(number),
-            null, null, null, "1"
-        )
-        val cachedResult = if (cacheCursor.moveToFirst()) {
-            Pair(cacheCursor.getInt(0), cacheCursor.getLong(1))
-        } else null
-        cacheCursor.close()
-        if (cachedResult != null) return cachedResult
-
-        // 3. 查系统通话记录（需传Context，任意方式拨出的通话都识别，不限时间）
-        if (context != null) return getLastDialFromSystem(context, number)
-        return null
     }
 
     /** 从系统通话记录查询（带Context，用于DialEngine层调用） */

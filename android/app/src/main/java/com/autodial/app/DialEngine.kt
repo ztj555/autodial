@@ -90,31 +90,37 @@ class DialEngine(
     // ==================== 拨号卡选择 ====================
 
     fun resolveSimSlot(number: String): Int {
-        val prefs = service.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        val modeKey = prefs.getString("dial_mode", DialMode.ROUND_SELECT.key) ?: DialMode.ROUND_SELECT.key
-        val mode = DialMode.fromKey(modeKey)
-        return when (mode) {
-            DialMode.SIM1 -> 0
-            DialMode.SIM2 -> 1
-            DialMode.SYSTEM -> -2
-            DialMode.POPUP -> -1
-            DialMode.ALTERNATE -> { val l = callLogDb.getLastSimSlotGlobal(); if (l >= 0) 1 - l else 0 }
-            DialMode.OPPOSITE -> {
-                val d = callLogDb.getLastDialInfo(number, service)
-                if (d != null && d.first >= 0) {
-                    val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
-                    // 2天内用相反卡；超过2天用全局轮询，不弹窗
-                    if (d.second >= twoDaysAgo) 1 - d.first
+        return try {
+            val prefs = service.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val modeKey = prefs.getString("dial_mode", DialMode.ROUND_SELECT.key) ?: DialMode.ROUND_SELECT.key
+            val mode = DialMode.fromKey(modeKey)
+            Log.d(TAG, "resolveSimSlot: mode=$modeKey number=$number")
+            when (mode) {
+                DialMode.SIM1 -> 0
+                DialMode.SIM2 -> 1
+                DialMode.SYSTEM -> -2
+                DialMode.POPUP -> -1
+                DialMode.ALTERNATE -> { val l = callLogDb.getLastSimSlotGlobal(); if (l >= 0) 1 - l else 0 }
+                DialMode.OPPOSITE -> {
+                    val d = callLogDb.getLastDialInfo(number, service)
+                    if (d != null && d.first >= 0) {
+                        val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
+                        // 2天内用相反卡；超过2天用全局轮询，不弹窗
+                        if (d.second >= twoDaysAgo) 1 - d.first
+                        else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
+                    }
                     else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
                 }
-                else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
+                DialMode.ROUND_SELECT -> {
+                    val d = callLogDb.getLastDialInfo(number, service)
+                    // 有记录就用上次同一张卡（智能记忆），不弹窗；没记录就用轮询
+                    if (d != null && d.first >= 0) d.first
+                    else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
+                }
             }
-            DialMode.ROUND_SELECT -> {
-                val d = callLogDb.getLastDialInfo(number, service)
-                // 有记录就用上次同一张卡（智能记忆），不弹窗；没记录就用轮询
-                if (d != null && d.first >= 0) d.first
-                else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
-            }
+        } catch (e: Exception) {
+            Log.e(TAG, "resolveSimSlot 异常，降级为卡1拨号: ${e.message}", e)
+            0
         }
     }
 
