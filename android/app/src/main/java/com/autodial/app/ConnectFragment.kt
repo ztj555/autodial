@@ -1227,6 +1227,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         ThemeManager.applyToView(requireView(), colors)
+        pinInput.setTextColor(Color.parseColor(colors.text))
     }
 
     private fun updateThemePreview() {

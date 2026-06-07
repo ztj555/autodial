@@ -40,10 +40,7 @@ class MainActivity : AppCompatActivity() {
 
     private val connectionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val connected = intent?.getBooleanExtra("connected", false) ?: return
-            if (connected) {
-                switchTab(1)
-            }
+            // 连接成功不再自动跳转到记录页
         }
     }
 

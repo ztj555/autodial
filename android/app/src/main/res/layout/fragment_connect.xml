@@ -104,8 +104,9 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
                 android:gravity="center"
-                android:text="配对码"
+                android:text="配对码↓"
                 android:tag="text"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -114,7 +115,7 @@
                 android:id="@+id/disconnectBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
-                android:layout_gravity="end|center_vertical"
+                android:layout_gravity="end|bottom"
                 android:layout_marginEnd="16dp"
                 android:minWidth="60dp"
                 android:gravity="center"
@@ -134,7 +135,6 @@
             android:tag="bg2"
             android:background="#1A1D24"
             android:hint="输入电脑屏幕上的4位数字"
-            android:textColorHint="#605040"
             android:textSize="26sp"
             android:letterSpacing="0.3"
             android:gravity="center"
