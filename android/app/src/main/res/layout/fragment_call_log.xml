@@ -87,8 +87,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="今日财运: "
-                    android:tag="text2"
-                    android:textColor="#A09070"
+                    android:tag="text"
                     android:textSize="11sp" />
 
                 <TextView
@@ -96,7 +95,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0"
-                    android:tag="text"
+                    android:textColor="#FF4D4F"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace" />
@@ -112,8 +111,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="今日财气: "
-                    android:tag="text2"
-                    android:textColor="#A09070"
+                    android:tag="text"
                     android:textSize="11sp" />
 
                 <TextView
@@ -121,7 +119,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0分"
-                    android:tag="text"
+                    android:textColor="#A78BFA"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace" />
