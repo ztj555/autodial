@@ -214,7 +214,7 @@ object DialAnimationOverlay {
             val w = width.toFloat()
             val h = height.toFloat()
             val cx = w / 2f
-            val cy = h * 2f / 3f  // 屏幕从下往上2/3处
+            val cy = h / 3f  // 屏幕从上往下1/3处（中央偏上）
 
             canvas.save()
 
