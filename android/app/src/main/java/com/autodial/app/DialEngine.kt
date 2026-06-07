@@ -102,15 +102,17 @@ class DialEngine(
             DialMode.OPPOSITE -> {
                 val d = callLogDb.getLastDialInfo(number, service)
                 if (d != null && d.first >= 0) {
-                    // 仅在2天内的通话记录才用相反模式，超过的弹窗让用户选
                     val twoDaysAgo = System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L
-                    if (d.second >= twoDaysAgo) 1 - d.first else -1
+                    // 2天内用相反卡；超过2天用全局轮询，不弹窗
+                    if (d.second >= twoDaysAgo) 1 - d.first
+                    else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
                 }
                 else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
             }
             DialMode.ROUND_SELECT -> {
                 val d = callLogDb.getLastDialInfo(number, service)
-                if (d != null && d.first >= 0) -1
+                // 有记录就用上次同一张卡（智能记忆），不弹窗；没记录就用轮询
+                if (d != null && d.first >= 0) d.first
                 else { val g = callLogDb.getLastSimSlotGlobal(); if (g >= 0) 1 - g else 0 }
             }
         }
