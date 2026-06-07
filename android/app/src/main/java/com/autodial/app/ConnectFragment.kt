@@ -1391,7 +1391,7 @@ class ConnectFragment : Fragment() {
                 dialModeCurrent.text = selected.label
                 // 同步到CallLogFragment顶栏
                 try {
-                    (requireActivity() as MainActivity).syncDialModeUI()
+                    (requireActivity() as? MainActivity)?.syncDialModeUI()
                 } catch (_: Exception) {}
                 dialog.dismiss()
             }

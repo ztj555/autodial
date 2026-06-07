@@ -586,8 +586,8 @@ class CallLogFragment : Fragment() {
                     } else emptyList()
                 } catch (_: Exception) { emptyList() }
 
-                // 创建单个 CallLogDb 实例复用，避免循环内重复创建
-                val callLogDb = CallLogDb(ctx)
+                // 复用 CallLogDb 单例，避免高频创建/销毁
+                val callLogDb = CallLogDb.getInstance(ctx)
 
                 while (it.moveToNext() && records.size < 200) {
                     val num = it.getString(numIdx) ?: continue
@@ -615,8 +615,6 @@ class CallLogFragment : Fragment() {
 
                     records.add(PhoneCallRecord(num, date, dur, type, simSlot))
                 }
-
-                callLogDb.close()
             }
         } catch (e: Exception) {
             Toast.makeText(ctx, "读取通话记录失败", Toast.LENGTH_SHORT).show()
@@ -663,7 +661,7 @@ class CallLogFragment : Fragment() {
     /** 从数据库查询今日拨号次数和通时分钟数 */
     private fun loadTodayLuckStats() {
         if (!isAdded) return
-        val callLogDb = CallLogDb(requireContext())
+        val callLogDb = CallLogDb.getInstance(requireContext())
         try {
             val todayCount = callLogDb.getTodayCount(requireContext())
             val dayStats = callLogDb.getDailyDurationStats(requireContext(), 1)
@@ -675,9 +673,7 @@ class CallLogFragment : Fragment() {
                 val minutes = (today.totalDurationSec + 30) / 60
                 todayFortuneText.text = "${minutes}分"
             }
-        } catch (_: Exception) {} finally {
-            callLogDb.close()
-        }
+        } catch (_: Exception) {}
     }
 
     // ==================== 拨号模式 UI ====================

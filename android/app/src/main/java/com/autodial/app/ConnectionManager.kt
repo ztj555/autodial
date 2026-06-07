@@ -59,8 +59,8 @@ class ConnectionManager(private val context: Context) {
     @Volatile private var state: ConnectionState = ConnectionState.DISCONNECTED
     @Volatile private var transportMode: String = ""
 
-    private var lanWebSocket: WebSocket? = null
-    private var cloudWebSocket: WebSocket? = null
+    @Volatile private var lanWebSocket: WebSocket? = null
+    @Volatile private var cloudWebSocket: WebSocket? = null
 
     private val lanClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
@@ -84,9 +84,9 @@ class ConnectionManager(private val context: Context) {
     private var cloudPingSentTime = 0L
     private var lanPingInFlight = false
     private var cloudPingInFlight = false
-    var lanLatencyMs: Long = -1
+    @Volatile var lanLatencyMs: Long = -1
         private set
-    var cloudLatencyMs: Long = -1
+    @Volatile var cloudLatencyMs: Long = -1
         private set
 
     // NetworkMonitor

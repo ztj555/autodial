@@ -11,12 +11,23 @@ import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.*
 
-class CallLogDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
+class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 
     companion object {
         private const val TAG = "CallLogDb"
         private const val DB_NAME = "autodial.db"
         private const val DB_VERSION = 2  // v2: 新增 sim_cache 表
+
+        @Volatile
+        private var instance: CallLogDb? = null
+
+        @Synchronized
+        fun getInstance(context: Context): CallLogDb {
+            if (instance == null) {
+                instance = CallLogDb(context.applicationContext)
+            }
+            return instance!!
+        }
         const val TABLE_DIAL = "dial_log"
         const val COL_ID = "_id"
         const val COL_NUMBER = "number"

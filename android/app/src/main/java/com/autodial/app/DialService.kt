@@ -246,7 +246,7 @@ class DialService : Service() {
         _instance = this
         try {
             isRunning = true
-            callLogDb = CallLogDb(this)
+            callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
             startForeground(NOTIFICATION_ID, buildNotification("跨屏拨号 运行中"))
 
@@ -292,7 +292,7 @@ class DialService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Service onCreate error: ${e.message}", e)
             isRunning = true
-            callLogDb = CallLogDb(this)
+            callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
             try { startForeground(NOTIFICATION_ID, buildNotification("跨屏拨号 运行中")) } catch (_: Exception) {}
             // 即使初始化失败，也要创建 ConnectionManager 并注册 listener

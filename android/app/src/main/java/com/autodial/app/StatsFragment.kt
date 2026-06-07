@@ -135,7 +135,7 @@ class StatsFragment : Fragment() {
 
     private fun loadStats() {
         if (!isAdded) return
-        val db = CallLogDb(requireContext())
+        val db = CallLogDb.getInstance(requireContext())
         try {
             // 今日数据
             val today = db.getTodayCount(requireContext())
@@ -162,8 +162,6 @@ class StatsFragment : Fragment() {
             buildChart(stats)
         } catch (e: Exception) {
             android.util.Log.e("StatsFragment", "加载统计失败: ${e.message}")
-        } finally {
-            db.close()
         }
     }
 
