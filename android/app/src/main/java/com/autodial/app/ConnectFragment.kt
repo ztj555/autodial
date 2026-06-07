@@ -62,13 +62,9 @@ class ConnectFragment : Fragment() {
     private lateinit var cloudStatusText: TextView
     private lateinit var connectionStrategyRow: View
     private lateinit var connectionStrategyDesc: TextView
-    private lateinit var channelStatusRow: View
-    private lateinit var channelStatusText: TextView
-    // v7.1: 通道详情（延迟 + URL）
-    private lateinit var channelDetailRow: View
-    private lateinit var lanLatencyText: TextView
-    private lateinit var cloudLatencyText: TextView
-    private lateinit var cloudUrlText: TextView
+    // 延迟显示（连接通道模块内联）
+    private lateinit var lanLatencyInline: TextView
+    private lateinit var cloudLatencyInline: TextView
     private lateinit var autoCopySwitch: TextView
     private lateinit var copyToastSwitch: TextView
     private lateinit var dialAnimationSwitch: TextView
@@ -179,11 +175,9 @@ class ConnectFragment : Fragment() {
             otherHeader = view.findViewById(R.id.otherSectionHeader)
             otherContent = view.findViewById(R.id.otherSectionContent)
             otherArrow = view.findViewById(R.id.otherArrow)
-            // v8: 通道详情 + 使用说明折叠 + 励志语
-            channelDetailRow = view.findViewById(R.id.channelDetailRow)
-            lanLatencyText = view.findViewById(R.id.lanLatencyText)
-            cloudLatencyText = view.findViewById(R.id.cloudLatencyText)
-            cloudUrlText = view.findViewById(R.id.cloudUrlText)
+            // v8: 内联延迟 + 使用说明折叠 + 励志语
+            lanLatencyInline = view.findViewById(R.id.lanLatencyInline)
+            cloudLatencyInline = view.findViewById(R.id.cloudLatencyInline)
             usageGuideHeader = view.findViewById(R.id.usageGuideHeader)
             usageGuideContent = view.findViewById(R.id.usageGuideContent)
             usageGuideArrow = view.findViewById(R.id.usageGuideArrow)
@@ -269,10 +263,6 @@ class ConnectFragment : Fragment() {
             connectionStrategyRow.setOnClickListener {
                 showStrategyDialog()
             }
-
-            // 通道状态
-            channelStatusRow = view.findViewById(R.id.channelStatusRow)
-            channelStatusText = view.findViewById(R.id.channelStatusText)
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
@@ -889,28 +879,10 @@ class ConnectFragment : Fragment() {
                 val selected = strategies[which]
                 prefCtrl.setConnectionStrategy(selected)
                 updateStrategyDesc()
-                updateChannelStatus()
                 dialog.dismiss()
             }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    private fun updateChannelStatus() {
-        if (!isAdded) return
-        try {
-            val colors = ThemeManager.getColors(requireContext())
-            val mode = DialService.transportMode
-            val lanOk = mode.contains("lan")
-            val cloudOk = DialService.isCloudConnected
-
-            // 通道状态摘要
-            val parts = mutableListOf<String>()
-            if (lanOk) parts.add("LAN已连接")
-            if (cloudOk) parts.add("Cloud已连接")
-            channelStatusText.text = if (parts.isNotEmpty()) parts.joinToString(" · ") else "未连接"
-            channelStatusText.setTextColor(Color.parseColor(if (parts.isNotEmpty()) colors.green else "#605040"))
-        } catch (_: Exception) {}
     }
 
     // ==================== 云服务器管理 ====================
@@ -1380,23 +1352,26 @@ class ConnectFragment : Fragment() {
             cloudStatusText.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
             cloudStatusDot.setImageResource(if (cloudOk) R.drawable.dot_green else R.drawable.dot_gray)
 
-            // v8: 延迟 + 服务器URL显示
+            // v8: 延迟内联显示（连接通道模块内）
             val mgr = DialService._instance?.connectionManager
-            val showDetail = lanOk || cloudOk
-            channelDetailRow.visibility = if (showDetail) View.VISIBLE else View.GONE
-            if (showDetail) {
-                val lanLat = mgr?.lanLatencyMs ?: -1
-                val cloudLat = mgr?.cloudLatencyMs ?: -1
-                lanLatencyText.text = if (lanOk && lanLat >= 0) "📶 局域网  ${lanLat}ms" else "📶 局域网  --"
-                lanLatencyText.setTextColor(Color.parseColor(if (lanOk) colors.green else "#605040"))
-                cloudLatencyText.text = if (cloudOk && cloudLat >= 0) "☁ 云中转  ${cloudLat}ms" else "☁ 云中转  --"
-                cloudLatencyText.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
-                val cloudUrl = mgr?.currentCloudUrl ?: ""
-                cloudUrlText.text = if (cloudUrl.isNotEmpty()) cloudUrl else ""
+            val lanLat = mgr?.lanLatencyMs ?: -1
+            val cloudLat = mgr?.cloudLatencyMs ?: -1
+
+            if (lanOk && lanLat >= 0) {
+                lanLatencyInline.text = "${lanLat}ms"
+                lanLatencyInline.setTextColor(Color.parseColor(colors.green))
+                lanLatencyInline.visibility = View.VISIBLE
+            } else {
+                lanLatencyInline.visibility = View.GONE
             }
 
-            // 更新策略下通道状态摘要
-            updateChannelStatus()
+            if (cloudOk && cloudLat >= 0) {
+                cloudLatencyInline.text = "${cloudLat}ms"
+                cloudLatencyInline.setTextColor(Color.parseColor(colors.green))
+                cloudLatencyInline.visibility = View.VISIBLE
+            } else {
+                cloudLatencyInline.visibility = View.GONE
+            }
         } catch (_: Exception) {}
     }
 
