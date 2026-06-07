@@ -270,33 +270,38 @@ class CallLogDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_
      * @return 0=卡1, 1=卡2, -1=无记录
      */
     fun getLastSimSlot(number: String): Int {
-        // 1. 优先查 APP 自身的拨号记录
-        val db = readableDatabase
-        val cursor = db.query(
-            TABLE_DIAL,
-            arrayOf(COL_SIM_SLOT),
-            "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
-            arrayOf(number),
-            null, null, "$COL_TIME DESC", "1"
-        )
-        if (cursor.moveToFirst()) {
-            val slot = cursor.getInt(0)
+        return try {
+            // 1. 优先查 APP 自身的拨号记录
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_DIAL,
+                arrayOf(COL_SIM_SLOT),
+                "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
+                arrayOf(number),
+                null, null, "$COL_TIME DESC", "1"
+            )
+            if (cursor.moveToFirst()) {
+                val slot = cursor.getInt(0)
+                cursor.close()
+                return slot
+            }
             cursor.close()
-            return slot
-        }
-        cursor.close()
 
-        // 2. fallback 查 SIM 缓存
-        val cacheCursor = db.query(
-            TABLE_SIM_CACHE,
-            arrayOf(CACHE_COL_SIM_SLOT),
-            "$CACHE_COL_NUMBER = ?",
-            arrayOf(number),
-            null, null, null, "1"
-        )
-        val cachedSlot = if (cacheCursor.moveToFirst()) cacheCursor.getInt(0) else -1
-        cacheCursor.close()
-        return cachedSlot
+            // 2. fallback 查 SIM 缓存
+            val cacheCursor = db.query(
+                TABLE_SIM_CACHE,
+                arrayOf(CACHE_COL_SIM_SLOT),
+                "$CACHE_COL_NUMBER = ?",
+                arrayOf(number),
+                null, null, null, "1"
+            )
+            val cachedSlot = if (cacheCursor.moveToFirst()) cacheCursor.getInt(0) else -1
+            cacheCursor.close()
+            cachedSlot
+        } catch (e: Exception) {
+            Log.e(TAG, "getLastSimSlot($number) 异常: ${e.message}")
+            -1
+        }
     }
 
     /**
@@ -365,10 +370,28 @@ class CallLogDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_
                 val time = it.getLong(0)
                 val simSlot = try {
                     val accountId = it.getString(1) ?: ""
-                    // 根据subId识别卡槽
-                    if (accountId.contains("subId=1") || accountId.contains("slot=1")) 1
-                    else if (accountId.contains("subId=2") || accountId.contains("slot=2")) 2
-                    else 0
+                    val sm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                        context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+                    } else null
+                    val simList = sm?.activeSubscriptionInfoList?.filterNotNull() ?: emptyList()
+
+                    // 方式1: 从 accountId 提取 subId，通过 SubscriptionManager 映射到 simSlotIndex
+                    val subIdMatch = Regex("subId=(\\d+)").find(accountId)
+                    if (subIdMatch != null) {
+                        val parsedSubId = subIdMatch.groupValues[1].toIntOrNull()
+                        if (parsedSubId != null) {
+                            simList.find { it.subscriptionId == parsedSubId }?.simSlotIndex ?: 0
+                        } else 0
+                    }
+                    // 方式2: slot=N 格式，N 就是 simSlotIndex（通常 0-based）
+                    else {
+                        val slotMatch = Regex("slot=(\\d+)").find(accountId)
+                        if (slotMatch != null) slotMatch.groupValues[1].toIntOrNull() ?: 0
+                        // 方式3: 直接用 accountId 的 hashCode 来猜测（如 tel:xxx@0, tel:xxx@1 等）
+                        else if (accountId.contains("@0")) 0
+                        else if (accountId.contains("@1")) 1
+                        else 0
+                    }
                 } catch (_: Exception) { 0 }
                 return Pair(simSlot, time)
             }
