@@ -55,7 +55,7 @@ class PrefCtrl(private val context: Context) {
     fun isAutoCopyEnabled() = prefs.getBoolean("auto_copy_number", true)
     fun setAutoCopy(enabled: Boolean) = prefs.edit().putBoolean("auto_copy_number", enabled).apply()
 
-    fun isCopyToastEnabled() = prefs.getBoolean("copy_toast", true)
+    fun isCopyToastEnabled() = prefs.getBoolean("copy_toast", false)
     fun setCopyToast(enabled: Boolean) = prefs.edit().putBoolean("copy_toast", enabled).apply()
 
     fun getDialAnimationMode() = prefs.getInt("dial_animation_mode", DialAnimationOverlay.MODE_BOUNCE)

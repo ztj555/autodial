@@ -244,6 +244,7 @@ class DialService : Service() {
     override fun onCreate() {
         super.onCreate()
         _instance = this
+        FileLogger.init(this)  // 最早初始化，确保日志系统可用
         try {
             isRunning = true
             callLogDb = CallLogDb.getInstance(this)
@@ -276,9 +277,6 @@ class DialService : Service() {
             // ==================== 初始化 ConnectionManager ====================
             connectionManager = ConnectionManager(this)
             ensureListenerRegistered()
-
-            // 初始化文件日志
-            FileLogger.init(this)
 
             // v6: 注册网络监听器
             connectionManager.registerNetworkMonitor()

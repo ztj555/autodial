@@ -239,6 +239,14 @@ class DialEngine(
         try {
             val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("phone_number", number))
+            // 复制号码弹窗提醒
+            if (prefs.getBoolean("copy_toast", false)) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    try {
+                        android.widget.Toast.makeText(service, "已复制: $number", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (_: Exception) {}
+                }
+            }
         } catch (_: Exception) {}
     }
 
