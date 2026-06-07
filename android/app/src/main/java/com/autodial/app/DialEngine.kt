@@ -91,7 +91,7 @@ class DialEngine(
 
     fun resolveSimSlot(number: String): Int {
         val prefs = service.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        val modeKey = prefs.getString("dial_mode", DialMode.POPUP.key) ?: DialMode.POPUP.key
+        val modeKey = prefs.getString("dial_mode", DialMode.ROUND_SELECT.key) ?: DialMode.ROUND_SELECT.key
         val mode = DialMode.fromKey(modeKey)
         return when (mode) {
             DialMode.SIM1 -> 0
