@@ -149,7 +149,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -187,7 +187,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0.0"
-                        android:textColor="#000000"
+                        android:tag="text"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />

@@ -431,11 +431,9 @@ class CallLogFragment : Fragment() {
             connecting = false
             connectionStatusDot.setImageResource(R.drawable.dot_green)
             connectionStatusText.text = "已连接"
-            connectionStatusText.setTextColor(android.graphics.Color.parseColor(colors.green))
         } else {
             connectionStatusDot.setImageResource(R.drawable.dot_gray)
             connectionStatusText.text = "未连接电脑"
-            connectionStatusText.setTextColor(android.graphics.Color.parseColor(colors.text2))
         }
         updateBtnStateUI()
     }
