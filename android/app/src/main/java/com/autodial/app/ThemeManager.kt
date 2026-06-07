@@ -41,7 +41,7 @@ object ThemeManager {
     private const val KEY_THEME_ID = "theme_id"
     private const val KEY_MODE = "theme_mode"
 
-    val DEFAULT_THEME_ID = "minimalist"
+    val DEFAULT_THEME_ID = "sky-blue"
     val DEFAULT_MODE = "light"
 
     // 主题变更监听器
