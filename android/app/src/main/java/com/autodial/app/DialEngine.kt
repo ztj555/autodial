@@ -253,7 +253,7 @@ class DialEngine(
     private fun showDialAnimation() {
         try {
             val prefs = service.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-            if (prefs.getInt("dial_animation_mode", DialAnimationOverlay.MODE_OFF) == DialAnimationOverlay.MODE_OFF) return
+            if (prefs.getInt("dial_animation_mode", DialAnimationOverlay.MODE_BOUNCE) == DialAnimationOverlay.MODE_OFF) return
             android.os.Handler(android.os.Looper.getMainLooper()).post { DialAnimationOverlay.show(service) }
         } catch (_: Exception) {}
     }

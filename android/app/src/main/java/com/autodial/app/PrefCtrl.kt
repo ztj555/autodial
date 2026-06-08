@@ -71,7 +71,7 @@ class PrefCtrl(private val context: Context) {
 
     fun isCloudEnabled() = prefs.getBoolean("cloud_enabled", false)
 
-    fun getCardOpacity(): Int = prefs.getInt("card_opacity", 50)
+    fun getCardOpacity(): Int = prefs.getInt("card_opacity", 0)
     fun setCardOpacity(value: Int) = prefs.edit().putInt("card_opacity", value).apply()
 
     fun isManuallyDisconnected() = prefs.getBoolean("manual_disconnect", false)
