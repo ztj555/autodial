@@ -330,9 +330,11 @@ class CallLogFragment : Fragment() {
                 requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
                     .edit().putString("dial_mode", dialModeKeys[index]).apply()
                 updateDialModeBarUI()
-                // 显示模式说明 2 秒
+                // 显示模式说明 2 秒 — 放在第一条记录上方
                 val mode = DialMode.fromKey(dialModeKeys[index])
-                Toast.makeText(requireContext(), mode.desc, Toast.LENGTH_SHORT).show()
+                val toast = Toast.makeText(requireContext(), mode.desc, Toast.LENGTH_SHORT)
+                toast.setGravity(android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL, 0, dpToPx(220))
+                toast.show()
             }
         }
 
@@ -709,4 +711,6 @@ class CallLogFragment : Fragment() {
         ThemeManager.applyToView(requireView(), colors)
         updateConnectionStatus(DialService.isConnected, DialService._instance?.connectionMode ?: "")
     }
+
+    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
 }
