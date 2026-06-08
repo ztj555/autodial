@@ -162,6 +162,10 @@ class DialEngine(
             val handle = getPhoneAccountHandle(simSlot)
             val uri = Uri.fromParts("tel", number, null)
 
+            // On Xiaomi, pre-arm accessibility service for possible SIM picker popup
+            val isXiaomi = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
+            if (isXiaomi) DialAccessibilityService.expectSimPicker(simSlot)
+
             // Always try placeCall first - works from foreground service in background
             try {
                 val extras = Bundle()
