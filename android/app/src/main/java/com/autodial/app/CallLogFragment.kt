@@ -39,13 +39,18 @@ data class PhoneCallRecord(
 )
 
 class CallLogAdapter(
-    private val records: List<PhoneCallRecord>,
+    private var records: List<PhoneCallRecord>,
     private val colors: ThemeColors,
     private val onLongClick: (PhoneCallRecord) -> Unit
 ) :
     RecyclerView.Adapter<CallLogAdapter.ViewHolder>() {
 
     private val timeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+
+    fun updateData(newRecords: List<PhoneCallRecord>) {
+        records = newRecords
+        notifyDataSetChanged()
+    }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val number: TextView = view.findViewById(R.id.itemCallNumber)
@@ -148,6 +153,7 @@ class CallLogFragment : Fragment() {
     }
 
     private lateinit var recyclerView: RecyclerView
+    private var callLogAdapter: CallLogAdapter? = null
     private lateinit var emptyView: View
     private lateinit var permissionHint: View
     private lateinit var lastCallHintBanner: View
@@ -641,8 +647,14 @@ class CallLogFragment : Fragment() {
         } else {
             recyclerView.visibility = View.VISIBLE
             emptyView.visibility = View.GONE
-            recyclerView.adapter = CallLogAdapter(records, colors) { record ->
-                showCallRecordMenu(record)
+            if (callLogAdapter == null) {
+                callLogAdapter = CallLogAdapter(records, colors) { record ->
+                    showCallRecordMenu(record)
+                }
+                recyclerView.adapter = callLogAdapter
+                recyclerView.adapter?.notifyDataSetChanged()
+            } else {
+                callLogAdapter!!.updateData(records)
             }
         }
     }
