@@ -42,46 +42,42 @@ class DialService : Service() {
         private const val ACTION_NEW_DIAL = "com.autodial.NEW_DIAL"
         private const val ACTION_CALL_ENDED = "com.autodial.CALL_ENDED"
         private const val ACTION_LAST_CALL_HINT = "com.autodial.LAST_CALL_HINT"
-        /** 拨号前需要用户选卡时发出此广播，MainActivity 弹出 SimSelectBottomSheet */
         const val ACTION_SHOW_SIM_SELECT = "com.autodial.SHOW_SIM_SELECT"
-        /** 收到短信发送请求时发出此广播，MainActivity 启动 SmsConfirmActivity */
         const val ACTION_SHOW_SMS_CONFIRM = "com.autodial.SHOW_SMS_CONFIRM"
-        /** 云端连接状态变化 */
         const val ACTION_CLOUD_STATUS = "com.autodial.CLOUD_STATUS"
+        const val ACTION_EXECUTE_PENDING_DIAL = "com.autodial.EXECUTE_PENDING_DIAL"
 
         var isRunning = false
             private set
-        /** 委托给 ConnectionManager */
+        @Volatile var isActivityVisible = false
+        var pendingBackgroundDialNumber: String? = null
         val isConnected: Boolean get() = _instance?.connectionManager?.isConnected ?: false
-        val serverAddress: String get() = "" // 不再单独追踪，由 ConnectionManager 管理
+        val serverAddress: String get() = ""
         val isCloudConnected: Boolean get() = _instance?.connectionManager?.isCloudConnected ?: false
         val isLanConnected: Boolean get() = _instance?.connectionManager?.isLanConnected ?: false
         val transportMode: String get() = _instance?.connectionManager?.getTransportMode() ?: ""
-        val currentCloudServer: String get() = "" // 不再单独追踪
+        val currentCloudServer: String get() = ""
         val currentPin: String get() = _instance?.let { it.lastPin } ?: ""
 
         fun newIntent(context: Context): Intent = Intent(context, DialService::class.java)
 
-        // 供 DialConfirmActivity 调用，回报拨号结果给电脑
         fun sendDialResult(number: String, status: String) {
             _instance?._sendResultToPC(number, status)
         }
-        // 供 SmsConfirmActivity 调用，回报短信发送结果给电脑
         fun sendSmsResult(number: String, status: String) {
             _instance?._sendSmsResultToPC(number, status)
         }
         internal var _instance: DialService? = null
     }
 
-    // ==================== ConnectionManager 委托 ====================
+    // ==================== ConnectionManager delegate ====================
 
     lateinit var connectionManager: ConnectionManager
         private set
     var connectionMode: String = ""
         private set
 
-    // v4: 拨号引擎
-    private lateinit var dialEngine: DialEngine
+    internal lateinit var dialEngine: DialEngine
 
     private var manualConnecting = false
     private var lastPin = ""
@@ -89,36 +85,58 @@ class DialService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var callLogDb: CallLogDb
     private var phoneStateListener: PhoneStateListener? = null
-    // A1修复: 保存 TelephonyCallback 引用以便 onDestroy 注销
     private var telephonyCallback: android.telephony.TelephonyCallback? = null
     private val handler = Handler(Looper.getMainLooper())
-    // v6: 亮屏广播 — 解决 Doze 后连接失效问题
     private var screenOnReceiver: BroadcastReceiver? = null
 
-    /** 当前正在等待用户选卡的号码（队列，防止并发拨号覆盖） */
     private val pendingDialQueue = ArrayDeque<String>()
     private var pendingDialNumber: String?
         get() = pendingDialQueue.firstOrNull()
         set(value) {
-            // A2修复: 检查非空再 removeFirst，防止空队列崩溃
             if (value == null) { pendingDialQueue.removeFirstOrNull() }
             else pendingDialQueue.addLast(value)
         }
 
-    /** 标记 listener 是否已注册（防止 catch 路径重复注册） */
     private var listenerRegistered = false
 
-    /** ConnectionManager 状态监听器 */
+    internal fun requestDialInForeground(number: String) {
+        Companion.pendingBackgroundDialNumber = number
+        FileLogger.i("DialService", "Background dial queued: $number")
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_EXECUTE_PENDING_DIAL
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pi = PendingIntent.getActivity(this, 0, intent, flags)
+
+        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("AutoDial")
+            .setContentText("Tap to dial $number")
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(Notification.CATEGORY_CALL)
+            .setFullScreenIntent(pi, true)
+            .setAutoCancel(true)
+            .build()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(1002, n)
+    }
+
     private val connectionListener = object : ConnectionManager.ConnectionStateListener {
         override fun onStateChanged(
             newState: ConnectionManager.ConnectionState,
             oldState: ConnectionManager.ConnectionState
         ) {
             connectionMode = connectionManager.getTransportMode()
-            FileLogger.i("DialService", "状态变化: $oldState → $newState, 通道=$connectionMode")
+            FileLogger.i("DialService", "\u72b6\u6001\u53d8\u5316: $oldState \u2192 $newState, \u901a\u9053=$connectionMode")
             when (newState) {
                 ConnectionManager.ConnectionState.CONNECTED -> {
-                    updateNotification("已连接到电脑(${connectionMode})")
+                    updateNotification("\u5df2\u8fde\u63a5\u5230\u7535\u8111(${connectionMode})")
                     getSharedPreferences("autodial", MODE_PRIVATE)
                         .edit().putBoolean("was_connected", true).apply()
                     notifyConnectionChange(true, null)
@@ -126,21 +144,20 @@ class DialService : Service() {
                 }
                 ConnectionManager.ConnectionState.DISCONNECTED -> {
                     if (oldState == ConnectionManager.ConnectionState.CONNECTED) {
-                        updateNotification("连接已断开")
+                        updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
                         notifyConnectionChange(false, "disconnected")
                     }
                 }
                 ConnectionManager.ConnectionState.CONNECTING -> {
-                    updateNotification("正在连接...")
+                    updateNotification("\u6b63\u5728\u8fde\u63a5...")
                 }
                 ConnectionManager.ConnectionState.DISCOVERING -> {
-                    updateNotification("正在搜索电脑...")
+                    updateNotification("\u6b63\u5728\u641c\u7d22\u7535\u8111...")
                 }
             }
         }
 
         override fun onMessageReceived(msg: JSONObject) {
-            // Bug2修复: 提取 messageId，立即回发 ACK
             val messageId = msg.optString("messageId", "")
             val originalType = msg.optString("type", "")
             FileLogger.logMessage("RECV", originalType, msg.toString())
@@ -160,19 +177,18 @@ class DialService : Service() {
                 }
             }
 
-            // 业务消息分发（dial, sms, hangup 等）
             try {
                 when (originalType) {
                     "dial" -> {
                         val number = msg.optString("number", "")
-                        FileLogger.i("DialService", "收到拨号请求: $number")
+                        FileLogger.i("DialService", "\u6536\u5230\u62e8\u53f7\u8bf7\u6c42: $number")
                         if (number.isNotEmpty() && ::dialEngine.isInitialized) {
-                            Log.d(TAG, "拨号请求: $number")
+                            Log.d(TAG, "\u62e8\u53f7\u8bf7\u6c42: $number")
                             dialEngine.dialNumber(number)
                         }
                     }
                     "reconnect_request" -> {
-                        FileLogger.i("DialService", "收到 PC 端云端唤醒指令")
+                        FileLogger.i("DialService", "\u6536\u5230 PC \u7aef\u4e91\u7aef\u5524\u9192\u6307\u4ee4")
                         if (::connectionManager.isInitialized) {
                             connectionManager.onReconnectRequest()
                         }
@@ -180,9 +196,9 @@ class DialService : Service() {
                     "sms" -> {
                         val number = msg.optString("number", "")
                         val content = msg.optString("content", "")
-                        FileLogger.i("DialService", "收到短信请求: $number, 内容长度=${content.length}")
+                        FileLogger.i("DialService", "\u6536\u5230\u77ed\u4fe1\u8bf7\u6c42: $number, \u5185\u5bb9\u957f\u5ea6=${content.length}")
                         if (number.isNotEmpty()) {
-                            Log.d(TAG, "短信请求: $number, 内容长度=${content.length}")
+                            Log.d(TAG, "\u77ed\u4fe1\u8bf7\u6c42: $number, \u5185\u5bb9\u957f\u5ea6=${content.length}")
                             val intent = Intent(ACTION_SHOW_SMS_CONFIRM).apply {
                                 putExtra("number", number)
                                 putExtra("content", content)
@@ -192,22 +208,22 @@ class DialService : Service() {
                         }
                     }
                     "hangup" -> {
-                        FileLogger.i("DialService", "收到挂断指令")
-                        Log.d(TAG, "收到挂断指令")
+                        FileLogger.i("DialService", "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
+                        Log.d(TAG, "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
                         if (::dialEngine.isInitialized) dialEngine.endCall()
                     }
                 }
-            } catch (e: Exception) { Log.e(TAG, "消息处理失败: ${e.message}") }
+            } catch (e: Exception) { Log.e(TAG, "\u6d88\u606f\u5904\u7406\u5931\u8d25: ${e.message}") }
         }
 
         override fun onError(error: ConnectionManager.ConnectionError) {
             when (error) {
                 is ConnectionManager.ConnectionError.AuthFailed -> {
-                    updateNotification("配对码错误")
+                    updateNotification("\u914d\u5bf9\u7801\u9519\u8bef")
                     notifyConnectionChange(false, "pin_wrong")
                 }
                 is ConnectionManager.ConnectionError.Disconnected -> {
-                    updateNotification("连接已断开")
+                    updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
                     notifyConnectionChange(false, error.reason)
                 }
                 else -> {
@@ -217,21 +233,16 @@ class DialService : Service() {
         }
     }
 
-    // ==================== v4: 拨号引擎代理 ====================
+    // ==================== v4: delegate ====================
 
-    /** 拨号结果回调（供 DialEngine 使用） */
     internal fun onDialResult(number: String, status: String) {
         _sendResultToPC(number, status)
     }
 
-    /** 设置待拨号号码（供弹窗选卡后回调使用） */
     internal fun setPendingDialNumber(number: String?) {
         pendingDialNumber = number
     }
 
-    /**
-     * 确保 ConnectionManager 的 listener 已注册
-     */
     private fun ensureListenerRegistered() {
         if (listenerRegistered) return
         if (!::connectionManager.isInitialized) return
@@ -240,52 +251,44 @@ class DialService : Service() {
         Log.d(TAG, "ConnectionManager listener registered")
     }
 
-    // ==================== 生命周期 ====================
+    // ==================== lifecycle ====================
 
     override fun onCreate() {
         super.onCreate()
         _instance = this
-        FileLogger.init(this)  // 最早初始化，确保日志系统可用
+        FileLogger.init(this)
         try {
             isRunning = true
             callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
-            startForeground(NOTIFICATION_ID, buildNotification("跨屏拨号 运行中"))
+            startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d"))
 
-            // 保持CPU唤醒，防止MIUI杀掉后台WebSocket连接
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "autodial:wake").apply {
                 setReferenceCounted(false)
-                acquire(12 * 60 * 60 * 1000L) // 12小时后自动释放
+                acquire(12 * 60 * 60 * 1000L)
             }
 
-            // 异步同步系统通话记录到 SIM 缓存（首次安装或数据库升级后）
             Thread {
                 try {
                     val count = callLogDb.syncFromSystemCallLog(this@DialService)
-                    if (count > 0) Log.d(TAG, "SIM缓存同步完成：$count 个号码")
+                    if (count > 0) Log.d(TAG, "SIM cache synced: $count numbers")
                 } catch (e: Exception) {
-                    Log.e(TAG, "SIM缓存同步失败: ${e.message}")
+                    Log.e(TAG, "SIM cache sync failed: ${e.message}")
                 }
             }.start()
 
-            // 监听通话状态，通话结束时通知UI刷新通话记录
             registerCallStateListener()
 
-            // ==================== 初始化 DialEngine ====================
             dialEngine = DialEngine(this, callLogDb)
 
-            // ==================== 初始化 ConnectionManager ====================
             connectionManager = ConnectionManager(this)
             ensureListenerRegistered()
 
-            // v6: 注册网络监听器
             connectionManager.registerNetworkMonitor()
 
-            // v6: 注册亮屏广播 — 屏幕亮起时检查连接健康
             registerScreenOnReceiver()
 
-            // 自动重连（从保存的配置恢复）
             connectionManager.loadSavedConfig()
 
         } catch (e: Exception) {
@@ -293,8 +296,7 @@ class DialService : Service() {
             isRunning = true
             callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
-            try { startForeground(NOTIFICATION_ID, buildNotification("跨屏拨号 运行中")) } catch (_: Exception) {}
-            // 即使初始化失败，也要创建 ConnectionManager 并注册 listener
+            try { startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")) } catch (_: Exception) {}
             if (!::connectionManager.isInitialized) {
                 connectionManager = ConnectionManager(this)
             }
@@ -302,16 +304,13 @@ class DialService : Service() {
                 dialEngine = DialEngine(this, callLogDb)
             }
             ensureListenerRegistered()
-            // v6: 注册网络监听器
             try { connectionManager.registerNetworkMonitor() } catch (_: Exception) {}
-            // 尝试自动重连
             try { connectionManager.loadSavedConfig() } catch (_: Exception) {}
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
-            // 确保 ConnectionManager 已初始化且 listener 已注册
             if (!::connectionManager.isInitialized) {
                 connectionManager = ConnectionManager(this)
             }
@@ -321,6 +320,17 @@ class DialService : Service() {
             ensureListenerRegistered()
 
             when (intent?.action) {
+                ACTION_EXECUTE_PENDING_DIAL -> {
+                    val pending = Companion.pendingBackgroundDialNumber
+                    if (pending != null) {
+                        Companion.pendingBackgroundDialNumber = null
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(1002)
+                        if (::dialEngine.isInitialized) {
+                            dialEngine.dialNumber(pending)
+                        }
+                    }
+                }
                 "CONNECT" -> {
                     val ip = intent.getStringExtra("ip") ?: ""
                     val pin = intent.getStringExtra("pin") ?: ""
@@ -330,7 +340,6 @@ class DialService : Service() {
                         manualConnecting = true
                         getSharedPreferences("autodial", MODE_PRIVATE).edit()
                             .putString("ip", ip).putString("pin", pin).apply()
-                        // v7: 读取用户设定的连接策略（自动迁移旧配置）
                         val strategy = ConnectionStrategy.readFromPrefs(
                             getSharedPreferences("autodial", MODE_PRIVATE)
                         )
@@ -342,17 +351,15 @@ class DialService : Service() {
                     getSharedPreferences("autodial", MODE_PRIVATE).edit()
                         .putBoolean("was_connected", false).apply()
                     connectionManager.disconnect()
-                    updateNotification("跨屏拨号 运行中")
+                    updateNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")
                 }
-                /** SimSelectBottomSheet 用户选好卡后回调 */
                 "DIAL_WITH_SIM" -> {
                     val number = intent.getStringExtra("number") ?: return START_STICKY
                     val simSlot = intent.getIntExtra("sim_slot", 0)
                     pendingDialNumber = null
-                    dialEngine.broadcastDialSimInfo(number, simSlot)  // v4: delegate
+                    dialEngine.broadcastDialSimInfo(number, simSlot)
                     dialEngine.performDial(number, simSlot)
                 }
-                /** SimSelectBottomSheet 用户取消 */
                 "DIAL_CANCELLED" -> {
                     pendingDialNumber = null
                     val number = intent.getStringExtra("number") ?: return START_STICKY
@@ -368,16 +375,13 @@ class DialService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            // 注销通话状态监听
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // A1修复: 注销 TelephonyCallback（Android 12+）
                 telephonyCallback?.let { try { tm.unregisterTelephonyCallback(it) } catch (_: Exception) {} }
                 telephonyCallback = null
             } else {
                 phoneStateListener?.let { try { @Suppress("DEPRECATION") tm.listen(it, PhoneStateListener.LISTEN_NONE) } catch (_: Exception) {} }
             }
-            // v6: 注销亮屏广播
             unregisterScreenOnReceiver()
             if (::connectionManager.isInitialized) connectionManager.cleanup()
             FileLogger.shutdown()
@@ -388,7 +392,7 @@ class DialService : Service() {
         } catch (_: Exception) {}
     }
 
-    // ==================== 发送方法（委托 ConnectionManager）====================
+    // ==================== send methods ====================
 
     private fun sendToPC(msg: JSONObject) {
         if (::connectionManager.isInitialized) {
@@ -400,7 +404,7 @@ class DialService : Service() {
 
     private fun _sendResultToPC(number: String, status: String) {
         try {
-            FileLogger.i("DialService", "拨号结果: $number → $status")
+            FileLogger.i("DialService", "\u62e8\u53f7\u7ed3\u679c: $number \u2192 $status")
             sendToPC(JSONObject().apply {
                 put("type", "dial_result"); put("number", number); put("status", status)
             })
@@ -409,7 +413,7 @@ class DialService : Service() {
 
     private fun _sendSmsResultToPC(number: String, status: String) {
         try {
-            FileLogger.i("DialService", "短信结果: $number → $status")
+            FileLogger.i("DialService", "\u77ed\u4fe1\u7ed3\u679c: $number \u2192 $status")
             sendToPC(JSONObject().apply {
                 put("type", "sms_result"); put("number", number); put("status", status)
             })
@@ -428,40 +432,39 @@ class DialService : Service() {
         } catch (_: Exception) {}
     }
 
-    // ==================== 通话状态监听 ====================
+    // ==================== call state listener ====================
 
     private fun registerCallStateListener() {
         try {
             val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Android 12+: 使用 TelephonyCallback，保存引用以便 onDestroy 注销（A1修复）
                 telephonyCallback = object : android.telephony.TelephonyCallback(),
                     android.telephony.TelephonyCallback.CallStateListener {
                     override fun onCallStateChanged(state: Int) {
                         if (state == TelephonyManager.CALL_STATE_IDLE) {
-                            Log.d(TAG, "通话结束，通知刷新通话记录")
+                            Log.d(TAG, "\u901a\u8bdd\u7ed3\u675f\uff0c\u901a\u77e5\u5237\u65b0\u901a\u8bdd\u8bb0\u5f55")
                             notifyCallEnded()
                         }
                     }
                 }
                 tm.registerTelephonyCallback(mainExecutor, telephonyCallback!!)
-                Log.d(TAG, "已注册通话状态监听 (TelephonyCallback)")
+                Log.d(TAG, "\u5df2\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c (TelephonyCallback)")
             } else {
                 @Suppress("DEPRECATION")
                 phoneStateListener = object : PhoneStateListener() {
                     override fun onCallStateChanged(state: Int, phoneNumber: String?) {
                         if (state == TelephonyManager.CALL_STATE_IDLE) {
-                            Log.d(TAG, "通话结束，通知刷新通话记录")
+                            Log.d(TAG, "\u901a\u8bdd\u7ed3\u675f\uff0c\u901a\u77e5\u5237\u65b0\u901a\u8bdd\u8bb0\u5f55")
                             notifyCallEnded()
                         }
                     }
                 }
                 @Suppress("DEPRECATION")
                 tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
-                Log.d(TAG, "已注册通话状态监听 (PhoneStateListener)")
+                Log.d(TAG, "\u5df2\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c (PhoneStateListener)")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "注册通话状态监听失败: ${e.message}")
+            Log.e(TAG, "\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c\u5931\u8d25: ${e.message}")
         }
     }
 
@@ -472,20 +475,16 @@ class DialService : Service() {
         } catch (_: Exception) {}
     }
 
-    // ==================== v6: 亮屏健康检查 ====================
+    // ==================== screen on health check ====================
 
-    /**
-     * 注册亮屏广播 — 屏幕亮起时检查连接是否存活
-     * 解决 Android Doze 休眠后 WebSocket 变成僵尸连接的问题
-     */
     private fun registerScreenOnReceiver() {
         unregisterScreenOnReceiver()
         screenOnReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == Intent.ACTION_SCREEN_ON
                     || intent?.action == Intent.ACTION_USER_PRESENT) {
-                    Log.d(TAG, "屏幕亮起，触发连接健康检查")
-                    FileLogger.i(TAG, "亮屏健康检查")
+                    Log.d(TAG, "\u5c4f\u5e55\u4eae\u8d77\uff0c\u89e6\u53d1\u8fde\u63a5\u5065\u5eb7\u68c0\u67e5")
+                    FileLogger.i(TAG, "\u4eae\u5c4f\u5065\u5eb7\u68c0\u67e5")
                     if (::connectionManager.isInitialized) {
                         connectionManager.wakeAndReconnect()
                     }
@@ -497,7 +496,7 @@ class DialService : Service() {
             addAction(Intent.ACTION_USER_PRESENT)
         }
         registerReceiver(screenOnReceiver, filter)
-        Log.d(TAG, "已注册亮屏广播")
+        Log.d(TAG, "\u5df2\u6ce8\u518c\u4eae\u5c4f\u5e7f\u64ad")
     }
 
     private fun unregisterScreenOnReceiver() {
@@ -507,33 +506,17 @@ class DialService : Service() {
         }
     }
 
-    // ==================== SIM 卡信息 ====================
+    // ==================== SIM info ====================
 
-    /**
-     * 获取当前可用的 SIM 卡列表（subscriptionId → simSlotIndex 映射）
-     */
     private fun getSimInfoList(): List<SubscriptionInfo> {
         return dialEngine.getSimInfoList()
     }
 
-    /**
-     * 根据 simSlot (0/1) 获取对应的 PhoneAccountHandle
-     *
-     * 国产 ROM（MIUI / ColorOS / EMUI / OriginOS 等）的 PhoneAccount extras
-     * 中 subscriptionId 的 key 各不相同，且 ComponentName 也与 AOSP 不同。
-     * 本方法采用 5 层策略逐级 fallback，确保在各种设备上都能找到有效 handle。
-     */
     private fun getPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
         return dialEngine.getPhoneAccountHandle(simSlot)
     }
 
-    // ==================== 拨号卡选择逻辑 ====================
-
-    /**
-     * 根据当前拨号模式决定使用哪张卡，或是否弹窗让用户选
-     * @return simSlot (0=卡1, 1=卡2)，-1 表示需要弹窗
-     */
-    // ==================== v4: Delegate to DialEngine ====================
+    // ==================== dial delegate ====================
 
     private fun resolveSimSlot(number: String): Int {
         return dialEngine.resolveSimSlot(number)
@@ -556,11 +539,11 @@ class DialService : Service() {
     }
 
     private fun copyNumberToClipboard(number: String) {
-        // moved to DialEngine, called via onDialSuccess
+        // moved to DialEngine
     }
 
     private fun showDialAnimation() {
-        // moved to DialEngine, called via onDialSuccess
+        // moved to DialEngine
     }
 
     private fun broadcastDialSimInfo(number: String, simSlot: Int) {
@@ -568,11 +551,10 @@ class DialService : Service() {
     }
 
     private fun notifyLastCallHint(number: String) {
-        // moved to DialEngine, called via dialNumber
+        // moved to DialEngine
     }
 
-
-    // ==================== 通知 UI ====================
+    // ==================== notification UI ====================
 
     private fun notifyConnectionChange(connected: Boolean, reason: String?) {
         val intent = Intent(ACTION_CONNECTION).apply {
@@ -588,15 +570,15 @@ class DialService : Service() {
         dialEngine.notifyNewDial(number)
     }
 
-    // ==================== 通知栏 ====================
+    // ==================== notification bar ====================
 
     private fun createNotificationChannel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(CHANNEL_ID, "跨屏拨号 服务", NotificationManager.IMPORTANCE_LOW)
+                val channel = NotificationChannel(CHANNEL_ID, "\u8de8\u5c4f\u62e8\u53f7 \u670d\u52a1", NotificationManager.IMPORTANCE_LOW)
                     .apply {
-                        description = "保持拨号连接"
-                        setVibrationPattern(longArrayOf(0))  // 禁用振动
+                        description = "\u4fdd\u6301\u62e8\u53f7\u8fde\u63a5"
+                        setVibrationPattern(longArrayOf(0))
                         enableVibration(false)
                     }
                 getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -606,10 +588,10 @@ class DialService : Service() {
 
     private fun buildNotification(text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("跨屏拨号").setContentText(text)
+            .setContentTitle("\u8de8\u5c4f\u62e8\u53f7").setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setOngoing(true).setSilent(true)
-            .setVibrate(longArrayOf(0))  // 禁用振动
+            .setVibrate(longArrayOf(0))
             .build()
     }
 

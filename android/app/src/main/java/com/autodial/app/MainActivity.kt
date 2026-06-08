@@ -40,7 +40,6 @@ class MainActivity : AppCompatActivity() {
 
     private val connectionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            // 连接成功不再自动跳转到记录页
         }
     }
 
@@ -74,7 +73,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // 每次启动清除手动断开标志，恢复自动重连
         getSharedPreferences("autodial", MODE_PRIVATE).edit()
             .putBoolean("manual_disconnect", false).apply()
 
@@ -86,19 +84,15 @@ class MainActivity : AppCompatActivity() {
         tabCallLogLabel = findViewById(R.id.tabCallLogLabel)
         tabStatsLabel = findViewById(R.id.tabStatsLabel)
 
-        // 注册主题变更监听
         ThemeManager.addOnThemeChangedListener(themeListener)
 
-        // 设置 ViewPager 适配器
         viewPager.adapter = ViewPagerAdapter(this, fragments)
         viewPager.isUserInputEnabled = false
 
-        // 底部导航点击事件
         tabConnect.setOnClickListener { switchTab(0) }
         tabCallLog.setOnClickListener { switchTab(1) }
         tabStats.setOnClickListener { switchTab(2) }
 
-        // 注册广播
         ContextCompat.registerReceiver(this, connectionReceiver,
             IntentFilter("com.autodial.CONNECTION_CHANGE"),
             ContextCompat.RECEIVER_EXPORTED
@@ -112,52 +106,67 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.RECEIVER_EXPORTED
         )
 
-        // 启动后台服务
         startService(DialService.newIntent(this))
 
-        // 请求权限
         requestPermissions()
 
-        // 应用主题
         applyTheme()
-        // 默认选中第一个 tab
         switchTab(0)
     }
 
+    // ==================== background dial support ====================
+
     override fun onResume() {
         super.onResume()
-        // 主题变更已由 ThemeManager 监听器处理，这里只需确保当前状态正确
+        DialService.isActivityVisible = true
+        // Execute any pending background dial
+        val pending = DialService.pendingBackgroundDialNumber
+        if (pending != null) {
+            DialService.pendingBackgroundDialNumber = null
+            DialService._instance?.let {
+                if (it::dialEngine.isInitialized) {
+                    it.dialEngine.dialNumber(pending)
+                }
+            }
+        }
     }
 
-    /**
-     * 应用主题到 MainActivity 及子 View
-     */
+    override fun onPause() {
+        super.onPause()
+        DialService.isActivityVisible = false
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == DialService.ACTION_EXECUTE_PENDING_DIAL) {
+            val pending = DialService.pendingBackgroundDialNumber
+            if (pending != null) {
+                DialService.pendingBackgroundDialNumber = null
+                DialService._instance?.let {
+                    if (it::dialEngine.isInitialized) {
+                        it.dialEngine.dialNumber(pending)
+                    }
+                }
+            }
+        }
+    }
+
     private fun applyTheme() {
         val colors = ThemeManager.getColors(this)
-
-        // 状态栏 + 导航栏
         val bgColor = Color.parseColor(colors.bg)
         window.statusBarColor = bgColor
         window.navigationBarColor = bgColor
-        // 浅色模式时文字用深色
         val isLight = ThemeManager.isLightMode(this)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = isLight
             isAppearanceLightNavigationBars = isLight
         }
-
-        // 应用颜色到 main layout
         ThemeManager.applyToView(findViewById<View>(android.R.id.content), colors)
     }
 
-    /**
-     * 通知所有 Fragment 主题已变更（保留兼容，Fragment 已有各自监听器）
-     */
     fun notifyFragmentsThemeChanged() {
-        // Fragment 各自有 ThemeManager 监听器，无需手动通知
     }
 
-    /** 同步拨号模式UI（ConnectFragment修改后通知CallLogFragment顶栏） */
     fun syncDialModeUI() {
         (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
     }
@@ -175,7 +184,7 @@ class MainActivity : AppCompatActivity() {
             if (SimSelectOverlay.hasPermission(this)) {
                 SimSelectOverlay.show(this, number, lastSimSlot, lastDialTime)
             } else {
-                Toast.makeText(this, "请开启悬浮窗权限以显示选卡弹窗", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "\u8bf7\u5f00\u542f\u60ac\u6d6e\u7a97\u6743\u9650\u4ee5\u663e\u793a\u9009\u5361\u5f39\u7a97", Toast.LENGTH_LONG).show()
                 startActivity(Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:$packageName")
@@ -235,7 +244,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "弹窗选卡需要悬浮窗权限，请允许", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "\u5f39\u7a97\u9009\u5361\u9700\u8981\u60ac\u6d6e\u7a97\u6743\u9650\uff0c\u8bf7\u5141\u8bb8", Toast.LENGTH_LONG).show()
             try {
                 startActivity(Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
