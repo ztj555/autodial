@@ -330,6 +330,9 @@ class CallLogFragment : Fragment() {
                 requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
                     .edit().putString("dial_mode", dialModeKeys[index]).apply()
                 updateDialModeBarUI()
+                // 显示模式说明 2 秒
+                val mode = DialMode.fromKey(dialModeKeys[index])
+                Toast.makeText(requireContext(), mode.desc, Toast.LENGTH_SHORT).show()
             }
         }
 

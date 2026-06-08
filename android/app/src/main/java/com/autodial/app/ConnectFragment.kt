@@ -271,6 +271,7 @@ class ConnectFragment : Fragment() {
                 "③ 连接成功后在电脑上点号码即可拨号\n\n" +
                 "💡 不在同一WiFi？高级设置→连接策略→自动\n" +
                 "💡 切换SIM卡？设置→拨号模式\n" +
+                "💡 可按照个人习惯切换弹窗 轮选 系统等不同的拨号模式\n" +
                 "💡 连不上？检查电脑防火墙放行端口 35432"
 
             // v7: 云服务器内联列表（纯配置UI，无连接动作）
@@ -722,13 +723,10 @@ class ConnectFragment : Fragment() {
         }
     }
 
-    /** 首次启动时如未设置电池优化，弹窗引导 */
+    /** 每次启动时如未设置电池优化，弹窗引导直到设置好为止 */
     private fun checkBatteryOptFirstTime() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         if (!isAdded) return
-        val prefs = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("battery_opt_prompted", false)) return // 已提示过
-        prefs.edit().putBoolean("battery_opt_prompted", true).apply()
         val pm = requireActivity().getSystemService(Context.POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(requireActivity().packageName)) return
         AlertDialog.Builder(requireActivity())

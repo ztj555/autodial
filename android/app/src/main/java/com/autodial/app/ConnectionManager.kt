@@ -998,7 +998,8 @@ class ConnectionManager(private val context: Context) {
                         try { cloudPingSentTime = now; cloudWebSocket?.send(pingMsg.toString()); cloudPingInFlight = true } catch (_: Exception) { cloudPingInFlight = false }
                     }
                 }
-                handler.postDelayed(heartbeatRunnable!!, HEARTBEAT_INTERVAL_MS)
+                // 防止心跳内部触发 stopHeartbeat() 后 heartbeatRunnable 已被置 null 导致 NPE
+                heartbeatRunnable?.let { handler.postDelayed(it, HEARTBEAT_INTERVAL_MS) }
             }
         }
         handler.postDelayed(heartbeatRunnable!!, HEARTBEAT_INTERVAL_MS)
