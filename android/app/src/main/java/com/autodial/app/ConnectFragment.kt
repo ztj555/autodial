@@ -910,13 +910,13 @@ class ConnectFragment : Fragment() {
         }
     }
 
-    /** 渲染服务器内联列表，每行带连通状态和测试结果 */
+    /** 渲染服务器内联列表，每行带连通状态、手动连接和操作按钮 */
     private fun refreshCloudServerList() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
         val servers = cloudCtrl.getServerList()
-        sortServers(servers)  // 上次用的排到第一
+        sortServers(servers)
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
         val isCloudOk = DialService.isCloudConnected
@@ -924,39 +924,31 @@ class ConnectFragment : Fragment() {
         if (servers.isEmpty()) {
             cloudServerListContainer.addView(TextView(requireContext()).apply {
                 text = "未配置服务器，点击「+ 添加」"
-                textSize = 13f; setTextColor(Color.parseColor(colors.text2))
-                setPadding(0, 8, 0, 8)
+                textSize = 14f; setTextColor(Color.parseColor(colors.text2))
+                setPadding(0, 10, 0, 10)
             })
             return
         }
 
         servers.forEachIndexed { i, server ->
             val isCurrent = server == connectedServer && isCloudOk
-
             val row = LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 7, 0, 7)
+                setPadding(0, 8, 0, 8)
             }
 
             // 连接状态指示灯
             row.addView(TextView(requireContext()).apply {
                 text = if (isCurrent) "\u25CF" else "\u25CB"
-                textSize = 10f; setPadding(0, 0, 6, 0)
+                textSize = 12f; setPadding(0, 0, 6, 0)
                 setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.text2))
-            })
-
-            // 序号 (A/B/C/D/E...)
-            row.addView(TextView(requireContext()).apply {
-                text = serverLabel(i)
-                textSize = 13f; setPadding(0, 0, 8, 0)
-                setTextColor(Color.parseColor(if (i == 0) colors.gold else colors.text2))
             })
 
             // 地址（可长按复制）
             val disp = cloudCtrl.stripCloudPrefix(server)
             val addrView = TextView(requireContext()).apply {
-                text = disp; textSize = 12f; isSingleLine = true
+                text = disp; textSize = 14f; isSingleLine = true
                 setTextColor(Color.parseColor(if (isCurrent) colors.gold else colors.text))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnLongClickListener {
@@ -968,17 +960,52 @@ class ConnectFragment : Fragment() {
             }
             row.addView(addrView)
 
-            // 测试按钮（单台）
-            val testBtn = TextView(requireContext()).apply {
-                text = "\u26A1"; textSize = 12f; setPadding(6, 0, 6, 0)
-                setTextColor(Color.parseColor(colors.text2))
+            // 手动连接按钮
+            row.addView(TextView(requireContext()).apply {
+                text = "连"; textSize = 13f; setPadding(8, 2, 8, 2)
+                setTextColor(Color.parseColor(colors.bg))
+                setBackgroundColor(Color.parseColor(colors.gold))
+                setOnClickListener {
+                    if (!DialService.isConnected || !DialService.isLanConnected) {
+                        // 当前没有局域网连接，尝试连接此云服务器
+                        val pin = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                            .getString("pin", "") ?: ""
+                        if (pin.isEmpty()) {
+                            Toast.makeText(requireActivity(), "请先在连接页输入配对码", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE).edit()
+                            .putString("cloud_server", server)
+                            .putString("connection_strategy", "auto")
+                            .apply()
+                        val intent = DialService.newIntent(requireContext()).apply {
+                            action = "CONNECT"; putExtra("ip", server); putExtra("pin", pin)
+                        }
+                        requireActivity().startService(intent)
+                        Toast.makeText(requireActivity(), "正在连接 $server ...", Toast.LENGTH_SHORT).show()
+                    } else {
+                        // 已有 LAN 连接，只作为云中继备用
+                        requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE).edit()
+                            .putString("cloud_server", server)
+                            .apply()
+                        Toast.makeText(requireActivity(), "$server 已设为云中继", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
+            row.addView(TextView(requireContext()).apply { text = " "; textSize = 6f })
+
+            // 测试按钮
+            row.addView(TextView(requireContext()).apply {
+                text = "测"; textSize = 13f; setPadding(6, 2, 6, 2)
+                setTextColor(Color.parseColor(colors.text))
+                setBackgroundColor(Color.parseColor(colors.bg2))
                 setOnClickListener { testSingleServer(server, this) }
-            }
-            row.addView(testBtn)
+            })
+            row.addView(TextView(requireContext()).apply { text = " "; textSize = 4f })
 
             // 上移
             if (i > 0) row.addView(TextView(requireContext()).apply {
-                text = "\u2191"; textSize = 13f; setPadding(4, 0, 4, 0)
+                text = "\u2191"; textSize = 15f; setPadding(4, 0, 4, 0)
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i); servers.add(i - 1, server)
@@ -989,7 +1016,7 @@ class ConnectFragment : Fragment() {
 
             // 删除
             row.addView(TextView(requireContext()).apply {
-                text = "\u2715"; textSize = 12f; setPadding(4, 0, 2, 0)
+                text = "删"; textSize = 13f; setPadding(6, 2, 2, 2)
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)

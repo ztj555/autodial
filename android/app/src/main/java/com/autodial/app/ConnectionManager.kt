@@ -65,7 +65,7 @@ class ConnectionManager(private val context: Context) {
     private val lanClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
     private val cloudClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
+        .connectTimeout(6, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -75,6 +75,7 @@ class ConnectionManager(private val context: Context) {
     private var cloudReconnectAttempts = 0
     private var cloudReconnectRunnable: Runnable? = null
     private val MAX_RETRY_ATTEMPTS = 30
+    private val MAX_CLOUD_RETRY_ATTEMPTS = 8
 
     // 心跳
     private var heartbeatRunnable: Runnable? = null
@@ -917,7 +918,7 @@ class ConnectionManager(private val context: Context) {
         if (isCloudConnected) return
         if (currentStrategy == ConnectionStrategy.LAN_ONLY) return
 
-        if (cloudReconnectAttempts >= MAX_RETRY_ATTEMPTS) {
+        if (cloudReconnectAttempts >= MAX_CLOUD_RETRY_ATTEMPTS) {
             v6LogW(TAG, lastPin, "Cloud 重连达到最大次数, 停止")
             return
         }
