@@ -796,11 +796,12 @@ class ConnectFragment : Fragment() {
                 statusDot.setImageResource(R.drawable.dot_green)
                 statusText.text = "已连接"
                 statusText.setTextColor(Color.parseColor(colors.green))
-                val mode = DialService.transportMode
+                val lanOk = DialService.isLanConnected
+                val cloudOk = DialService.isCloudConnected
                 connectionMode.text = when {
-                    mode.contains("lan") && mode.contains("cloud") -> "LAN + Cloud"
-                    mode.contains("lan") -> "局域网"
-                    mode.contains("cloud") -> "云中转"
+                    lanOk && cloudOk -> "LAN + Cloud"
+                    lanOk -> "局域网"
+                    cloudOk -> "云中转"
                     else -> ""
                 }
                 connectionMode.visibility = View.VISIBLE

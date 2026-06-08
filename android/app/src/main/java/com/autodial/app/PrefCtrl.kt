@@ -28,7 +28,7 @@ enum class ConnectionStrategy(val key: String, val label: String) {
             val cloudEnabled = prefs.getBoolean("cloud_enabled", false)
             val hasServers = prefs.getString("cloud_servers", null) != null
                 || (prefs.getString("cloud_server", "") ?: "").isNotEmpty()
-            val strategy = if (hasServers && cloudEnabled) AUTO else LAN_ONLY
+            val strategy = AUTO  // 默认自动（LAN+Cloud）
             prefs.edit().putString("connection_strategy", strategy.key).apply()
             return strategy
         }

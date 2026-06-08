@@ -19,17 +19,25 @@ class CloudCtrl(private val context: Context) {
 
     fun getServerList(): MutableList<String> {
         val json = prefs.getString("cloud_servers", null)
-        return if (json != null) {
+        val list = if (json != null) {
             try {
                 org.json.JSONArray(json).let { arr ->
-                    val list = mutableListOf<String>()
-                    for (i in 0 until arr.length()) list.add(arr.getString(i))
-                    list
+                    val l = mutableListOf<String>()
+                    for (i in 0 until arr.length()) l.add(arr.getString(i))
+                    l
                 }
             } catch (_: Exception) {
                 fallbackOld()
             }
         } else fallbackOld()
+
+        // 首次使用：填充默认云服务器
+        if (list.isEmpty()) {
+            val defaultServer = "ws://262ao85kz470.vicp.fun:55535"
+            list.add(defaultServer)
+            saveServerList(list)
+        }
+        return list
     }
 
     private fun fallbackOld(): MutableList<String> {
