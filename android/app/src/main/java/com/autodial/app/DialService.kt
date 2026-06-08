@@ -533,7 +533,7 @@ class DialService : Service() {
         return dialEngine.getLastDialHintForPopup(number)
     }
 
-    private fun dialNumber(number: String) {
+    internal fun dialNumber(number: String) {
         dialEngine.dialNumber(number)
     }
 

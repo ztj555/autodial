@@ -123,11 +123,7 @@ class MainActivity : AppCompatActivity() {
         val pending = DialService.pendingBackgroundDialNumber
         if (pending != null) {
             DialService.pendingBackgroundDialNumber = null
-            DialService._instance?.let {
-                if (it::dialEngine.isInitialized) {
-                    it.dialEngine.dialNumber(pending)
-                }
-            }
+            DialService._instance?.dialNumber(pending)
         }
     }
 
@@ -142,11 +138,7 @@ class MainActivity : AppCompatActivity() {
             val pending = DialService.pendingBackgroundDialNumber
             if (pending != null) {
                 DialService.pendingBackgroundDialNumber = null
-                DialService._instance?.let {
-                    if (it::dialEngine.isInitialized) {
-                        it.dialEngine.dialNumber(pending)
-                    }
-                }
+                DialService._instance?.dialNumber(pending)
             }
         }
     }
