@@ -113,13 +113,6 @@ class DialEngine(
 
     fun dialNumber(number: String) {
         try {
-            // If app is in background, bring it to foreground first via fullScreenIntent
-            if (!DialService.isActivityVisible) {
-                Log.w(TAG, "App in background, requesting foreground dial: $number")
-                service.requestDialInForeground(number)
-                return
-            }
-
             notifyLastCallHint(number)
             if (androidx.core.content.ContextCompat.checkSelfPermission(service, Manifest.permission.CALL_PHONE)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -165,37 +158,35 @@ class DialEngine(
 
     fun performDial(number: String, simSlot: Int) {
         try {
-            val isXiaomi = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
             val telecomManager = service.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
             val handle = getPhoneAccountHandle(simSlot)
             val uri = Uri.fromParts("tel", number, null)
-            val isShortCode = number.length <= 3 && !number.contains("*") && !number.contains("#")
 
-            if ((isShortCode || !isXiaomi) && handle != null) {
-                try {
-                    val extras = Bundle()
-                    extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
-                    telecomManager.placeCall(uri, extras)
-                    Log.d(TAG, "dialed(placeCall, SIM${simSlot + 1})")
-                    onDialSuccess(number, simSlot)
-                    return
-                } catch (e: SecurityException) { Log.e(TAG, "placeCall denied: ${e.message}") }
-                catch (e: Exception) { Log.e(TAG, "placeCall failed: ${e.message}") }
-            }
+            // Always try placeCall first - works from foreground service in background
+            try {
+                val extras = Bundle()
+                if (handle != null) extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                telecomManager.placeCall(uri, extras)
+                Log.d(TAG, "dialed(placeCall, SIM${simSlot + 1}): $number")
+                onDialSuccess(number, simSlot)
+                return
+            } catch (e: SecurityException) { Log.e(TAG, "placeCall denied: ${e.message}") }
+            catch (e: Exception) { Log.e(TAG, "placeCall failed: ${e.message}") }
+
+            // fallback: ACTION_CALL
             try {
                 val intent = Intent(Intent.ACTION_CALL).apply {
                     data = uri
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if (handle != null) putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                 }
-                if (isXiaomi) DialAccessibilityService.expectSimPicker(simSlot)
                 service.startActivity(intent)
-                Log.d(TAG, "dialed(ACTION_CALL, SIM${simSlot + 1})")
+                Log.d(TAG, "dialed(ACTION_CALL fallback): $number")
                 onDialSuccess(number, simSlot)
-                return
-            } catch (e: Exception) { Log.e(TAG, "ACTION_CALL failed: ${e.message}") }
-            service.onDialResult(number, "error")
-            callLogDb.insertDial(number, "error", simSlot)
+            } catch (e: Exception) {
+                Log.e(TAG, "ACTION_CALL failed: ${e.message}")
+                service.onDialResult(number, "error")
+                callLogDb.insertDial(number, "error", simSlot)
+            }
         } catch (e: Exception) {
             service.onDialResult(number, "error")
         }
