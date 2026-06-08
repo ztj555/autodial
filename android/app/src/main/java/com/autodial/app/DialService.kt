@@ -125,6 +125,13 @@ class DialService : Service() {
             .build()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(1002, n)
+        // Auto-cancel after 3s: if fullScreenIntent didn't fire, discard silently
+        handler.postDelayed({
+            nm.cancel(1002)
+            if (Companion.pendingBackgroundDialNumber == number) {
+                Companion.pendingBackgroundDialNumber = null
+            }
+        }, 3000)
     }
 
     private val connectionListener = object : ConnectionManager.ConnectionStateListener {
