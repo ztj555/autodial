@@ -231,8 +231,11 @@ async def handle_connection(ws, path=None):
                     log_info('CLEANUP', pin, f"Closed old phone: {meta['device_name']}")
 
                 group.phones.add(ws)
+                # Include pc_present field so phone knows if PC is online
+                has_pc = len(group.pcs) > 0
                 await ws.send(json.dumps({
-                    'type': 'auth_ok', 'pin': pin, 'pcCount': len(group.pcs)
+                    'type': 'auth_ok', 'pin': pin, 'pcCount': len(group.pcs),
+                    'pc_present': has_pc
                 }))
 
                 # Forward phone_hello to all PCs in same PIN group
@@ -276,6 +279,10 @@ async def handle_connection(ws, path=None):
                 await ws.send(json.dumps({
                     'type': 'pc_auth_ok', 'pin': pin, 'phoneCount': len(group.phones)
                 }))
+
+                # Notify all phones that PC is now online
+                if len(group.phones) > 0:
+                    await forward_to_phones(pin, {'type': 'pc_online', 'pin': pin})
 
                 # Bug9 fix: forward existing phone_hello to newly connected PC
                 for phone in list(group.phones):
@@ -322,10 +329,20 @@ async def handle_connection(ws, path=None):
     except Exception as e:
         log_error('CONN', None, f"Error: {e}")
     finally:
-        remove_from_group(ws)
         meta = ws_meta.pop(ws, {})
+        pin = meta.get('pin', 'none')
+        role = meta.get('role', '?')
+        remove_from_group(ws)
         ws_connections.discard(ws)
-        log_info('DISCONNECT', meta.get('pin', 'none'),
+
+        # If PC disconnects and no other PC in group, notify all phones
+        if role == 'pc' and pin != 'none':
+            group = pin_groups.get(pin)
+            if not group or len(group.pcs) == 0:
+                log_info('PC_OFFLINE', pin, f"{meta.get('device_name','?')} disconnected, notifying phones")
+                await forward_to_phones(pin, {'type': 'pc_offline', 'pin': pin})
+
+        log_info('DISCONNECT', pin,
                  f"{meta.get('role','?')} ip={meta.get('ip','?')}")
 
 # ==================== HTTP Health Check (same port) ====================
