@@ -200,16 +200,17 @@ const PhoneConnectionManager = {
 
         let device = this.devices.get(pin);
 
-    if (device) {
-      // 更新已有设备
-      if (info.ws) { device.ws = info.ws; device.transportMode = device.cloudWs ? 'lan+cloud' : 'lan'; }
-      if (info.cloudWs) { device.cloudWs = info.cloudWs; device.isCloud = info.isCloud; device.transportMode = device.ws ? 'lan+cloud' : 'cloud'; }
-      if (info.name) device.name = info.name;
-      if (info.ip) device.ip = info.ip;
-      if (info.alias) device.alias = info.alias;
-      device.lastHeartbeat = Date.now();
-      device.state = CONNECTION_STATES.CONNECTED;
-      device.stale = false;
+        if (device) {
+            // 更新已有设备
+            if (info.ws) device.ws = info.ws;
+            if (info.cloudWs) device.cloudWs = info.cloudWs;
+            if (info.isCloud !== undefined) device.isCloud = info.isCloud;
+            if (info.name) device.name = info.name;
+            if (info.ip) device.ip = info.ip;
+            if (info.alias) device.alias = info.alias;
+            device.lastHeartbeat = Date.now();
+            device.state = CONNECTION_STATES.CONNECTED;
+            device.stale = false;
 
             // 重置重连调度器
             if (device.reconnectScheduler) device.reconnectScheduler.cancel();
@@ -217,25 +218,20 @@ const PhoneConnectionManager = {
             this._logI(pin, `设备已更新: name=${device.name} ip=${device.ip} lan=${!!device.ws} cloud=${!!device.cloudWs}`);
         } else {
             // 新设备
-      device = {
-        pin,
-        name: info.name || 'Unknown',
-        ip: info.ip || (info.isCloud ? 'cloud' : ''),
-        alias: info.alias || '',
-        ws: info.ws || null,
-        cloudWs: info.cloudWs || null,
-        isCloud: info.isCloud || false,
-        state: CONNECTION_STATES.CONNECTED,
-        stale: false,
-        lastHeartbeat: Date.now(),
-        connectedAt: Date.now(),
-        reconnectScheduler: null,
-        // v7: 通道追踪
-        transportMode: (info.cloudWs && info.ws) ? 'lan+cloud'
-          : (info.cloudWs ? 'cloud' : 'lan'),
-        lanLatencyMs: -1,
-        cloudLatencyMs: -1
-      };
+            device = {
+                pin,
+                name: info.name || 'Unknown',
+                ip: info.ip || (info.isCloud ? 'cloud' : ''),
+                alias: info.alias || '',
+                ws: info.ws || null,
+                cloudWs: info.cloudWs || null,
+                isCloud: info.isCloud || false,
+                state: CONNECTION_STATES.CONNECTED,
+                stale: false,
+                lastHeartbeat: Date.now(),
+                connectedAt: Date.now(),
+                reconnectScheduler: null  // 手机端自己管理重连，PC 端仅在云端唤醒时创建
+            };
             this.devices.set(pin, device);
             this._logI(pin, `新设备注册: name=${device.name} ip=${device.ip} lan=${!!device.ws} cloud=${!!device.cloudWs}`);
         }
@@ -259,31 +255,27 @@ const PhoneConnectionManager = {
         const device = this.devices.get(pin);
         if (!device) return;
 
-    if (transport === 'lan') {
-      device.ws = null;
-      device.lastHeartbeat = 0;
-      device.stale = true;
-      device.transportMode = device.cloudWs ? 'cloud' : '';
-      device.lanLatencyMs = -1;
-      this._logW(pin, `LAN 通道已断开, 标记 stale, 模式=${device.transportMode}`);
-      if (device.cloudWs) {
-        device.state = CONNECTION_STATES.CONNECTED;
-      } else {
-        device.state = CONNECTION_STATES.DISCONNECTED;
-      }
-    } else if (transport === 'cloud') {
-      device.cloudWs = null;
-      device.isCloud = false;
-      device.stale = true;
-      device.transportMode = device.ws ? 'lan' : '';
-      device.cloudLatencyMs = -1;
-      this._logW(pin, `云端通道已断开, 标记 stale, 模式=${device.transportMode}`);
-      if (device.ws) {
-        device.state = CONNECTION_STATES.CONNECTED;
-      } else {
-        device.state = CONNECTION_STATES.DISCONNECTED;
-      }
-    } else {
+        if (transport === 'lan') {
+            device.ws = null;
+            device.lastHeartbeat = 0;
+            device.stale = true;
+            this._logW(pin, `LAN 通道已断开, 标记 stale`);
+            if (device.cloudWs) {
+                device.state = CONNECTION_STATES.CONNECTED;
+            } else {
+                device.state = CONNECTION_STATES.DISCONNECTED;
+            }
+        } else if (transport === 'cloud') {
+            device.cloudWs = null;
+            device.isCloud = false;
+            device.stale = true;
+            this._logW(pin, `云端通道已断开, 标记 stale`);
+            if (device.ws) {
+                device.state = CONNECTION_STATES.CONNECTED;
+            } else {
+                device.state = CONNECTION_STATES.DISCONNECTED;
+            }
+        } else {
             // 全部移除
             this.devices.delete(pin);
             this._logI(pin, `设备已完全移除`);
@@ -514,28 +506,21 @@ const PhoneConnectionManager = {
             // UI 显示规则：优先别名，兜底 "设备类型+末4位PIN"
             const displayName = device.alias || device.name || ('设备' + pin.slice(-4));
 
-      list.push({
-        id: pin,
-        pin,
-        name: displayName,
-        note: device.alias,
-        rawName: device.name,
-        alias: device.alias,
-        ip: device.ip,
-        active: pin === this.activePin,
-        connectedAt: device.connectedAt,
-        isCloud: cloudOk,
-        connectionType: connType,
-        status,
-        stale: device.stale,
-        // v7: 通道延迟
-        transportMode: device.transportMode || connType,
-        latency: device.transportMode === 'lan+cloud'
-          ? Math.min(device.lanLatencyMs || 999, device.cloudLatencyMs || 999)
-          : (connType === 'lan' ? (device.lanLatencyMs || -1) : (device.cloudLatencyMs || -1)),
-        lanLatencyMs: device.lanLatencyMs || -1,
-        cloudLatencyMs: device.cloudLatencyMs || -1
-      });
+            list.push({
+                id: pin,          // 向后兼容：HTML 使用 phone.id
+                pin,
+                name: displayName,
+                note: device.alias, // 向后兼容：旧 UI 使用 note 字段
+                rawName: device.name,
+                alias: device.alias,
+                ip: device.ip,
+                active: pin === this.activePin,
+                connectedAt: device.connectedAt,
+                isCloud: cloudOk,
+                connectionType: connType,
+                status,
+                stale: device.stale
+            });
         });
         return list;
     },
@@ -642,16 +627,6 @@ const PhoneConnectionManager = {
             device.lastHeartbeat = Date.now();
             device.stale = false;
         }
-    },
-
-    // v7: 通道延迟追踪
-    updateLanLatency(pin, latencyMs) {
-        const device = this.devices.get(pin);
-        if (device) device.lanLatencyMs = latencyMs;
-    },
-    updateCloudLatency(pin, latencyMs) {
-        const device = this.devices.get(pin);
-        if (device) device.cloudLatencyMs = latencyMs;
     },
 
     /** 通过设备名称更新心跳（云端连接场景） */

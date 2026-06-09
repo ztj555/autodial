@@ -9,7 +9,6 @@ const os = require('os');
 const fs = require('fs');
 const { exec, execSync } = require('child_process');
 const crypto = require('crypto');
-const net = require('net');  // v7: 用于云服务器连通性测试
 
 // ==================== v6 文件日志系统 ====================
 // 格式: [时间] [级别] [模块] [PIN] 内容
@@ -96,10 +95,9 @@ const DEFAULT_SETTINGS = {
   theme: 'dark-gold',        // 主题ID
   mode: 'dark',              // 显示模式 dark/dusk/dawn/twilight/warm/mist/light
   phoneNotes: {},            // 手机备注 { "ip|name": "备注" }
-  cloudServer: '',           // 云中转服务器地址（向后兼容）
-  cloudEnabled: false,       // [DEPRECATED v7] 向后兼容，新代码用 connectionStrategy
-  cloudServers: [],          // 多云服务器列表
-  connectionStrategy: 'auto' // v7: 连接策略 'auto' | 'lan_only' | 'cloud_only'
+  cloudServer: '',           // 云中转服务器地址，如 wss://relay.example.com:35430
+  cloudEnabled: false,       // 是否启用云中转
+  cloudServers: []           // 多云服务器列表，如 ["1.2.3.4:35430", "5.6.7.8:35430"]
 };
 
 function loadSettings() {
@@ -119,20 +117,17 @@ function saveSettings(settings) {
 
 let appSettings = loadSettings();
 
-// v7: 向后兼容 — cloudEnabled + cloudServers → connectionStrategy
+// 修复：同步 cloudServer 到 cloudServers（向后兼容）
+if (appSettings.cloudServer && (!Array.isArray(appSettings.cloudServers) || appSettings.cloudServers.length === 0)) {
+  appSettings.cloudServers = [appSettings.cloudServer];
+  console.log("[云端] 从 cloudServer 同步到 cloudServers: " + appSettings.cloudServer);
+}
+
+// 修复：如果 cloudEnabled 为 true 但实际没有配置服务器，自动清除标志
 const hasConfiguredServers = Array.isArray(appSettings.cloudServers) && appSettings.cloudServers.length > 0;
-if (!appSettings.connectionStrategy) {
-  if (appSettings.cloudEnabled && hasConfiguredServers) {
-    appSettings.connectionStrategy = 'auto';
-    fileLog('I', 'Config', null, '迁移: cloudEnabled=true + 有服务器 → strategy=auto');
-  } else if (appSettings.cloudEnabled && !hasConfiguredServers) {
-    appSettings.connectionStrategy = 'lan_only';
-    fileLog('I', 'Config', null, '迁移: cloudEnabled=true 但无服务器 → strategy=lan_only');
-  } else {
-    appSettings.connectionStrategy = 'lan_only';
-  }
-  // 清理旧字段（保留 cloudServer/cloudServers 给服务器列表用）
-  delete appSettings.cloudEnabled;
+if (appSettings.cloudEnabled && !hasConfiguredServers) {
+  console.log("[云端] cloudEnabled=true 但没有配置服务器，清除标志");
+  appSettings.cloudEnabled = false;
 }
 
 // 保存修正后的配置
@@ -484,8 +479,8 @@ function createMainWindow() {
         ips: getLocalIPs(),
         pin: PIN_CODE,
         port: PORT,
-        connectionStrategy: appSettings.connectionStrategy,
-        cloudServers: appSettings.cloudServers,
+        cloudEnabled: appSettings.cloudEnabled,
+        cloudServer: appSettings.cloudServer,
         cloudConnected: cloudConnected
       });
       if (phoneDevices.size > 0) {
@@ -648,8 +643,8 @@ ipcMain.handle('get-info', async () => {
     phoneCount: phoneDevices.size,
     hostname: os.hostname(),
     firewall: firewallWarning ? 'warning' : 'ok',
-    connectionStrategy: appSettings.connectionStrategy,
-    cloudServers: appSettings.cloudServers,
+    cloudEnabled: appSettings.cloudEnabled,
+    cloudServer: appSettings.cloudServer,
     cloudConnected: cloudConnected
   };
 });
@@ -946,17 +941,19 @@ ipcMain.on('rename-phone', (event, { id, pin, note }) => {
   _notifyPhonesUpdate();
 });
 
-// v7: 云端配置更新（策略 + 服务器列表）
-ipcMain.on('update-cloud-config', (event, { strategy, servers }) => {
-  if (strategy !== undefined) appSettings.connectionStrategy = strategy;
+// 云端配置更新
+ipcMain.on('update-cloud-config', (event, { enabled, server, servers }) => {
+  appSettings.cloudEnabled = !!enabled;
+  if (server !== undefined) appSettings.cloudServer = server;
   if (servers !== undefined) appSettings.cloudServers = servers;
-  if (Array.isArray(servers) && servers.length > 0) {
+  // 同步：如果有多个服务器，cloudServer 保存第一个（向后兼容）
+  if (Array.isArray(servers) && servers.length > 0 && !server) {
     appSettings.cloudServer = servers[0];
   }
   saveSettings(appSettings);
-  fileLog('I', 'Cloud', null, `配置更新: strategy=${appSettings.connectionStrategy} servers=${JSON.stringify(appSettings.cloudServers)}`);
+  console.log('[云端] 配置更新: enabled=' + appSettings.cloudEnabled + ' servers=' + JSON.stringify(appSettings.cloudServers) + ' server=' + appSettings.cloudServer);
 
-  if (appSettings.connectionStrategy !== 'lan_only') {
+  if (appSettings.cloudEnabled) {
     const serverList = Array.isArray(appSettings.cloudServers) && appSettings.cloudServers.length > 0
       ? appSettings.cloudServers
       : (appSettings.cloudServer ? [appSettings.cloudServer] : []);
@@ -968,13 +965,13 @@ ipcMain.on('update-cloud-config', (event, { strategy, servers }) => {
   }
 });
 
-// v7: 获取云端状态（含策略 + 通道信息）
+// 获取云端状态
 ipcMain.handle('get-cloud-status', async () => {
   return {
-    strategy: appSettings.connectionStrategy,
+    enabled: appSettings.cloudEnabled,
+    server: appSettings.cloudServer,
     servers: appSettings.cloudServers || [],
-    connected: cloudConnected,
-    cloudUrl: cloudConnected ? appSettings.cloudServer : ''
+    connected: cloudConnected
   };
 });
 
@@ -1074,10 +1071,6 @@ ipcMain.on('restart-app', () => {
 // v6: 轻量云端重连（只重建云端通道，不重启整个软件）
 ipcMain.on('restart-cloud', () => {
   fileLog('I', 'Cloud', null, '用户触发云端重连');
-  if (appSettings.connectionStrategy === 'lan_only') {
-    fileLog('W', 'Cloud', null, '策略为lan_only，跳过云端重连');
-    return;
-  }
   cloudReconnectAttempt = 0;
   if (cloudWs) {
     try {
@@ -1098,7 +1091,7 @@ ipcMain.on('restart-cloud', () => {
 ipcMain.on('dial-failed-trigger-recovery', () => {
   fileLog('I', 'Cloud', null, '拨号超时, 触发云端轻量恢复');
   // 只重建云端通道，不重建 LAN
-  if (!cloudConnected && appSettings.connectionStrategy !== 'lan_only') {
+  if (!cloudConnected && appSettings.cloudEnabled) {
     cloudReconnectAttempt = 0;
     if (cloudWs) {
       try {
@@ -1116,38 +1109,11 @@ ipcMain.on('dial-failed-trigger-recovery', () => {
   }
 });
 
-// v7: 启动时自动测试云服务器连通性
-function autoTestCloudServers() {
-  const serverList = Array.isArray(appSettings.cloudServers) && appSettings.cloudServers.length > 0
-    ? appSettings.cloudServers
-    : (appSettings.cloudServer ? [appSettings.cloudServer] : []);
-  if (serverList.length === 0) return;
-
-  fileLog('I', 'Cloud', null, `自动测试 ${serverList.length} 台云服务器连通性...`);
-  serverList.forEach(async (addr) => {
-    let url = addr;
-    if (!url.startsWith('ws://') && !url.startsWith('wss://')) url = 'ws://' + url;
-    try {
-      const u = new URL(url);
-      const result = await new Promise((resolve) => {
-        const sock = new net.Socket();
-        sock.setTimeout(3000);
-        sock.on('connect', () => { sock.destroy(); resolve(true); });
-        sock.on('timeout', () => { sock.destroy(); resolve(false); });
-        sock.on('error', () => { sock.destroy(); resolve(false); });
-        sock.connect(parseInt(u.port) || 80, u.hostname);
-      });
-      fileLog('I', 'Cloud', null, `  ${addr} → ${result ? '可达' : '不可达'}`);
-    } catch (_) {
-      fileLog('W', 'Cloud', null, `  ${addr} → 格式错误`);
-    }
-  });
-}
-
-// 测试云端服务器连通性（从 UI 触发）
+// 测试云端服务器连通性
 ipcMain.handle('test-cloud-servers', async (event, servers) => {
   const results = [];
   if (!Array.isArray(servers)) return results;
+  const net = require('net');
   for (let i = 0; i < servers.length; i++) {
     const addr = servers[i];
     try {
@@ -1189,7 +1155,7 @@ ipcMain.handle('test-cloud-servers', async (event, servers) => {
 
 // 连接到指定云端服务器（手动切换）
 ipcMain.on('connect-cloud-specific', (event, serverUrl) => {
-  if (!serverUrl || appSettings.connectionStrategy === 'lan_only') return;
+  if (!serverUrl || !appSettings.cloudEnabled) return;
   appSettings.cloudServer = serverUrl;
   saveSettings(appSettings);
   connectCloudServer(serverUrl);
@@ -1360,9 +1326,8 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 默认：返回状态信息（v7: 增加通道详情）
+  // 默认：返回状态信息
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-  const active = getActivePhone();
   res.end(JSON.stringify({
     pin: PIN_CODE,
     ip: LOCAL_IP,
@@ -1370,12 +1335,7 @@ const server = http.createServer((req, res) => {
     port: PORT,
     connected: phoneDevices.size > 0,
     phoneCount: phoneDevices.size,
-    phones: getPhoneList(),
-    connectionStrategy: appSettings.connectionStrategy,
-    cloudConnected: cloudConnected,
-    cloudServer: cloudConnected ? appSettings.cloudServer : '',
-    activePhoneTransport: active ? (active.connectionType || 'none') : 'none',
-    activePhoneLatency: active ? (active.latency || -1) : -1
+    phones: getPhoneList()
   }));
 });
 
@@ -1642,8 +1602,8 @@ let _cloudTraversalGeneration = 0;
 
 function connectCloudServer(targetServerUrl, onResult) {
   let serverUrl = targetServerUrl || appSettings.cloudServer;
-  if (!serverUrl || appSettings.connectionStrategy === 'lan_only') {
-    fileLog('I', 'Cloud', null, '策略为lan_only，跳过云端连接');
+  if (!serverUrl || !appSettings.cloudEnabled) {
+    fileLog('I', 'Cloud', null, '云中转未启用或未配置服务器地址');
     return;
   }
   if (!serverUrl.startsWith('ws://') && !serverUrl.startsWith('wss://')) {
@@ -1884,7 +1844,7 @@ function connectCloudServersFromList(servers, startIndex) {
 
 function _scheduleCloudReconnect() {
   if (cloudReconnectTimer) clearTimeout(cloudReconnectTimer);
-  if (!appSettings.connectionStrategy || appSettings.connectionStrategy === 'lan_only') return;
+  if (!appSettings.cloudEnabled) return;
 
   // v6: 阶梯降频策略 + 30次上限
   const MAX_CLOUD_RETRY = 30;
@@ -1926,8 +1886,8 @@ function _triggerCloudRecovery() {
   if (now - _lastCloudTriggerTime < 3000) {
     return false;
   }
-  if (!appSettings.connectionStrategy || appSettings.connectionStrategy === 'lan_only') {
-    fileLog('W', 'Cloud', null, '策略为lan_only, 跳过云端恢复');
+  if (!appSettings.cloudEnabled) {
+    fileLog('W', 'Cloud', null, '云端未启用, 跳过自动重连');
     return false;
   }
   _lastCloudTriggerTime = now;
@@ -2025,8 +1985,8 @@ function sendToCloudPhone(phone, msg) {
 
 function _notifyCloudStatus() {
   const status = {
-    strategy: appSettings.connectionStrategy,
-    server: cloudConnected ? appSettings.cloudServer : '',
+    enabled: appSettings.cloudEnabled,
+    server: appSettings.cloudServer,
     servers: appSettings.cloudServers || [],
     connected: cloudConnected
   };
@@ -2085,8 +2045,8 @@ app.whenReady().then(() => {
     createMainWindow();
     createFloatBarWindow();
 
-    // v7: 根据连接策略自动连接云端
-    if (appSettings.connectionStrategy !== 'lan_only') {
+    // 云中转：如果已配置并启用，自动连接
+    if (appSettings.cloudEnabled) {
       const serverList = Array.isArray(appSettings.cloudServers) && appSettings.cloudServers.length > 0
         ? appSettings.cloudServers
         : (appSettings.cloudServer ? [appSettings.cloudServer] : []);
@@ -2094,11 +2054,6 @@ app.whenReady().then(() => {
         connectCloudServersFromList(serverList, 0);
       }
     }
-
-    // v7: 延迟 5s 后自动测试云服务器连通性
-    setTimeout(() => {
-      autoTestCloudServers();
-    }, 5000);
 
     // 隐藏界面启动：启动后立即隐藏主窗口
     if (appSettings.silentStart) {

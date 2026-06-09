@@ -338,9 +338,7 @@ class CallLogFragment : Fragment() {
                 updateDialModeBarUI()
                 // 显示模式说明 2 秒 — 放在第一条记录上方
                 val mode = DialMode.fromKey(dialModeKeys[index])
-                val toast = Toast.makeText(requireContext(), mode.desc, Toast.LENGTH_SHORT)
-                toast.setGravity(android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL, 0, dpToPx(220))
-                toast.show()
+                showDialModeHint(mode.desc)
             }
         }
 
@@ -722,6 +720,32 @@ class CallLogFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         ThemeManager.applyToView(requireView(), colors)
         updateConnectionStatus(DialService.isConnected, DialService._instance?.connectionMode ?: "")
+    }
+
+    private fun showDialModeHint(text: String) {
+        val activity = activity ?: return
+        val colors = ThemeManager.getColors(requireContext())
+        val hint = TextView(activity).apply {
+            this.text = text
+            textSize = 15f
+            setTextColor(Color.parseColor(colors.bg))
+            setBackgroundColor(Color.parseColor(colors.goldLight))
+            setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10))
+            gravity = android.view.Gravity.CENTER
+            alpha = 0.95f
+        }
+        val root = activity.window.decorView as android.widget.FrameLayout
+        val params = android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+            topMargin = dpToPx(300)
+        }
+        root.addView(hint, params)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try { root.removeView(hint) } catch (_: Exception) {}
+        }, 2000)
     }
 
     private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
