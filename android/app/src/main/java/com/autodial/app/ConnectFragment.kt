@@ -793,20 +793,35 @@ class ConnectFragment : Fragment() {
 
             if (connected) {
                 connecting = false
-                statusDot.setImageResource(R.drawable.dot_green)
-                statusText.text = "已连接"
-                statusText.setTextColor(Color.parseColor(colors.green))
                 val lanOk = DialService.isLanConnected
                 val cloudOk = DialService.isCloudConnected
+                val pcOk = DialService.isPcReachable
+
+                // 状态指示：LAN 优先，Cloud 区分 PC 在线/离线
+                if (lanOk || pcOk) {
+                    statusDot.setImageResource(R.drawable.dot_green)
+                    statusText.text = "已连接"
+                    statusText.setTextColor(Color.parseColor(colors.green))
+                } else if (cloudOk && !pcOk) {
+                    statusDot.setImageResource(R.drawable.dot_orange)
+                    statusText.text = "等待PC上线"
+                    statusText.setTextColor(Color.parseColor("#FF9800"))
+                } else {
+                    statusDot.setImageResource(R.drawable.dot_green)
+                    statusText.text = "已连接"
+                    statusText.setTextColor(Color.parseColor(colors.green))
+                }
+
                 connectionMode.text = when {
                     lanOk && cloudOk -> "LAN + Cloud"
                     lanOk -> "局域网"
-                    cloudOk -> "云中转"
+                    cloudOk && pcOk -> "云中转"
+                    cloudOk && !pcOk -> "云中继已连接，等待PC上线"
                     else -> ""
                 }
                 connectionMode.visibility = View.VISIBLE
                 connectionBanner.visibility = View.VISIBLE
-                bannerText.text = "✅ 已连接到电脑！等待拨号指令..."
+                bannerText.text = if (lanOk || pcOk) "✅ 已连接到电脑！等待拨号指令..." else "☁️ 云端已连通，等待电脑连接云端..."
                 discoveryHint.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
@@ -1371,14 +1386,25 @@ class ConnectFragment : Fragment() {
             val colors = ThemeManager.getColors(requireContext())
             val lanOk = DialService.isLanConnected
             val cloudOk = DialService.isCloudConnected
+            val pcOk = DialService.isPcReachable
 
             lanStatusText.text = if (lanOk) "已连接" else "未连接"
             lanStatusText.setTextColor(Color.parseColor(if (lanOk) colors.green else "#605040"))
             lanStatusDot.setImageResource(if (lanOk) R.drawable.dot_green else R.drawable.dot_gray)
 
-            cloudStatusText.text = if (cloudOk) "已连接" else "未连接"
-            cloudStatusText.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
-            cloudStatusDot.setImageResource(if (cloudOk) R.drawable.dot_green else R.drawable.dot_gray)
+            cloudStatusText.text = when {
+                cloudOk && pcOk -> "已连接（PC在线）"
+                cloudOk && !pcOk -> "已连通，等待PC"
+                else -> "未连接"
+            }
+            cloudStatusText.setTextColor(Color.parseColor(
+                if (cloudOk && pcOk) colors.green else if (cloudOk && !pcOk) "#FF9800" else "#605040"
+            ))
+            cloudStatusDot.setImageResource(
+                if (cloudOk && pcOk) R.drawable.dot_green
+                else if (cloudOk && !pcOk) R.drawable.dot_orange
+                else R.drawable.dot_gray
+            )
 
             // v8: 延迟内联显示（连接通道模块内）
             val mgr = DialService._instance?.connectionManager

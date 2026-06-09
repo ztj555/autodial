@@ -55,6 +55,7 @@ class DialService : Service() {
         val serverAddress: String get() = ""
         val isCloudConnected: Boolean get() = _instance?.connectionManager?.isCloudConnected ?: false
         val isLanConnected: Boolean get() = _instance?.connectionManager?.isLanConnected ?: false
+        val isPcReachable: Boolean get() = _instance?.connectionManager?.isPcReachable ?: false
         val transportMode: String get() = _instance?.connectionManager?.getTransportMode() ?: ""
         val currentCloudServer: String get() = ""
         val currentPin: String get() = _instance?.let { it.lastPin } ?: ""

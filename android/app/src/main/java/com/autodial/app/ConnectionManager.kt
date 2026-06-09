@@ -112,6 +112,10 @@ class ConnectionManager(private val context: Context) {
     @Volatile private var manualDisconnecting = false
     private var currentStrategy: ConnectionStrategy = ConnectionStrategy.AUTO
 
+    // PC 在线状态（通过云中继确认）
+    @Volatile var pcConfirmedOnline = false
+        private set
+
     // LAN 发现序列
     private var lanDiscoveryCount = 0
     private val MAX_LAN_DISCOVERIES = 4
@@ -151,6 +155,9 @@ class ConnectionManager(private val context: Context) {
             val cloudOk = cloudWebSocket != null && transportMode.contains("cloud")
             return lanOk || cloudOk
         }
+    /** PC 是否通过云中继可达（LAN 直接连接视为始终可达） */
+    val isPcReachable: Boolean
+        get() = isLanConnected || (isCloudConnected && pcConfirmedOnline)
     val connectionMode: String get() = transportMode
     val isLanConnected: Boolean get() = lanWebSocket != null
     val isCloudConnected: Boolean get() = cloudWebSocket != null
@@ -816,6 +823,9 @@ class ConnectionManager(private val context: Context) {
                                 transportMode = if (transportMode.contains("lan")) "lan+cloud" else "cloud"
                                 lastCloudPongTime = System.currentTimeMillis()
                                 cloudPingInFlight = false
+                                // 读取云中继上报的 PC 在线状态（兼容旧版云中继，默认 true）
+                                pcConfirmedOnline = msg.optBoolean("pc_present", true)
+                                v6LogI(TAG, pin, "PC 在线状态: $pcConfirmedOnline")
                                 setState(ConnectionState.CONNECTED)
                             }
                             "auth_fail" -> {
@@ -825,6 +835,16 @@ class ConnectionManager(private val context: Context) {
                                 tryConnectCloudAtIndex(servers, pin, index + 1)
                             }
                             "pong" -> { lastCloudPongTime = System.currentTimeMillis(); cloudPingInFlight = false; cloudLatencyMs = lastCloudPongTime - cloudPingSentTime }
+                            "pc_online" -> {
+                                v6LogI(TAG, pin, "PC 已上线 (via Cloud)")
+                                pcConfirmedOnline = true
+                                handler.post { notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED) }
+                            }
+                            "pc_offline" -> {
+                                v6LogW(TAG, pin, "PC 已下线 (via Cloud)")
+                                pcConfirmedOnline = false
+                                handler.post { notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED) }
+                            }
                             "reconnect_request" -> {
                                 v6LogI(TAG, pin, "收到 PC 端云端唤醒指令 (via Cloud)")
                                 onReconnectRequest()
@@ -866,6 +886,7 @@ class ConnectionManager(private val context: Context) {
     private fun handleCloudDisconnect() {
         try { cloudWebSocket?.cancel() } catch (_: Exception) {}
         cloudWebSocket = null
+        pcConfirmedOnline = false
         v6LogW(TAG, lastPin, "handleCloudDisconnect, transport=$transportMode")
 
         if (manualDisconnecting) {
