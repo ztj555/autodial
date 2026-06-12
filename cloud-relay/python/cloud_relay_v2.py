@@ -226,7 +226,10 @@ async def handle_connection(ws, path=None):
     }
     ws_connections.add(ws)
 
-    log.info(f'CONNECT {client_ip}')
+    log.info(f'CONNECT {client_ip} (path={path})')
+    
+    # v6诊断: 记录详细信息便于排查连接问题
+    log.info(f'CONNECT_DETAIL ip={client_ip} remote_address={ws.remote_address} local_address={ws.local_address}')
 
     try:
         async for raw in ws:
@@ -248,6 +251,9 @@ async def handle_connection(ws, path=None):
                 if check_rate_limit(client_ip):
                     await ws.send(json.dumps({'type': 'auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
                     log.warning(f'RATE_LIMITED phone_hello ip={client_ip}')
+                    # v6诊断: 记录当前速率限制状态
+                    recent_attempts = len([t for t in _pin_attempts.get(client_ip, []) if datetime.now() - t < timedelta(minutes=1)])
+                    log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
                     continue
                 pin = msg.get('pin', '')
                 if not pin or len(pin) < 4:
@@ -260,15 +266,18 @@ async def handle_connection(ws, path=None):
                 group = get_group(pin)
                 group.phones.add(ws)
                 # 回复手机端认证成功（告知当前在线 PC 数）
+                pc_online = len(group.pcs) > 0
                 await ws.send(json.dumps({
                     'type': 'auth_ok',
                     'pin': pin,
-                    'pcCount': len(group.pcs)
+                    'pcCount': len(group.pcs),
+                    'pc_present': pc_online  # v8: 手机端据此判断 PC 是否可达
                 }))
                 # 转发 phone_hello 给同 PIN 的所有 PC
                 # Bug6修复: 附加 deviceId（用手机端 device_name），使 PC 端能正确识别云端设备
                 msg['deviceId'] = meta['device_name']
                 await forward_to_pcs(pin, msg, ws)
+                record_message(pin, msg_type, len(raw))
                 log.info(f'PHONE_HELLO pin={pin} device={meta["device_name"]} ip={client_ip} pcs={len(group.pcs)}')
                 continue
 
@@ -278,6 +287,8 @@ async def handle_connection(ws, path=None):
                 if check_rate_limit(client_ip):
                     await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
                     log.warning(f'RATE_LIMITED pc_hello ip={client_ip}')
+                    recent_attempts = len([t for t in _pin_attempts.get(client_ip, []) if datetime.now() - t < timedelta(minutes=1)])
+                    log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
                     continue
                 pin = msg.get('pin', '')
                 if not pin or len(pin) < 4:
@@ -310,7 +321,16 @@ async def handle_connection(ws, path=None):
                             log.info(f'RESEND phone_hello to new PC: device={phone_device_name} pin={pin}')
                         except Exception as e:
                             log.warning(f'Failed to resend phone_hello: {e}')
+                record_message(pin, msg_type, len(raw))
                 log.info(f'PC_HELLO pin={pin} hostname={meta["device_name"]} ip={client_ip} phones={len(group.phones)}')
+                # v8: PC 上线后通知同 PIN 所有手机
+                if len(group.phones) > 0:
+                    await forward_to_phones(pin, {
+                        'type': 'pc_online',
+                        'pin': pin,
+                        'pcCount': len(group.pcs),
+                        'hostname': meta['device_name']
+                    })
                 continue
 
             # ===== 未握手则拒绝 =====
@@ -329,6 +349,7 @@ async def handle_connection(ws, path=None):
                 if msg_type == 'ack':
                     log.info(f'RELAY ack phone→pc pin={pin} messageId={msg.get("messageId","?")} originalType={msg.get("originalType","?")} deviceName={msg.get("deviceName","?")}')
                 await forward_to_pcs(pin, msg, ws)
+                record_message(pin, msg_type, len(raw))
                 if msg_type == 'ping':
                     await ws.send(json.dumps({'type': 'pong'}))
                     # ping 不记日志，避免刷屏
@@ -341,6 +362,13 @@ async def handle_connection(ws, path=None):
                 target = msg.get('targetDevice', '')
                 log.info(f'RELAY {msg_type} pc→phone pin={pin} targetDevice={target}')
                 await forward_to_phones(pin, msg, ws)
+                record_message(pin, msg_type, len(raw))
+                continue
+
+            # ===== 通用 ping/pong（任何角色发 ping 都回复 pong）=====
+            if msg_type == 'ping':
+                await ws.send(json.dumps({'type': 'pong'}))
+                record_message(pin, 'ping', len(raw))
                 continue
 
             log.info(f'UNKNOWN type={msg_type} pin={pin}')
@@ -348,12 +376,28 @@ async def handle_connection(ws, path=None):
     except websockets.exceptions.ConnectionClosed:
         pass
     except Exception as e:
-        log.error(f'Connection error: {e}')
+        import traceback
+        log.error(f'Connection error: {e}\nTraceback:\n{traceback.format_exc()}')
     finally:
         remove_from_group(ws)
         meta = ws_meta.pop(ws, {})
         ws_connections.discard(ws)
-        log.info(f'DISCONNECT {meta.get("role", "unknown")} pin={meta.get("pin", "none")} ip={meta.get("ip", "?")}')
+        role = meta.get('role', 'unknown')
+        pin = meta.get('pin', 'none')
+        ip = meta.get('ip', '?')
+        log.info(f'DISCONNECT {role} pin={pin} ip={ip}')
+        # v8: 如果断线的是 PC，通知同 PIN 所有手机 PC 已离线
+        if role == 'pc' and pin != 'none':
+            group = pin_groups.get(pin)
+            if group and len(group.phones) > 0:
+                try:
+                    await forward_to_phones(pin, {
+                        'type': 'pc_offline',
+                        'pin': pin,
+                        'pcCount': len(group.pcs)
+                    })
+                except Exception:
+                    pass
 
 # ==================== 防火墙配置 ====================
 def configure_firewall():
@@ -567,7 +611,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('page-' + pageId).classList.add('active');
-            document.querySelector(`.nav-btn[onclick="showPage('${pageId}')"]`).classList.add('active');
+            // 更安全的按钮激活方式
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(pageId)) {
+                    btn.classList.add('active');
+                }
+            });
             if (pageId === 'dashboard') loadDashboard();
             if (pageId === 'clients') loadClients();
             if (pageId === 'stats') loadStats();
@@ -734,8 +783,23 @@ def get_logs(n=100):
 async def health_check_handler(path, request_headers):
     """处理 HTTP 请求（健康检查 + API + Web 界面）"""
     # 如果是 WebSocket 握手请求，不拦截，让 websockets 库处理
-    if request_headers.get('Upgrade', '').lower() == 'websocket':
-        return None
+    # v8修复: dict() 归一化 headers 键为全小写，兼容 Node.js ws (Upgrade) 和 OkHttp (upgrade)
+    try:
+        hdrs = dict(request_headers)
+        upgrade = hdrs.get('upgrade', '')
+        if upgrade == 'websocket':
+            log.info(f'WS_UPGRADE path={path} upgrade={upgrade} → allow')
+            return None
+    except Exception as e:
+        log.warning(f'WS_CHECK_FAIL: {e}')
+        # fallback: 直接检查 headers 中是否有 upgrade 相关字段
+        try:
+            for key in request_headers:
+                if key.lower() == 'upgrade' and request_headers[key].lower() == 'websocket':
+                    log.info(f'WS_UPGRADE(fallback) path={path} → allow')
+                    return None
+        except Exception:
+            pass
     
     parsed = urlparse(path)
     path = parsed.path
@@ -807,14 +871,18 @@ async def run_server():
     global server_instance, _heartbeat_task
     log.info(f'Starting server on port {PORT}...')
     
-    # 自动配置防火墙规则
-    configure_firewall()
+    # 自动配置防火墙规则（放到 executor 中避免阻塞事件循环）
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, configure_firewall)
 
     # C4修复: 取消旧心跳任务再创建新的
-    if _heartbeat_task and not _heartbeat_task.done():
-        _heartbeat_task.cancel()
-    _heartbeat_task = asyncio.create_task(check_heartbeats())
-    log.info(f'Heartbeat checker started (timeout={HEARTBEAT_TIMEOUT}s)')
+    # 注意：已禁用应用层心跳检测，改用WebSocket内置的ping/pong机制
+    # 避免因只有WebSocket心跳而没有应用层消息导致误判超时
+    # if _heartbeat_task and not _heartbeat_task.done():
+    #     _heartbeat_task.cancel()
+    # _heartbeat_task = asyncio.create_task(check_heartbeats())
+    # log.info(f'Heartbeat checker started (timeout={HEARTBEAT_TIMEOUT}s)')
+    log.info('Using WebSocket built-in ping/pong mechanism (application-layer heartbeat disabled)')
 
     async with serve(handle_connection, '0.0.0.0', PORT,
                      process_request=health_check_handler,
@@ -823,7 +891,7 @@ async def run_server():
                      close_timeout=10) as server:
         server_instance = server
         log.info(f'Server started on port {PORT}, PID={os.getpid()}')
-        log.info(f'Web 管理界面: http://0.0.0.0:{WEB_PORT}')
+        log.info(f'Web 管理界面: http://0.0.0.0:{PORT} (与 WebSocket 同端口)')
 
         # 通知托盘状态更新
         update_tray_status(True)
@@ -895,7 +963,7 @@ def create_menu():
         pystray.MenuItem(f'AutoDial 云中转 - {status_text}', None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(f'端口: {PORT}', None, enabled=False),
-        pystray.MenuItem(f'Web: http://127.0.0.1:{WEB_PORT}', None, enabled=False),
+        pystray.MenuItem(f'Web: http://127.0.0.1:{PORT}', None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem('停止服务器' if server_running else '启动服务器',
                          toggle_server, default=True),
@@ -924,9 +992,9 @@ async def start_server_task():
     asyncio.create_task(run_server())
 
 def open_web():
-    """打开 Web 管理界面"""
+    """打开 Web 管理界面（注意：Web管理界面在WebSocket端口上通过HTTP路由处理）"""
     import webbrowser
-    webbrowser.open(f'http://127.0.0.1:{WEB_PORT}')
+    webbrowser.open(f'http://127.0.0.1:{PORT}')
 
 def open_log():
     """打开日志文件"""
@@ -969,7 +1037,9 @@ def run_server_thread():
     try:
         loop.run_until_complete(run_server())
     except Exception as e:
+        import traceback
         log.error(f'Server error: {e}')
+        log.error(f'Traceback: {traceback.format_exc()}')
         update_tray_status(False)
 
 # ==================== 主入口 ====================
@@ -984,7 +1054,7 @@ def main():
     print(f'  PID:      {os.getpid()}')
     print('========================================')
     print('')
-    print(f'  Web 管理界面: http://127.0.0.1:{WEB_PORT}')
+    print(f'  Web 管理界面: http://127.0.0.1:{PORT} (与 WebSocket 同端口)')
     print('')
 
     # 启动服务器线程

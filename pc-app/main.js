@@ -12,18 +12,29 @@ const crypto = require('crypto');
 
 // ==================== v6 文件日志系统 ====================
 // 格式: [时间] [级别] [模块] [PIN] 内容
-const LOG_DIR = path.join(app.getPath('userData'), 'autodial-logs');
+let _LOG_DIR = null;
+function _getLogDir() {
+  if (!_LOG_DIR) {
+    try {
+      _LOG_DIR = path.join(app.getPath('userData'), 'autodial-logs');
+      fs.mkdirSync(_LOG_DIR, { recursive: true });
+    } catch (e) {
+      // app 尚未就绪时返回空，调用方 (fileLog) 有兜底逻辑
+      return '';
+    }
+  }
+  return _LOG_DIR;
+}
+const LOG_DIR = null;  // v6修复: 延迟初始化，等 app.whenReady() 后再通过 _getLogDir() 获取
 const MAX_LOG_SIZE = 10 * 1024 * 1024;  // 10MB
 const MAX_LOG_DAYS = 7;
 const LOG_FALLBACK_BUFFER = [];          // 内存降级环形缓冲区
 const LOG_FALLBACK_MAX = 1000;
 let _logFailCount = 0;
 
-try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch (e) {}
-
 function _getLogFilePath() {
     const dateStr = new Date().toISOString().slice(0, 10);
-    return path.join(LOG_DIR, `autodial-pc-${dateStr}.log`);
+    return path.join(_getLogDir(), `autodial-pc-${dateStr}.log`);
 }
 
 function fileLog(level, module, pin, msg) {
@@ -65,11 +76,13 @@ function logMessage(direction, pin, msgType, content) {
 
 function cleanOldLogs() {
     try {
-        const files = fs.readdirSync(LOG_DIR);
+        const logDir = _getLogDir();
+        if (!logDir) return;
+        const files = fs.readdirSync(logDir);
         const cutoff = Date.now() - MAX_LOG_DAYS * 24 * 60 * 60 * 1000;
         for (const file of files) {
             if (file.endsWith('.log')) {
-                const filePath = path.join(LOG_DIR, file);
+                const filePath = path.join(logDir, file);
                 try {
                     const stat = fs.statSync(filePath);
                     if (stat.mtimeMs < cutoff) fs.unlinkSync(filePath);
@@ -79,14 +92,21 @@ function cleanOldLogs() {
     } catch (_) {}
 }
 
-cleanOldLogs();
 setInterval(cleanOldLogs, 6 * 60 * 60 * 1000);
 
-fileLog('I', 'Logger', null, '=== AutoDial PC v6 日志系统启动 ===');
-fileLog('I', 'Logger', null, `日志目录: ${LOG_DIR}`);
-
 // ==================== 设置管理 ====================
-const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+let _SETTINGS_FILE = null;
+function _getSettingsFile() {
+  if (!_SETTINGS_FILE) {
+    try {
+      _SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+    } catch (e) {
+      // app 尚未就绪时返回空，调用方有兜底逻辑
+      return '';
+    }
+  }
+  return _SETTINGS_FILE;
+}
 const DEFAULT_SETTINGS = {
   closeAction: 'minimize',   // 'minimize' | 'exit'
   trayExit: true,            // 托盘右键退出直接退出程序
@@ -102,8 +122,9 @@ const DEFAULT_SETTINGS = {
 
 function loadSettings() {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    const f = _getSettingsFile();
+    if (fs.existsSync(f)) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(f, 'utf8')) };
     }
   } catch (e) {}
   return { ...DEFAULT_SETTINGS };
@@ -111,7 +132,7 @@ function loadSettings() {
 
 function saveSettings(settings) {
   try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+    fs.writeFileSync(_getSettingsFile(), JSON.stringify(settings, null, 2), 'utf8');
   } catch (e) {}
 }
 
@@ -143,8 +164,8 @@ function _pushLog(level, text) {
   const entry = { level, text, ts: Date.now() };
   _logBuffer.push(entry);
   if (_logBuffer.length > 200) _logBuffer.shift();
-  // 广播给所有渲染进程
-  [mainWindow, floatBarWindow].forEach(win => {
+  // 广播给所有渲染进程（与其他广播函数保持一致）
+  [mainWindow, floatBarWindow, settingsWindow, smsWindow].forEach(win => {
     if (win && !win.isDestroyed()) {
       try { win.webContents.send('server-log', entry); } catch (e) {}
     }
@@ -1091,14 +1112,17 @@ ipcMain.on('restart-cloud', () => {
 ipcMain.on('dial-failed-trigger-recovery', () => {
   fileLog('I', 'Cloud', null, '拨号超时, 触发云端轻量恢复');
   // 只重建云端通道，不重建 LAN
-  if (!cloudConnected && appSettings.cloudEnabled) {
+  if (appSettings.cloudEnabled) {
+    // v6修复: 无论当前cloudConnected状态如何都重置计数，防止TCP半开连接导致计数器不归零
     cloudReconnectAttempt = 0;
-    if (cloudWs) {
-      try {
-        if (cloudWs._pingTimer) clearInterval(cloudWs._pingTimer);
-        cloudWs.close();
-      } catch (e) {}
-      cloudWs = null;
+    if (!cloudConnected) {
+      if (cloudWs) {
+        try {
+          if (cloudWs._pingTimer) clearInterval(cloudWs._pingTimer);
+          cloudWs.close();
+        } catch (e) {}
+        cloudWs = null;
+      }
     }
     const serverList = Array.isArray(appSettings.cloudServers) && appSettings.cloudServers.length > 0
       ? appSettings.cloudServers
@@ -1170,7 +1194,14 @@ function _sendError(event, message) {
 
 // ==================== HTTP/WebSocket 服务器 ====================
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  let url;
+  try {
+    url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'invalid url' }));
+    return;
+  }
 
   // 所有请求统一加 CORS 头（允许浏览器插件跨域访问）
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1521,13 +1552,16 @@ wss.on('connection', (ws, req) => {
 
 function _notifyPhonesUpdate() {
   activePhoneId = PhoneConnectionManager.activePin;
+  // v8修复: 检查是否有真正活跃的设备，而非仅 device.size > 0
+  const hasActive = Array.from(PhoneConnectionManager.devices.values())
+    .some(d => !d.stale && ((d.ws && d.ws.readyState === 1) || (d.cloudWs && d.cloudWs.readyState === 1)));
   const data = {
     phones: PhoneConnectionManager.getDeviceList(),
     activeId: PhoneConnectionManager.activePin,
-    connected: PhoneConnectionManager.devices.size > 0
+    connected: hasActive
   };
   const compatData = {
-    connected: PhoneConnectionManager.devices.size > 0,
+    connected: hasActive,
     phoneIP: PhoneConnectionManager.activePin ? (PhoneConnectionManager.devices.get(PhoneConnectionManager.activePin)?.ip || null) : null
   };
   [mainWindow, floatBarWindow, smsWindow].forEach(win => {
@@ -1630,30 +1664,34 @@ function connectCloudServer(targetServerUrl, onResult) {
     cloudWs = newWs;
 
     // v7: 云端 pong 超时检测
-    cloudWs._lastPong = Date.now();
-    const PONG_TIMEOUT = 5000;  // 5s 无pong判死
+    newWs._lastPong = Date.now();
+    const PONG_TIMEOUT = 20000; // 20s 无pong判死（必须 > PING_INTERVAL，否则第一个 ping 还没发就超时）
     const PING_INTERVAL = 15000; // 15s 发一次ping
 
-    cloudWs.on('open', () => {
+    newWs.on('open', () => {
       fileLog('I', 'Cloud', null, 'WebSocket 已连接，发送 pc_hello');
-      cloudWs.send(JSON.stringify({
+      newWs.send(JSON.stringify({
         type: 'pc_hello',
         pin: PIN_CODE,
         hostname: os.hostname()
       }));
     });
 
-    cloudWs.on('message', (data) => {
+    newWs.on('message', (data) => {
       try {
         const msg = JSON.parse(data);
 
         if (msg.type === 'pc_auth_ok') {
           cloudConnected = true;
           cloudReconnectAttempt = 0;
-          cloudWs._established = true;  // v6: 标记连接已建立，断开时走 _scheduleCloudReconnect
+          newWs._established = true;  // v6: 标记连接已建立，断开时走 _scheduleCloudReconnect
           appSettings.cloudServer = serverUrl;
           saveSettings(appSettings);
           fileLog('I', 'Cloud', null, `认证成功 PIN=${msg.pin} 在线手机数=${msg.phoneCount}`);
+          // v6修复: 云端重连后更新所有已注册设备的cloudWs引用
+          PhoneConnectionManager.devices.forEach((dev, pin) => {
+            if (dev.isCloud) dev.cloudWs = newWs;
+          });
           _notifyCloudStatus();
           if (typeof onResult === 'function') onResult(true, serverUrl);
         }
@@ -1675,13 +1713,13 @@ function connectCloudServer(targetServerUrl, onResult) {
             ip: 'cloud',
             name: deviceName,
             alias: loadPhoneNote(pin, deviceName),
-            cloudWs: cloudWs,
+            cloudWs: newWs,
             isCloud: true
           });
 
           activePhoneId = PhoneConnectionManager.activePin;
 
-          cloudWs.send(JSON.stringify({
+          newWs.send(JSON.stringify({
             type: 'auth_ok',
             message: '配对成功！',
             pin,
@@ -1733,7 +1771,7 @@ function connectCloudServer(targetServerUrl, onResult) {
 
         if (msg.type === 'pong' || msg.type === 'error') {
           // v7: 记录 pong 时间用于超时检测
-          if (msg.type === 'pong') cloudWs._lastPong = Date.now();
+          if (msg.type === 'pong') newWs._lastPong = Date.now();
           return;
         }
 
@@ -1742,16 +1780,16 @@ function connectCloudServer(targetServerUrl, onResult) {
       }
     });
 
-    cloudWs.on('close', (code, reason) => {
-      if (cloudWs._cleanedUp) return;
-      cloudWs._cleanedUp = true;
+    newWs.on('close', (code, reason) => {
+      if (newWs._cleanedUp) return;
+      newWs._cleanedUp = true;
       // v6 稳定性: 旧连接的事件不处理，防止覆盖新连接状态
-      if (cloudWs._generation !== _cloudTraversalGeneration) {
-        fileLog('W', 'Cloud', null, `旧连接(generation=${cloudWs._generation})的close事件, 当前generation=${_cloudTraversalGeneration}, 忽略`);
+      if (newWs._generation !== _cloudTraversalGeneration) {
+        fileLog('W', 'Cloud', null, `旧连接(generation=${newWs._generation})的close事件, 当前generation=${_cloudTraversalGeneration}, 忽略`);
         return;
       }
       cloudConnected = false;
-      if (cloudWs._pingTimer) { clearInterval(cloudWs._pingTimer); cloudWs._pingTimer = null; }
+      if (newWs._pingTimer) { clearInterval(newWs._pingTimer); newWs._pingTimer = null; }
       fileLog('W', 'Cloud', null, `连接断开 code=${code}`);
       // 移除所有云端通道
       PhoneConnectionManager.devices.forEach((dev, pin) => {
@@ -1761,23 +1799,23 @@ function connectCloudServer(targetServerUrl, onResult) {
       _notifyCloudStatus();
       _notifyPhonesUpdate();
       // v6: 已建立过的连接断开时走 _scheduleCloudReconnect，不再回调 onResult
-      if (cloudWs._established) {
+      if (newWs._established) {
         _scheduleCloudReconnect();
       } else if (typeof onResult === 'function') {
         onResult(false, serverUrl);
       }
     });
 
-    cloudWs.on('error', (err) => {
-      if (cloudWs._cleanedUp) return;
-      cloudWs._cleanedUp = true;
+    newWs.on('error', (err) => {
+      if (newWs._cleanedUp) return;
+      newWs._cleanedUp = true;
       // v6 稳定性: 旧连接的事件不处理
-      if (cloudWs._generation !== _cloudTraversalGeneration) {
-        fileLog('W', 'Cloud', null, `旧连接(generation=${cloudWs._generation})的error事件, 忽略`);
+      if (newWs._generation !== _cloudTraversalGeneration) {
+        fileLog('W', 'Cloud', null, `旧连接(generation=${newWs._generation})的error事件, 忽略`);
         return;
       }
       cloudConnected = false;
-      if (cloudWs._pingTimer) { clearInterval(cloudWs._pingTimer); cloudWs._pingTimer = null; }
+      if (newWs._pingTimer) { clearInterval(newWs._pingTimer); newWs._pingTimer = null; }
       fileLog('E', 'Cloud', null, `连接错误: ${err.message}`);
       _removeCloudPhones();
       _notifyCloudStatus();
@@ -1786,16 +1824,16 @@ function connectCloudServer(targetServerUrl, onResult) {
     });
 
     // v7: 定期发送心跳 + pong超时检测
-    cloudWs._pingTimer = setInterval(() => {
-      if (cloudWs && cloudWs.readyState === WebSocket.OPEN) {
+    newWs._pingTimer = setInterval(() => {
+      if (newWs && newWs.readyState === WebSocket.OPEN) {
         // 检查上次pong是否超时
-        const sinceLastPong = Date.now() - cloudWs._lastPong;
+        const sinceLastPong = Date.now() - newWs._lastPong;
         if (sinceLastPong > PONG_TIMEOUT) {
           fileLog('W', 'Cloud', null, `pong超时(${Math.round(sinceLastPong/1000)}s), 判定云端断线`);
-          try { cloudWs.close(4000, 'pong_timeout'); } catch (e) {}
+          try { newWs.close(4000, 'pong_timeout'); } catch (e) {}
           return;
         }
-        try { cloudWs.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
+        try { newWs.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
       }
     }, PING_INTERVAL);
 
@@ -2018,6 +2056,12 @@ function tryAddFirewallRule() {
 // ==================== 启动 ====================
 app.whenReady().then(() => {
   tryAddFirewallRule();
+  cleanOldLogs();  // v6修复: 等 app ready 后再清理旧日志
+
+  // v6修复: 推迟到 app ready 后执行（app.getPath 在此之前不可用）
+  fileLog('I', 'Logger', null, '=== AutoDial PC v6 日志系统启动 ===');
+  fileLog('I', 'Logger', null, `日志目录: ${_getLogDir()}`);
+  saveSettings(appSettings);
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -2079,8 +2123,14 @@ app.on('window-all-closed', () => {
 // 全局异常捕获
 process.on('uncaughtException', (err) => {
   console.error('[未捕获异常]', err.message);
+  try { fileLog('E', 'Fatal', null, `未捕获异常: ${err.message}\n${err.stack}`); } catch (_) {}
+  // 严重错误后尝试优雅退出（保留最后日志）
+  try { saveSettings(appSettings); } catch (_) {}
+  app.isQuitting = true;
+  app.quit();
 });
 
 process.on('unhandledRejection', (reason) => {
   console.error('[未处理Promise拒绝]', reason);
+  try { fileLog('E', 'Fatal', null, `未处理Promise拒绝: ${reason}`); } catch (_) {}
 });

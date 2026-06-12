@@ -312,13 +312,7 @@
   .btn-clear { border: 1px solid var(--bg3); color: var(--text2); }
   .btn-clear:hover { border-color: var(--red); color: var(--red); }
 
-  /* 拨号盘 */
-  .dialpad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    flex-shrink: 0;
-  }
+  /* 拨号盘按钮样式（布局定义在下方） */
   .dial-btn {
     background: var(--bg2);
     border: 1px solid var(--bg3);
@@ -454,7 +448,84 @@
   .log-entry .lt { color: var(--text2); flex-shrink: 0; font-size: 10px; }
   .log-entry .lm { color: var(--text); }
 
-  /* Toast */
+  /* ---- 连接状态优化（方案3） ---- */
+  .status-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--gold-dark);
+    flex-shrink: 0;
+  }
+  .status-display.hidden { display: none; }
+  .status-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 3px solid var(--red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin-bottom: 10px;
+    transition: all 0.3s;
+  }
+  .status-icon.connected {
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
+    animation: pulse 1.5s infinite;
+  }
+  .status-text-large {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .status-subtext {
+    font-size: 11px;
+    color: var(--text2);
+  }
+  
+  /* ---- 拨号盘切换按钮（方案1） ---- */
+  .dialpad-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--gold-dark);
+    border-radius: var(--radius-md);
+    color: var(--gold);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .dialpad-toggle:hover {
+    background: rgba(201, 168, 76, 0.1);
+    border-color: var(--gold);
+  }
+  .dialpad-toggle .arrow {
+    transition: transform 0.2s;
+  }
+  .dialpad-toggle.expanded .arrow {
+    transform: rotate(180deg);
+  }
+  
+  /* ---- 拨号盘（方案1：默认隐藏） ---- */
+  .dialpad {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .dialpad.show {
+    display: grid;
+  }
   .toast {
     position: fixed; bottom: 12px; left: 50%;
     transform: translateX(-50%) translateY(80px);
@@ -504,6 +575,12 @@
     </label>
   </div>
 
+  <div class="status-display" id="statusDisplay">
+    <div class="status-icon" id="statusIcon">📵</div>
+    <div class="status-text-large" id="statusTextLarge">等待连接</div>
+    <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
+  </div>
+
   <div class="banner" id="banner">&#x2705; 手机已连接，可以拨号</div>
 
   <!-- 多手机选择器 -->
@@ -525,7 +602,12 @@
       </div>
     </div>
 
-    <div class="dialpad">
+    <div class="dialpad-toggle" id="dialpadToggle">
+      <span>&#x1F4DE; 拨号盘</span>
+      <span class="arrow">&#x25BC;</span>
+    </div>
+
+    <div class="dialpad" id="dialpad">
       <button class="dial-btn" data-key="1"><span class="num">1</span></button>
       <button class="dial-btn" data-key="2"><span class="num">2</span><span class="sub">ABC</span></button>
       <button class="dial-btn" data-key="3"><span class="num">3</span><span class="sub">DEF</span></button>
@@ -609,6 +691,14 @@ document.getElementById('btnClear').addEventListener('click', clearNumber);
 document.getElementById('callBtn').addEventListener('click', dial);
 document.getElementById('hangupBtn').addEventListener('click', hangup);
 document.getElementById('logToggle').addEventListener('click', toggleLog);
+// ==================== 拨号盘展开/收起 ====================
+document.getElementById('dialpadToggle').addEventListener('click', () => {
+  const toggle = document.getElementById('dialpadToggle');
+  const pad = document.getElementById('dialpad');
+  const isOpen = pad.classList.toggle('show');
+  toggle.classList.toggle('expanded', isOpen);
+});
+
 document.getElementById('smsBtn').addEventListener('click', () => {
   const number = document.getElementById('numberInput').value.trim().replace(/\s/g, '');
   window.api.send('open-sms', number || '');
@@ -672,15 +762,18 @@ async function init() {
 
   pollClipboard();
 
+  // v6修复: 收集所有IPC事件监听器的清理函数，窗口重载时统一清理
+  const _ipcCleanupFns = [];
+
   // IPC 事件监听
-  window.api.on('status-update', (data) => setPhoneConnected(data.connected, data.phoneIP));
-  window.api.on('phones-update', (data) => {
+  _ipcCleanupFns.push(window.api.on('status-update', (data) => setPhoneConnected(data.connected, data.phoneIP)));
+  _ipcCleanupFns.push(window.api.on('phones-update', (data) => {
     activePin = data.activeId;  // v6: 同步活跃手机 PIN
     updatePhoneSelector(data.phones, data.activeId);
     updateCallBtnText();  // v6: 手机列表变化时恢复按钮状态（防止卡"正在唤醒"）
-  });
+  }));
   // v6: 强制重连结果
-  window.api.on('force-reconnect-result', (data) => {
+  _ipcCleanupFns.push(window.api.on('force-reconnect-result', (data) => {
     // 恢复 phone-tag 上的小按钮
     const list = document.getElementById('phoneList');
     list.querySelectorAll('.phone-reconnect-btn').forEach(btn => {
@@ -694,35 +787,35 @@ async function init() {
     if (!data.success) {
       showToast(data.error || '唤醒手机失败', 'error');
     }
-  });
-  window.api.on('info-push', (data) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('info-push', (data) => {
     document.getElementById('localIP').textContent = data.ip || '--';
     document.getElementById('pinCode').textContent = data.pin || '----';
-  });
-  window.api.on('floatbar-visible-changed', (visible) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('floatbar-visible-changed', (visible) => {
     document.getElementById('floatbarToggle').checked = visible;
-  });
-  window.api.on('dial-result', (data) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('dial-result', (data) => {
     addLog(data.status === 'ok' ? 'success' : 'error', data.number + ' ' + (data.status === 'ok' ? '&#x2713;' : '&#x2717;'));
-  });
-  window.api.on('dial-sent', (data) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('dial-sent', (data) => {
     addLog('success', '\uD83D\uDCDE 已发送: ' + data.number);
     // v6: 记录拨号时的活跃手机 PIN，用于重连优先
     if (data.phoneId) lastDialPin = data.phoneId;
-  });
+  }));
   // v6: 拨号请求触发自动唤醒时的反馈
-  window.api.on('dial-waking', (data) => {
+  _ipcCleanupFns.push(window.api.on('dial-waking', (data) => {
     addLog('info', '\u23F3 正在唤醒手机(PIN=' + data.pin + ')...拨号排队中');
     if (data.number) showToast('正在唤醒手机，将自动拨号 ' + data.number);
-  });
+  }));
   // v6: 排队拨号超时
-  window.api.on('dial-timeout', (data) => {
+  _ipcCleanupFns.push(window.api.on('dial-timeout', (data) => {
     addLog('error', '\u274C 拨号超时: ' + data.number + ' (30s未响应)');
     showToast('拨号超时，正在尝试云端恢复...', 'error');
     updateCallBtnText();
     // v6: 拨号超时自动触发云端轻量恢复
     window.api.send('dial-failed-trigger-recovery');
-  });
+  }));
 
   // v6: 重启图标点击
   document.getElementById('restartCloudIcon').addEventListener('click', () => {
@@ -738,16 +831,21 @@ async function init() {
     }
   });
 
-  window.api.on('hangup-sent', () => {
+  _ipcCleanupFns.push(window.api.on('hangup-sent', () => {
     addLog('info', '已发送挂断');
-  });
-  window.api.on('server-log', (data) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('server-log', (data) => {
     const lvl = data.level === 'error' ? 'error' : data.level === 'warn' ? 'error' : 'info';
     addLog(lvl, '&#x1F5A5; ' + data.text);
-  });
-  window.api.on('error', (data) => {
+  }));
+  _ipcCleanupFns.push(window.api.on('error', (data) => {
     showToast(data.message, 'error');
     addLog('error', data.message);
+  }));
+
+  // v6修复: 窗口卸载时清理所有IPC监听器，防止内存泄漏
+  window.addEventListener('beforeunload', () => {
+    _ipcCleanupFns.forEach(fn => { try { fn(); } catch(e) {} });
   });
 }
 
@@ -758,13 +856,30 @@ function setPhoneConnected(connected, phoneIP) {
   const banner = document.getElementById('banner');
   const callBtn = document.getElementById('callBtn');
   const hasNumber = document.getElementById('numberInput').value.trim();
+  const statusIcon = document.getElementById('statusIcon');
+  const statusTextLarge = document.getElementById('statusTextLarge');
+  const statusSubtext = document.getElementById('statusSubtext');
+  
   callBtn.disabled = connected && !hasNumber;  // v6: 未连接时不禁用(重连按钮)
   document.getElementById('hangupBtn').disabled = !connected;
+  
   if (connected) {
+    // 方案3：优化连接状态显示
+    statusIcon.textContent = '✅';
+    statusIcon.className = 'status-icon connected';
+    statusTextLarge.textContent = '手机已连接';
+    statusSubtext.textContent = phoneIP ? '手机IP: ' + phoneIP : '可以拨号了';
+    
     dot.className = 'status-dot on';
     txt.textContent = phoneIP ? phoneIP : '已连接';
     banner.className = 'banner show';
   } else {
+    // 方案3：优化连接状态显示
+    statusIcon.textContent = '📵';
+    statusIcon.className = 'status-icon';
+    statusTextLarge.textContent = '等待连接';
+    statusSubtext.textContent = '请确保手机和电脑在同一局域网';
+    
     dot.className = 'status-dot';
     txt.textContent = '等待连接';
     banner.className = 'banner';
@@ -820,6 +935,7 @@ function updatePhoneSelector(phones, activeId) {
   currentPhones.forEach(phone => {
     const tag = document.createElement('div');
     tag.className = 'phone-tag' + (phone.id === activeId ? ' active' : '');
+    tag.__phoneId = phone.id;  // v6修复: 创建时即标记，确保 startRename 首次双击可用
 
     const dotEl = document.createElement('span');
     dotEl.className = 'phone-dot';
@@ -896,11 +1012,6 @@ function startRename(phoneId, currentNote) {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
       if (e.key === 'Escape') { input.value = currentNote; input.blur(); }
     });
-  });
-  // 给 tags 打标记
-  const phoneList = currentPhones;
-  tags.forEach((tag, i) => {
-    if (phoneList[i]) tag.__phoneId = phoneList[i].id;
   });
 }
 

@@ -204,15 +204,20 @@ class DialService : Service() {
                     "sms" -> {
                         val number = msg.optString("number", "")
                         val content = msg.optString("content", "")
-                        FileLogger.i("DialService", "\u6536\u5230\u77ed\u4fe1\u8bf7\u6c42: $number, \u5185\u5bb9\u957f\u5ea6=${content.length}")
+                        FileLogger.i("DialService", "收到短信请求: $number, 内容长度=${content.length}")
                         if (number.isNotEmpty()) {
-                            Log.d(TAG, "\u77ed\u4fe1\u8bf7\u6c42: $number, \u5185\u5bb9\u957f\u5ea6=${content.length}")
-                            val intent = Intent(ACTION_SHOW_SMS_CONFIRM).apply {
-                                putExtra("number", number)
-                                putExtra("content", content)
-                                setPackage(packageName)
+                            Log.d(TAG, "短信请求: $number, 内容长度=${content.length}")
+                            // v8修复: Activity 不可见时用通知替代，避免 Android 10+ 后台启动 Activity 被拦截
+                            if (isActivityVisible) {
+                                val intent = Intent(ACTION_SHOW_SMS_CONFIRM).apply {
+                                    putExtra("number", number)
+                                    putExtra("content", content)
+                                    setPackage(packageName)
+                                }
+                                sendBroadcast(intent)
+                            } else {
+                                showSmsNotification(number, content)
                             }
-                            sendBroadcast(intent)
                         }
                     }
                     "hangup" -> {
@@ -608,5 +613,31 @@ class DialService : Service() {
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                 .notify(NOTIFICATION_ID, buildNotification(text))
         } catch (_: Exception) {}
+    }
+
+    /** v8: 后台短信通知 — 通过通知栏提示用户确认发送 */
+    private fun showSmsNotification(number: String, content: String) {
+        val intent = Intent(this, SmsConfirmActivity::class.java).apply {
+            putExtra("number", number)
+            putExtra("content", content)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 2001, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("AutoDial 短信确认")
+            .setContentText("发给 $number: ${content.take(30)}...")
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(2001, notification)
+        } catch (_: Exception) {}
+        FileLogger.i("DialService", "已发送后台短信通知: $number")
     }
 }

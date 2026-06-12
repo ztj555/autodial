@@ -79,12 +79,12 @@ class ConnectionManager(private val context: Context) {
 
     // 心跳
     private var heartbeatRunnable: Runnable? = null
-    private var lastLanPongTime = 0L
-    private var lastCloudPongTime = 0L
-    private var lanPingSentTime = 0L
-    private var cloudPingSentTime = 0L
-    private var lanPingInFlight = false
-    private var cloudPingInFlight = false
+    @Volatile private var lastLanPongTime = 0L
+    @Volatile private var lastCloudPongTime = 0L
+    @Volatile private var lanPingSentTime = 0L
+    @Volatile private var cloudPingSentTime = 0L
+    @Volatile private var lanPingInFlight = false
+    @Volatile private var cloudPingInFlight = false
     @Volatile var lanLatencyMs: Long = -1
         private set
     @Volatile var cloudLatencyMs: Long = -1
@@ -175,8 +175,11 @@ class ConnectionManager(private val context: Context) {
         manualDisconnecting = false
         cancelReconnect()
         cancelCloudReconnect()
-        reconnectAttempts = 0
-        cloudReconnectAttempts = 0
+        // v8修复: 仅在新 PIN 或手动连接时重置计数器，避免 scheduleReconnect 的指数退避被清零
+        if (lastPin != pin) {
+            reconnectAttempts = 0
+            cloudReconnectAttempts = 0
+        }
         currentStrategy = strategy
 
         lastPin = pin
@@ -257,7 +260,9 @@ class ConnectionManager(private val context: Context) {
         cloudWebSocket = null
 
         if (transportMode.contains("cloud")) {
-            transportMode = if (transportMode.contains("lan")) "lan" else ""
+            // v8修复: 切到 LAN 前确认 LAN 确实在线
+            val lanOk = transportMode.contains("lan") && lanWebSocket != null
+            transportMode = if (lanOk) "lan" else ""
             if (transportMode.isEmpty()) setState(ConnectionState.DISCONNECTED)
         }
     }
@@ -272,13 +277,9 @@ class ConnectionManager(private val context: Context) {
                 }
             } catch (_: Exception) {
                 v6LogW(TAG, lastPin, "LAN 发送失败, 尝试云端降级")
-                lanWebSocket = null
-                if (cloudWebSocket != null && transportMode.contains("cloud")) {
-                    transportMode = "cloud"
-                } else {
-                    transportMode = ""
-                    setState(ConnectionState.DISCONNECTED)
-                }
+                // v8修复: 走正规断开流程，触发重试和 UI 通知
+                handleLanDisconnect()
+                // 不 return，继续走云端降级
             }
         }
 
@@ -597,8 +598,9 @@ class ConnectionManager(private val context: Context) {
     private fun startLanDiscovery(pin: String) {
         Thread {
             var discoveredIp: String? = null
+            var socket: DatagramSocket? = null
             try {
-                val socket = DatagramSocket(null)
+                socket = DatagramSocket(null)
                 socket.soTimeout = DISCOVERY_TIMEOUT_MS.toInt()
                 socket.reuseAddress = true
                 val discoverMsg = JSONObject().apply { put("type", "discover"); put("pin", pin) }.toString().toByteArray()
@@ -621,8 +623,8 @@ class ConnectionManager(private val context: Context) {
                         }
                     } catch (_: Exception) {}
                 }
-                socket.close()
             } catch (e: Exception) { v6LogE(TAG, pin, "LAN 发现异常: ${e.message}") }
+            finally { try { socket?.close() } catch (_: Exception) {} }
 
             handler.post {
                 // 如果在发现期间用户手动断开了，放弃结果
@@ -823,8 +825,8 @@ class ConnectionManager(private val context: Context) {
                                 transportMode = if (transportMode.contains("lan")) "lan+cloud" else "cloud"
                                 lastCloudPongTime = System.currentTimeMillis()
                                 cloudPingInFlight = false
-                                // 读取云中继上报的 PC 在线状态（兼容旧版云中继，默认 true）
-                                pcConfirmedOnline = msg.optBoolean("pc_present", true)
+                                // 读取云中继上报的 PC 在线状态（兼容旧版云中继，默认 false 防止 PC 不可达误判——Bug2修复）
+                                pcConfirmedOnline = msg.optBoolean("pc_present", false)
                                 v6LogI(TAG, pin, "PC 在线状态: $pcConfirmedOnline")
                                 setState(ConnectionState.CONNECTED)
                             }
@@ -1007,16 +1009,16 @@ class ConnectionManager(private val context: Context) {
                 val now = System.currentTimeMillis()
                 val pingMsg = JSONObject().put("type", "ping")
                 if (lanWebSocket != null && transportMode.contains("lan")) {
-                    if (lanPingInFlight && (now - lastLanPongTime) > PONG_TIMEOUT_MS) {
+                    if (lanPingInFlight && (now - lanPingSentTime) > PONG_TIMEOUT_MS) {
                         lanPingInFlight = false; handleLanPongTimeout()
-                    } else {
+                    } else if (!lanPingInFlight) {
                         try { lanPingSentTime = now; lanWebSocket?.send(pingMsg.toString()); lanPingInFlight = true } catch (_: Exception) { lanPingInFlight = false }
                     }
                 }
                 if (cloudWebSocket != null && transportMode.contains("cloud")) {
-                    if (cloudPingInFlight && (now - lastCloudPongTime) > PONG_TIMEOUT_MS) {
+                    if (cloudPingInFlight && (now - cloudPingSentTime) > PONG_TIMEOUT_MS) {
                         cloudPingInFlight = false; handleCloudPongTimeout()
-                    } else {
+                    } else if (!cloudPingInFlight) {
                         try { cloudPingSentTime = now; cloudWebSocket?.send(pingMsg.toString()); cloudPingInFlight = true } catch (_: Exception) { cloudPingInFlight = false }
                     }
                 }

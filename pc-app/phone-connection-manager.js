@@ -94,7 +94,7 @@ const CONNECTION_STATES = Object.freeze({
 
 const MAX_PHONE_CONNECTIONS = 2;    // 最多 2 个对端
 const CLOUD_CONNECTION_COUNT = 1;  // 1 个云端中继
-const HEARTBEAT_TIMEOUT = 45000;    // 45 秒心跳超时
+const HEARTBEAT_TIMEOUT = 120000;   // 120 秒心跳超时（云中继场景需留足余量，避免网络抖动导致误判断线）
 const HEARTBEAT_INTERVAL = 30000;   // 30 秒心跳间隔
 const NEIGHBOR_TTL = 30000;         // 邻居表 TTL 30s
 const ACK_TIMEOUT = 3000;           // ACK 超时 3s
