@@ -114,14 +114,54 @@ class ConnectFragment : Fragment() {
     private var discoveredIP = ""
     private var discoveryJob: Job? = null
 
+    // v9: 定时刷新 waiting-for-PC 状态（云已通但 pcConfirmedOnline 尚未更新）
+    private var waitingForPcRefreshRunnable: Runnable? = null
+    private val WAITING_FOR_PC_REFRESH_MS = 3000L
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
                 val connected = intent?.getBooleanExtra("connected", false) ?: return
                 val reason = intent.getStringExtra("reason")
                 updateConnectionUI(connected, reason)
+                // v9: 收到连接状态广播后立即检查是否卡在「等待PC上线」
+                scheduleWaitingForPcRefresh()
             } catch (_: Exception) {}
         }
+    }
+
+    /** v9: 在云已连通但 PC 未达时启动定时刷新，自动修正状态 */
+    private fun scheduleWaitingForPcRefresh() {
+        cancelWaitingForPcRefresh()
+        // 仅在 connected=true, LAN未连, cloud已连, pc未达 时启动
+        if (!DialService.isConnected) return
+        if (DialService.isLanConnected) return
+        if (!DialService.isCloudConnected) return
+        if (DialService.isPcReachable) return
+        // 状态卡在"等待PC上线"
+        waitingForPcRefreshRunnable = object : Runnable {
+            override fun run() {
+                if (!isAdded) return
+                if (DialService.isPcReachable) {
+                    // PC 已上线！强制刷新 UI
+                    updateConnectionUI(true, null)
+                    cancelWaitingForPcRefresh()
+                } else if (!DialService.isConnected || DialService.isLanConnected) {
+                    cancelWaitingForPcRefresh()
+                } else {
+                    // 继续等待
+                    waitingForPcRefreshRunnable?.let {
+                        view?.postDelayed(it, WAITING_FOR_PC_REFRESH_MS)
+                    }
+                }
+            }
+        }
+        view?.postDelayed(waitingForPcRefreshRunnable!!, WAITING_FOR_PC_REFRESH_MS)
+    }
+
+    private fun cancelWaitingForPcRefresh() {
+        waitingForPcRefreshRunnable?.let { view?.removeCallbacks(it) }
+        waitingForPcRefreshRunnable = null
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
@@ -248,7 +288,12 @@ class ConnectFragment : Fragment() {
             try {
                 ContextCompat.registerReceiver(requireActivity(), receiver,
                     IntentFilter("com.autodial.CONNECTION_CHANGE"),
-                    ContextCompat.RECEIVER_NOT_EXPORTED  // D6修复: 应用内广播不应 EXPORTED
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                // v9: 同时监听 CLOUD_STATUS 广播（pc_online/pc_offline 事件）
+                ContextCompat.registerReceiver(requireActivity(), cloudStatusReceiver,
+                    IntentFilter("com.autodial.CLOUD_STATUS"),
+                    ContextCompat.RECEIVER_NOT_EXPORTED
                 )
             } catch (_: Exception) {}
 
@@ -398,6 +443,8 @@ class ConnectFragment : Fragment() {
             val connected = DialService.isConnected
             if (connected && statusText.text.toString() != "已连接") {
                 updateConnectionUI(true, null)
+                // v9: 回到前台时若卡在「等待PC上线」，启动定时刷新
+                scheduleWaitingForPcRefresh()
             } else if (!connected && connectionBanner.visibility == View.VISIBLE) {
                 updateConnectionUI(false, null)
             }
@@ -405,10 +452,24 @@ class ConnectFragment : Fragment() {
         if (isAdded) updateBatteryOptUI()
     }
 
+    // v9: 独立 receiver 仅监听 ACTION_CLOUD_STATUS（pc_online/pc_offline）
+    private val cloudStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                if (DialService.isConnected && DialService.isCloudConnected) {
+                    updateConnectionUI(true, null)
+                    scheduleWaitingForPcRefresh()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         ThemeManager.removeOnThemeChangedListener(themeListener)
         try { requireActivity().unregisterReceiver(receiver) } catch (_: Exception) {}
+        try { requireActivity().unregisterReceiver(cloudStatusReceiver) } catch (_: Exception) {}
+        cancelWaitingForPcRefresh()
         stopDiscovery()
     }
 
