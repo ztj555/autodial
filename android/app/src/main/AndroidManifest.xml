@@ -43,7 +43,11 @@
         <service
             android:name=".DialService"
             android:exported="false"
-            android:foregroundServiceType="phoneCall" />
+            android:foregroundServiceType="phoneCall|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="跨屏拨号连接保活服务，保持与PC端的实时通信以接收拨号指令" />
+        </service>
 
         <activity
             android:name=".SmsConfirmActivity"

@@ -15,7 +15,24 @@ import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.util.concurrent.TimeUnit
+import javax.net.SocketFactory
+
+/**
+ * TCP KeepAlive SocketFactory — 防止蜂窝网络 NAT 网关在 30-60s 静默后断开连接。
+ * WebSocket 层 ping/pong 发生在 HTTP 升级后的帧层，NAT 网关只看 TCP 层无数据即判定 idle。
+ * 启用 TCP keepalive (15s idle, 5s interval, 3 probes) 确保 TCP 层有持续活动。
+ */
+private class KeepAliveSocketFactory : SocketFactory() {
+    override fun createSocket(): Socket = Socket().apply { enableKeepAlive() }
+    override fun createSocket(host: String, port: Int): Socket = Socket(host, port).apply { enableKeepAlive() }
+    override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket = Socket(host, port, localHost, localPort).apply { enableKeepAlive() }
+    override fun createSocket(host: InetAddress, port: Int): Socket = Socket(host, port).apply { enableKeepAlive() }
+    override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket = Socket(address, port, localAddress, localPort).apply { enableKeepAlive() }
+    private fun Socket.enableKeepAlive() { soKeepAlive = true }
+}
 
 /**
  * AutoDial ConnectionManager v7
@@ -62,10 +79,20 @@ class ConnectionManager(private val context: Context) {
     @Volatile private var lanWebSocket: WebSocket? = null
     @Volatile private var cloudWebSocket: WebSocket? = null
 
+    private val keepAliveFactory = KeepAliveSocketFactory()
+
     private val lanClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .socketFactory(keepAliveFactory)
+        .build()
     private val cloudClient = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS).pingInterval(30, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS).build()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .socketFactory(keepAliveFactory)
+        .build()
 
     private val handler = Handler(Looper.getMainLooper())
 

@@ -310,6 +310,14 @@ class DialService : Service() {
             callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
             try { startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")) } catch (_: Exception) {}
+            // v9: 补全异常恢复路径 — 缺失 WakeLock/CallState/ScreenOn 会导致功能残缺
+            try {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "autodial:wake").apply {
+                    setReferenceCounted(false)
+                    acquire(12 * 60 * 60 * 1000L)
+                }
+            } catch (_: Exception) {}
             if (!::connectionManager.isInitialized) {
                 connectionManager = ConnectionManager(this)
             }
@@ -318,6 +326,8 @@ class DialService : Service() {
             }
             ensureListenerRegistered()
             try { connectionManager.registerNetworkMonitor() } catch (_: Exception) {}
+            try { registerCallStateListener() } catch (_: Exception) {}
+            try { registerScreenOnReceiver() } catch (_: Exception) {}
             try { connectionManager.loadSavedConfig() } catch (_: Exception) {}
         }
     }
@@ -588,11 +598,13 @@ class DialService : Service() {
     private fun createNotificationChannel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(CHANNEL_ID, "\u8de8\u5c4f\u62e8\u53f7 \u670d\u52a1", NotificationManager.IMPORTANCE_LOW)
+                // v9: 提高到 IMPORTANCE_DEFAULT，系统才把前台服务当回事，降低被杀概率
+                val channel = NotificationChannel(CHANNEL_ID, "\u8de8\u5c4f\u62e8\u53f7 \u670d\u52a1", NotificationManager.IMPORTANCE_DEFAULT)
                     .apply {
                         description = "\u4fdd\u6301\u62e8\u53f7\u8fde\u63a5"
                         setVibrationPattern(longArrayOf(0))
                         enableVibration(false)
+                        setShowBadge(false)
                     }
                 getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
             }
