@@ -496,6 +496,13 @@ class DialService : Service() {
             val intent = Intent(ACTION_CALL_ENDED).apply { setPackage(packageName) }
             sendBroadcast(intent)
         } catch (_: Exception) {}
+        // v4.59: 通话结束后把 App 拉回前台（避免进程被杀后回到桌面）
+        try {
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            }
+            startActivity(launchIntent)
+        } catch (_: Exception) {}
     }
 
     // ==================== screen on health check ====================
