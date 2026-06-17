@@ -166,6 +166,14 @@ func connectCloudServer(serverURL string) {
 				}
 				registerDevice(pin, deviceName, "cloud", true, conn)
 				fileLog("I", "Cloud", pin, fmt.Sprintf("phone online via cloud: %s", deviceID))
+				// v4.57: 若 phone_hello 带 messageId，回 ACK 证明 PC 在线
+				if msgID, ok := msg["messageId"].(string); ok && msgID != "" {
+					conn.WriteJSON(map[string]string{
+						"type":         "ack",
+						"messageId":    msgID,
+						"originalType": "phone_hello",
+					})
+				}
 
 			case "pong":
 				cloudWsMu.Lock()

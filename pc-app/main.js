@@ -1416,6 +1416,10 @@ wss.on('connection', (ws, req) => {
         activePhoneId = PhoneConnectionManager.activePin;
 
         ws.send(JSON.stringify({ type: 'auth_ok', message: '配对成功！', pin }));
+        // v4.57: 若 phone_hello 带 messageId（真探活），回 ACK 确认 PC 在线
+        if (msg.messageId) {
+          ws.send(JSON.stringify({ type: 'ack', messageId: msg.messageId, originalType: 'phone_hello' }));
+        }
         fileLog('I', 'LAN', pin, `配对成功: ${deviceName} (${clientIP})`);
         // v6: 连接成功后补发待发拨号
         if (PhoneConnectionManager.hasQueuedDial(pin)) {
@@ -1725,6 +1729,10 @@ function connectCloudServer(targetServerUrl, onResult) {
             pin,
             targetDevice: msg.deviceName
           }));
+          // v4.57: 若 phone_hello 带 messageId，回 ACK 证明 PC 在线
+          if (msg.messageId) {
+            newWs.send(JSON.stringify({ type: 'ack', messageId: msg.messageId, originalType: 'phone_hello' }));
+          }
 
           fileLog('I', 'Cloud', pin, `云端配对成功: ${deviceName}`);
           // v6: 连接成功后补发待发拨号

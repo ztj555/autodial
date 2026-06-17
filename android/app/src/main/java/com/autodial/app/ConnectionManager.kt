@@ -143,9 +143,9 @@ class ConnectionManager(private val context: Context) {
     @Volatile var pcConfirmedOnline = false
         private set
 
-    // v4.56: 若 auth_ok 的 pc_present=false（旧版 relay 或 PC 延迟连接），
-    // 10秒乐观超时后自动修正为 reachable（消息能通说明PC可达）
-    private var pcOnlineGraceRunnable: Runnable? = null
+    // v4.57: 真探活 — 发 phone_hello 带 messageId，等 PC 回 ACK 才算 PC 在线
+    private var pcProbeMessageId: String? = null
+    private var pcProbeRunnable: Runnable? = null
 
     // LAN 发现序列
     private var lanDiscoveryCount = 0
@@ -270,7 +270,7 @@ class ConnectionManager(private val context: Context) {
         cancelLanDiscoveryCycle()
         reconnectAttempts = 0
         cloudReconnectAttempts = 0
-        handler.removeCallbacks(pcOnlineGraceRunnable) // v4.56
+        handler.removeCallbacks(pcProbeRunnable) // v4.57
 
         try { lanWebSocket?.cancel() } catch (_: Exception) {}
         lanWebSocket = null
@@ -838,9 +838,13 @@ class ConnectionManager(private val context: Context) {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     v6LogI(TAG, pin, "Cloud WebSocket 已打开: $currentCloudServer")
                     try {
+                        // v4.57: 带 messageId 的 phone_hello，PC 端需回 ACK 来证实可达
+                        val probeId = "probe_" + System.currentTimeMillis()
+                        pcProbeMessageId = probeId
                         ws.send(JSONObject().apply {
                             put("type", "phone_hello"); put("pin", pin)
                             put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
+                            put("messageId", probeId) // v4.57: PC 必须回 ACK
                         }.toString())
                     } catch (e: Exception) { v6LogE(TAG, pin, "Cloud hello 发送失败: ${e.message}") }
                 }
@@ -857,21 +861,11 @@ class ConnectionManager(private val context: Context) {
                                 transportMode = if (transportMode.contains("lan")) "lan+cloud" else "cloud"
                                 lastCloudPongTime = System.currentTimeMillis()
                                 cloudPingInFlight = false
-                                // 读取云中继上报的 PC 在线状态（兼容旧版云中继，默认 false 防止 PC 不可达误判——Bug2修复）
                                 pcConfirmedOnline = msg.optBoolean("pc_present", false)
                                 v6LogI(TAG, pin, "PC 在线状态: $pcConfirmedOnline")
-                                // v4.56: 若 relay 未报告 PC 在线（旧版 relay 无此字段 / PC 后连），
-                                // 10 秒后乐观假设 PC 可达（消息能通说明 relay+PC 都在线）
+                                // v4.57: 若 relay 未确认 PC 在线，发真探活包
                                 if (!pcConfirmedOnline) {
-                                    handler.removeCallbacks(pcOnlineGraceRunnable)
-                                    pcOnlineGraceRunnable = Runnable {
-                                        if (!pcConfirmedOnline && isCloudConnected) {
-                                            v6LogI(TAG, pin, "云连接 10s 超时，乐观假设 PC 可达")
-                                            pcConfirmedOnline = true
-                                            notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED)
-                                        }
-                                    }
-                                    handler.postDelayed(pcOnlineGraceRunnable!!, 10_000L)
+                                    startPcProbe(pin)
                                 }
                                 setState(ConnectionState.CONNECTED)
                             }
@@ -884,7 +878,7 @@ class ConnectionManager(private val context: Context) {
                             "pong" -> { lastCloudPongTime = System.currentTimeMillis(); cloudPingInFlight = false; cloudLatencyMs = lastCloudPongTime - cloudPingSentTime }
                             "pc_online" -> {
                                 v6LogI(TAG, pin, "PC 已上线 (via Cloud)")
-                                handler.removeCallbacks(pcOnlineGraceRunnable) // 取消乐观超时
+                                cancelPcProbe()
                                 pcConfirmedOnline = true
                                 handler.post { notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED) }
                             }
@@ -896,6 +890,13 @@ class ConnectionManager(private val context: Context) {
                             "reconnect_request" -> {
                                 v6LogI(TAG, pin, "收到 PC 端云端唤醒指令 (via Cloud)")
                                 onReconnectRequest()
+                            }
+                            "ack" -> {
+                                // v4.57: PC 回了 ACK → 探活成功，PC 真正在线
+                                val ackMsgId = msg.optString("messageId", "")
+                                if (ackMsgId.isNotEmpty()) handlePcProbeAck(ackMsgId)
+                                // 同时透传给上层（DialService 也会处理，但不会再重复探活）
+                                handler.post { notifyMessage(msg) }
                             }
                             else -> handler.post { notifyMessage(msg) }
                         }
@@ -935,7 +936,7 @@ class ConnectionManager(private val context: Context) {
         try { cloudWebSocket?.cancel() } catch (_: Exception) {}
         cloudWebSocket = null
         pcConfirmedOnline = false
-        handler.removeCallbacks(pcOnlineGraceRunnable) // v4.56: 清理乐观超时
+        cancelPcProbe() // v4.57
         v6LogW(TAG, lastPin, "handleCloudDisconnect, transport=$transportMode")
 
         if (manualDisconnecting) {
@@ -1122,5 +1123,40 @@ class ConnectionManager(private val context: Context) {
     private fun v6LogMsg(direction: String, type: String, content: String, pin: String) {
         val truncated = if (content.length > 500) content.substring(0, 500) + "...(truncated)" else content
         FileLogger.i(direction, "[$pin] [$type] $truncated")
+    }
+
+    // ==================== v4.57: PC 真探活 ====================
+
+    /**
+     * phone_hello 已带 messageId，relay 会转发到 PC。
+     * PC 端收到后应回 ACK（新增逻辑）。ACK 回来后 handlePcProbeAck() 标记可达。
+     * 超时 8 秒无 ACK → 保持 false，等 ConnectFragment 轮询重试。
+     */
+    private fun startPcProbe(pin: String) {
+        cancelPcProbe()
+        if (!isCloudConnected || pcProbeMessageId == null) return
+        v6LogI(TAG, pin, "发起 PC 探活, messageId=${pcProbeMessageId}")
+        pcProbeRunnable = Runnable {
+            v6LogW(TAG, pin, "PC 探活超时(8s), relay版旧或PC不在线")
+            pcProbeMessageId = null
+        }
+        handler.postDelayed(pcProbeRunnable!!, 8000L)
+    }
+
+    fun handlePcProbeAck(msgId: String) {
+        if (pcProbeMessageId != null && pcProbeMessageId == msgId) {
+            v6LogI(TAG, lastPin, "PC 探活 ACK OK, PC 在线")
+            cancelPcProbe()
+            if (!pcConfirmedOnline) {
+                pcConfirmedOnline = true
+                handler.post { notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED) }
+            }
+        }
+    }
+
+    private fun cancelPcProbe() {
+        pcProbeRunnable?.let { handler.removeCallbacks(it) }
+        pcProbeRunnable = null
+        pcProbeMessageId = null
     }
 }
