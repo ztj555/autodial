@@ -167,7 +167,7 @@ PHONE_TO_PC_TYPES = {
     'file_upload_start', 'file_chunk', 'file_upload_complete', 'file_upload_error'
 }
 PC_TO_PHONE_TYPES = {
-    'auth_ok', 'auth_fail', 'dial', 'sms', 'hangup',
+    'auth_ok', 'auth_fail', 'dial', 'sms', 'hangup', 'ack',
     # 上传协议（无状态透传）
     'file_chunk_ack', 'file_upload_error'
 }
