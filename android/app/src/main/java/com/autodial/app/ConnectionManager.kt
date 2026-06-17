@@ -143,6 +143,10 @@ class ConnectionManager(private val context: Context) {
     @Volatile var pcConfirmedOnline = false
         private set
 
+    // v4.56: 若 auth_ok 的 pc_present=false（旧版 relay 或 PC 延迟连接），
+    // 10秒乐观超时后自动修正为 reachable（消息能通说明PC可达）
+    private var pcOnlineGraceRunnable: Runnable? = null
+
     // LAN 发现序列
     private var lanDiscoveryCount = 0
     private val MAX_LAN_DISCOVERIES = 4
@@ -266,6 +270,7 @@ class ConnectionManager(private val context: Context) {
         cancelLanDiscoveryCycle()
         reconnectAttempts = 0
         cloudReconnectAttempts = 0
+        handler.removeCallbacks(pcOnlineGraceRunnable) // v4.56
 
         try { lanWebSocket?.cancel() } catch (_: Exception) {}
         lanWebSocket = null
@@ -855,6 +860,19 @@ class ConnectionManager(private val context: Context) {
                                 // 读取云中继上报的 PC 在线状态（兼容旧版云中继，默认 false 防止 PC 不可达误判——Bug2修复）
                                 pcConfirmedOnline = msg.optBoolean("pc_present", false)
                                 v6LogI(TAG, pin, "PC 在线状态: $pcConfirmedOnline")
+                                // v4.56: 若 relay 未报告 PC 在线（旧版 relay 无此字段 / PC 后连），
+                                // 10 秒后乐观假设 PC 可达（消息能通说明 relay+PC 都在线）
+                                if (!pcConfirmedOnline) {
+                                    handler.removeCallbacks(pcOnlineGraceRunnable)
+                                    pcOnlineGraceRunnable = Runnable {
+                                        if (!pcConfirmedOnline && isCloudConnected) {
+                                            v6LogI(TAG, pin, "云连接 10s 超时，乐观假设 PC 可达")
+                                            pcConfirmedOnline = true
+                                            notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED)
+                                        }
+                                    }
+                                    handler.postDelayed(pcOnlineGraceRunnable!!, 10_000L)
+                                }
                                 setState(ConnectionState.CONNECTED)
                             }
                             "auth_fail" -> {
@@ -866,6 +884,7 @@ class ConnectionManager(private val context: Context) {
                             "pong" -> { lastCloudPongTime = System.currentTimeMillis(); cloudPingInFlight = false; cloudLatencyMs = lastCloudPongTime - cloudPingSentTime }
                             "pc_online" -> {
                                 v6LogI(TAG, pin, "PC 已上线 (via Cloud)")
+                                handler.removeCallbacks(pcOnlineGraceRunnable) // 取消乐观超时
                                 pcConfirmedOnline = true
                                 handler.post { notifyStateChange(ConnectionState.CONNECTED, ConnectionState.CONNECTED) }
                             }
@@ -916,6 +935,7 @@ class ConnectionManager(private val context: Context) {
         try { cloudWebSocket?.cancel() } catch (_: Exception) {}
         cloudWebSocket = null
         pcConfirmedOnline = false
+        handler.removeCallbacks(pcOnlineGraceRunnable) // v4.56: 清理乐观超时
         v6LogW(TAG, lastPin, "handleCloudDisconnect, transport=$transportMode")
 
         if (manualDisconnecting) {
