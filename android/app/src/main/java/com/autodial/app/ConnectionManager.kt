@@ -270,7 +270,7 @@ class ConnectionManager(private val context: Context) {
         cancelLanDiscoveryCycle()
         reconnectAttempts = 0
         cloudReconnectAttempts = 0
-        handler.removeCallbacks(pcProbeRunnable) // v4.57
+        pcProbeRunnable?.let { handler.removeCallbacks(it) }
 
         try { lanWebSocket?.cancel() } catch (_: Exception) {}
         lanWebSocket = null
