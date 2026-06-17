@@ -31,7 +31,7 @@ private class KeepAliveSocketFactory : SocketFactory() {
     override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket = Socket(host, port, localHost, localPort).apply { enableKeepAlive() }
     override fun createSocket(host: InetAddress, port: Int): Socket = Socket(host, port).apply { enableKeepAlive() }
     override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket = Socket(address, port, localAddress, localPort).apply { enableKeepAlive() }
-    private fun Socket.enableKeepAlive() { soKeepAlive = true }
+    private fun Socket.enableKeepAlive() { keepAlive = true }
 }
 
 /**
