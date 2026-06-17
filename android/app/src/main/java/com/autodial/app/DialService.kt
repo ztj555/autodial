@@ -50,6 +50,7 @@ class DialService : Service() {
         var isRunning = false
             private set
         @Volatile var isActivityVisible = false
+        @Volatile var wasActivityVisibleBeforeDial = false // v4.59: 记录拨号前 App 是否在前台
         var pendingBackgroundDialNumber: String? = null
         val isConnected: Boolean get() = _instance?.connectionManager?.isConnected ?: false
         val serverAddress: String get() = ""
@@ -192,6 +193,7 @@ class DialService : Service() {
                         FileLogger.i("DialService", "\u6536\u5230\u62e8\u53f7\u8bf7\u6c42: $number")
                         if (number.isNotEmpty() && ::dialEngine.isInitialized) {
                             Log.d(TAG, "\u62e8\u53f7\u8bf7\u6c42: $number")
+                            Companion.wasActivityVisibleBeforeDial = isActivityVisible // v4.59: 记住拨号前状态
                             dialEngine.dialNumber(number)
                         }
                     }
@@ -496,12 +498,15 @@ class DialService : Service() {
             val intent = Intent(ACTION_CALL_ENDED).apply { setPackage(packageName) }
             sendBroadcast(intent)
         } catch (_: Exception) {}
-        // v4.59: 通话结束后把 App 拉回前台（避免进程被杀后回到桌面）
+        // v4.59: 只有拨号前 App 在前台，通话结束才拉回来；在桌面/其他 app 时不打扰
         try {
-            val launchIntent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            if (Companion.wasActivityVisibleBeforeDial) {
+                Companion.wasActivityVisibleBeforeDial = false
+                val launchIntent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+                startActivity(launchIntent)
             }
-            startActivity(launchIntent)
         } catch (_: Exception) {}
     }
 
