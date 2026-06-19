@@ -1623,7 +1623,7 @@ class ConnectFragment : Fragment() {
                         put("password", password)
                     }
                     val body = okhttp3.RequestBody.create(
-                        okhttp3.MediaType.parse("application/json"), json.toString()
+                        "application/json".toMediaType(), json.toString()
                     )
                     val request = okhttp3.Request.Builder()
                         .url("${getCloudApiUrl()}/api/v1/auth/register")
