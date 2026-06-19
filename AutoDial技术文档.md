@@ -1,501 +1,303 @@
-# AutoDial 跨屏拨号系统 — 技术文档
+# AutoDial 技术文档 v3
 
-> 版本: v6 / 生成日期: 2026-06-12 / 基于实际代码分析
-
----
-
-## 1. 系统概述
-
-AutoDial 是一套**跨屏拨号系统**，实现 PC 端控制 Android 手机拨打电话和发送短信。支持局域网直连和云中继两种通信模式。
-
-### 1.1 组件架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        浏览器扩展                            │
-│              (Chrome Extension, Manifest V3)                 │
-│     CRM 页面注入浮动按钮 → HTTP API 调用本地 PC             │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP (127.0.0.1:35432)
-┌──────────────────────────▼──────────────────────────────────┐
-│                      PC 端 (Electron 28)                     │
-│  ┌─────────────┐  ┌──────────────────┐  ┌──────────────┐   │
-│  │ HTTP Server │  │  PhoneConnection │  │  Cloud WS    │   │
-│  │ (拨号API)   │  │  Manager (心跳)  │  │  Client      │   │
-│  └─────────────┘  └──────────────────┘  └──────────────┘   │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  本地 WebSocket Server (35432) ← 局域网手机直连     │    │
-│  └─────────────────────────────────────────────────────┘    │
-└──────────┬───────────────────────────────┬──────────────────┘
-           │ LAN (UDP 35433 + WS 35432)   │ Cloud (WS 35430)
-┌──────────▼──────────┐     ┌─────────────▼──────────────────┐
-│   Android 手机       │     │     云中继 (Python)            │
-│  ┌────────────────┐ │     │  ┌──────────────────────────┐ │
-│  │ DialService    │ │     │  │ WebSocket Server (35430) │ │
-│  │ (前台服务)     │ │     │  │ PIN 分组转发            │ │
-│  │ ConnectionMgr  │ │     │  │ HTTP 管理界面            │ │
-│  │ DialEngine     │ │     │  │ 系统托盘                 │ │
-│  └────────────────┘ │     │  └──────────────────────────┘ │
-│  版本: 4.52         │     │  版本: 2.0.0                   │
-└─────────────────────┘     └────────────────────────────────┘
-```
+> 基于实际代码 | 最后更新：2026-06-19  
+> 包含 v2 (PIN) 和 v3 (JWT) 双版本协议
 
 ---
 
-## 2. PC 端 (Electron)
+## 一、版本关系
 
-### 2.1 基本信息
+| 版本 | 云中继 | 端口 | 认证 | 客户端 |
+|------|--------|------|------|--------|
+| **v3** | `cloud_relay_v3.py` | 35440 WS + 35441 REST | JWT (手机号+密码) | 新 Android、Chrome 插件 v3 |
+| **v2** | `cloud_relay_v2.py` | 35430 WS + 35431 Web | PIN 4位配对码 | 老 Android、老 PC 端 |
 
-| 项目 | 值 |
-|------|-----|
-| 框架 | Electron 28.3.3 |
-| 入口 | `main.js` (主进程) + `renderer/index.html` (渲染进程) |
-| 窗口 | 无边框, 420×780, 可调整大小 |
-| IPC | contextBridge + ipcRenderer/ipcMain |
-| 构建 | `@electron/packager`, 输出 exe (ASAR) |
+新老版本通过**端口分离**实现共存，互不干扰。v3 的核心变化是：**去掉 PC 桌面软件**, 浏览器插件通过 REST API 直连云中继拨号。
 
-### 2.2 主进程 (main.js)
+---
 
-**文件**: `pc-app/main.js` (约 2100 行)
+## 二、v3 JWT 认证体系
 
-#### 端口分配
+### 2.1 数据库设计（SQLite, aiosqlite, WAL 模式）
 
-| 端口 | 用途 |
-|------|------|
-| 35432 | HTTP API + 本地 WebSocket Server (手机直连) |
-| 35433 | UDP 广播发现 |
+```sql
+-- users: 用户表 -- bcrypt 哈希存储密码
+CREATE TABLE users (id INTEGER PK, phone TEXT UNIQUE, password TEXT, name TEXT, created_at TEXT);
+-- refresh_tokens: 续期令牌（只存 SHA-256 哈希）
+CREATE TABLE refresh_tokens (id INTEGER PK, user_id INTEGER FK, token_hash TEXT, expires_at TEXT, revoked INTEGER DEFAULT 0);
+CREATE INDEX idx_rt_hash ON refresh_tokens(token_hash);
+-- devices: 设备注册（原子 upsert）
+CREATE TABLE devices (id INTEGER PK, user_id INTEGER FK, device_name TEXT, device_type TEXT, last_heartbeat TEXT, is_active INTEGER DEFAULT 1, UNIQUE(user_id, device_name));
+-- audit_log: 审计日志
+CREATE TABLE audit_log (id INTEGER PK, user_id INTEGER, action TEXT, detail TEXT, ip TEXT, created_at TEXT);
+```
 
-#### HTTP API 端点
+### 2.2 JWT 密钥管理
 
-| 端点 | 方法 | 用途 |
+三层优先级：
+1. 环境变量 `AUTODIAL_JWT_SECRET`
+2. 密钥文件 `.jwt_secret`（程序目录，Windows 上通过 icacls 设只读）
+3. 自动生成（`secrets.token_hex(32)`）
+
+### 2.3 Token 生命周期
+
+```
+注册/登录 → bcrypt(password) → 返回 JWT(15min) + refresh_token(30天, 存SHA-256哈希)
+         ↓
+自动续期 → POST /api/v1/auth/refresh(body: {refresh_token}) → 新JWT + 新refresh_token(旧吊销)
+         ↓
+改密码/强制下线 → UPDATE refresh_tokens SET revoked=1 WHERE user_id=?
+```
+
+### 2.4 防爆破限流
+
+- 维度：IP + 手机号独立限流
+- 规则：同一 key 15 分钟内最多 5 次失败
+- 超过阈值返回 HTTP 429
+- 登录成功后重置限流计数器
+
+---
+
+## 三、v3 REST API（端口 35441）
+
+### 3.1 响应格式
+
+```json
+{"ok": true,  "data": {...}, "error": ""}
+{"ok": false, "data": null,  "error": "描述信息"}
+```
+
+### 3.2 认证端点
+
+**POST `/api/v1/auth/register`**
+```json
+// Request
+{"phone": "13800138000", "password": "123456"}
+// Response 201
+{"ok": true, "data": {"token": "<JWT>", "refresh_token": "<raw>", "phone": "13800138000"}}
+```
+
+**POST `/api/v1/auth/login`**
+```json
+// Request
+{"phone": "13800138000", "password": "123456"}
+// Response 200
+{"ok": true, "data": {"token": "<JWT>", "refresh_token": "<raw>", "phone": "13800138000"}}
+// 失败 401
+{"ok": false, "error": "手机号或密码错误"}
+```
+
+**POST `/api/v1/auth/refresh`**
+```json
+// Request
+{"refresh_token": "<上次登录获得的 refresh_token>"}
+// Response 200
+{"ok": true, "data": {"token": "<新JWT>", "refresh_token": "<新refresh_token>"}}
+```
+
+### 3.3 业务端点
+
+**GET `/api/v1/status`** — 查手机在线状态
+```json
+// Header: Authorization: Bearer <JWT>
+// Response
+{"ok": true, "data": {"phone_online": true, "device_name": "Redmi K40"}}
+```
+
+**POST `/api/v1/dial`** — 拨号（202 Accepted）
+```json
+// Header: Authorization: Bearer <JWT>
+// Request
+{"phone": "13800138000"}
+// Response 202
+{"ok": true, "data": {"req_id": "a1b2c3d4", "status": "pending"}}
+// 手机离线 409
+{"ok": false, "error": "没有在线的手机"}
+```
+
+**GET `/api/v1/dial/result?req_id=a1b2c3d4`** — 查拨号结果
+```json
+{"ok": true, "data": {"status": "ok", "number": "13800138000"}}
+// status 可能值: pending | ok | error | timeout | unknown
+```
+
+**POST `/api/v1/hangup`**
+```json
+// Header: Authorization: Bearer <JWT>
+// Response 202
+{"ok": true, "data": {}}
+```
+
+**POST `/api/v1/sms`**
+```json
+// Header: Authorization: Bearer <JWT>
+// Request
+{"phone": "13800138000"}
+// Response 202
+{"ok": true, "data": {}}
+```
+
+### 3.4 注册页面
+
+浏览器打开 `http://服务器:35441/register` 呈现内置 HTML 注册页面。
+
+---
+
+## 四、v3 WebSocket 协议（端口 35440）
+
+### 4.1 握手协议
+
+v3 WebSocket 同时支持 JWT 和旧 PIN 两种认证方式，通过 `auth_method` 字段区分。
+
+**JWT 握手**：
+```json
+// 手机端发送
+{"type": "phone_hello", "auth_method": "jwt", "token": "<JWT>", "deviceName": "Redmi K40"}
+// 云端回复
+{"type": "auth_ok", "user_id": 42, "phone": "13800138000"}
+// 或失败
+{"type": "auth_fail", "reason": "Token无效"}
+```
+
+**PIN 握手（兼容老设备）**：
+```json
+// 手机端发送
+{"type": "phone_hello", "pin": "1234", "deviceName": "Redmi K40"}
+// 云端回复（含 pc_present 字段）
+{"type": "auth_ok", "pin": "1234", "pcCount": 1, "pc_present": true}
+```
+
+**JWT 插件（扩展）握手**：
+```json
+{"type": "pc_hello", "auth_method": "jwt", "token": "<JWT>", "hostname": "DESKTOP-ABC"}
+→ {"type": "pc_auth_ok", "user_id": 42, "phone": "13800138000"}
+```
+
+### 4.2 JWT 路由
+
+- JWT 设备通过 `user_id` 路由，而非 PIN
+- `forward_to_user_phones(user_id, msg)` — 发给该用户的所有手机
+- `forward_to_user_pcs(user_id, msg)` — 发给该用户的所有插件连接
+
+### 4.3 拨号确认流程（`dial_ack`）
+
+```
+插件 → REST /api/v1/dial → 云端生成 req_id → WS 发给手机
+手机拨出 → WS 回 {"type":"dial_ack", "req_id":"xxx", "status":"ok"}
+云端更新 dial_results[req_id]
+插件轮询 GET /api/v1/dial/result → 拿到结果
+```
+
+### 4.4 心跳
+
+- WebSocket 内置 ping/pong：30s 间隔，90s 超时
+- 应用层心跳也保留：45s 超时检查
+
+---
+
+## 五、v2 PIN 协议（端口 35430）
+
+（保留原有的 v2 协议完整支持，供老设备使用。详见上一版技术文档。）
+
+**关键消息类型**：
+
+| type | 方向 | 说明 |
 |------|------|------|
-| `/dial?number=xxx` | GET | 触发拨号 |
-| `/hangup` | GET | 挂断电话 |
-| `/sms?number=xxx` | GET | 打开短信窗口 |
-| `/open` | GET | 打开主窗口 |
-| `/toggle-floatbar` | GET | 切换悬浮横条 |
-| `/cloud-servers` | GET | 获取云服务器列表 |
-| `/health` (relay) | GET | 云端 relay 健康检查 |
-
-#### UDP 广播发现
-
-- 发送端口: 35433
-- 消息格式: 广播 `{"type":"discover","pin":"<4位PIN>","hostname":"..."}` → 255.255.255.255
-- 响应: `{"type":"found","ip":"<phone_ip>","pin":"<PIN>"}`
-
-#### 云端连接
-
-- WebSocket 客户端 (ws 库)
-- 支持多服务器列表遍历连接
-- 认证: `{"type":"pc_hello","pin":"<PIN>","hostname":"..."}` → `{"type":"pc_auth_ok"}`
-- 心跳: 每 15s 发 `{"type":"ping"}`, 20s 无 pong 判超时
-- TCP KeepAlive: 10s 间隔
-
-#### 文件日志
-
-- 路径: `%APPDATA%/autodial-logs/autodial-pc-YYYY-MM-DD.log`
-- 滚动: 10MB 单文件上限, 保留 7 天
-- 格式: `[时间] [级别] [模块] [PIN] 内容`
-
-### 2.3 渲染进程 (renderer/index.html)
-
-单页面应用, 纯 HTML/CSS/JS, 无框架。
-
-#### 核心状态变量
-
-```javascript
-isConnected     // 手机是否连接
-activePin       // 当前活跃手机 PIN
-lastDialPin     // 上一次拨号的 PIN (重连优先级)
-currentPhones   // 手机列表
-```
-
-#### IPC 事件监听
-
-| 事件 | 方向 | 用途 |
-|------|------|------|
-| `status-update` | 主→渲染 | 手机连接状态变化 |
-| `phones-update` | 主→渲染 | 多手机列表更新 |
-| `force-reconnect-result` | 主→渲染 | 强制重连结果 |
-| `dial-sent` / `dial-result` | 主→渲染 | 拨号发送/结果 |
-| `dial-timeout` | 主→渲染 | 拨号超时 (30s) |
-| `dial-waking` | 主→渲染 | 正在唤醒手机 |
-| `server-log` | 主→渲染 | 服务端日志 |
-| `info-push` | 主→渲染 | IP/PIN 信息推送 |
-
-#### 按钮状态逻辑
-
-- **未连接** + 有号码 → "重连手机", 点击触发 `force-reconnect`
-- **未连接** + 无号码 → 拨号按钮可点击但 Toast 提示
-- **已连接** + 有号码 → 正常拨号
-- **已连接** + 无号码 → 拨号按钮禁用
-- 挂断按钮仅在已连接时可用
-
-### 2.4 PhoneConnectionManager
-
-**文件**: `pc-app/phone-connection-manager.js`
-
-| 参数 | 值 |
-|------|-----|
-| 最大手机连接数 | 2 |
-| 心跳超时 | 120s |
-| 邻居表 TTL | 30s |
-| ACK 超时 | 3s |
-| 拨号队列超时 | 30s |
-
-#### 设备状态机
-
-```
-DISCONNECTED → DISCOVERING → CONNECTING → CONNECTED
-                                       ↘ stale → DISCONNECTED
-```
-
-#### 双通道发送
-
-LAN 优先, 失败时降级到 Cloud。关键消息 (dial/hangup/sms) 走 ACK 确认机制, 3s 超时后尝试备选通道。
+| `phone_hello` | 手机→PC/云 | PIN 握手 + deviceName |
+| `pc_hello` | PC→云 | PC 注册到云中继 |
+| `auth_ok` | PC/云→手机 | 认证成功，云版含 `pc_present` |
+| `auth_fail` | →手机 | 认证失败 |
+| `dial` | PC→手机 | 拨号指令 |
+| `dial_result` | 手机→PC | 拨号结果 |
+| `sms` / `sms_result` | PC⇌手机 | 短信指令/结果 |
+| `hangup` | PC→手机 | 挂断 |
+| `ping` / `pong` | 双向 | 心跳 |
+| `ack` | 手机→PC | ACK 确认 |
+| `reconnect_request` | PC→云→手机 | 云端唤醒 |
+| `pc_online` / `pc_offline` | 云→手机 | PC 上下线通知 |
 
 ---
 
-## 3. 云中继 (Python)
+## 六、Chrome 扩展 v3 实现
 
-### 3.1 基本信息
+### 6.1 background.js（Service Worker）
 
-| 项目 | 值 |
-|------|-----|
-| 文件 | `cloud-relay/python/cloud_relay_v2.py` |
-| 语言 | Python 3.11 |
-| 依赖 | websockets, pystray, Pillow |
-| 默认端口 | 35430 |
-| 打包 | PyInstaller → 单文件 exe (27.8 MB) |
+**双模路由**：
+- PC 直连优先（每 15s 重检），3 次失败后切云端
+- 云端通过 REST API + JWT 认证
 
-### 3.2 架构
+**JWT 管理**：
+- `getToken()`：优先内存缓存 → 检查 chrome.storage → `isTokenExpired()` → 自动 refresh
+- 永不缓存密码，自动续期靠 `refresh_token`
+- CRM 自检测到坐席手机号时自动静默续期
 
-```
-WebSocket Server (0.0.0.0:35430)
-    │
-    ├── health_check_handler (HTTP 路由)
-    │   ├── WebSocket Upgrade → None (放行)
-    │   ├── /health → JSON 状态
-    │   ├── /api/status → 仪表盘数据
-    │   ├── /api/clients → 客户端列表
-    │   ├── /api/stats → 统计数据
-    │   ├── /api/logs → 最近 100 条日志
-    │   └── / → Web 管理界面 HTML
-    │
-    └── handle_connection (WebSocket)
-        ├── phone_hello → 手机认证
-        ├── pc_hello → PC 认证
-        ├── phone→PC 转发 (dial_result, sms_result, ping, ack...)
-        ├── PC→手机 转发 (auth_ok, dial, sms, hangup...)
-        └── ping → pong (通用)
-```
+**拨号确认**：
+- 云端拨号 → 202 Accepted → `pollDialResult(req_id, 3000ms)` 轮询等待手机确认
 
-### 3.3 PIN 分组
+### 6.2 content-script.js（内容脚本）
 
-- 每个 PIN 对应一个 `PinGroup`, 包含 `pcs` 和 `phones` 两个集合
-- 同 PIN 的 PC 和手机之间消息自动转发
-- 组内无连接时自动清理
+**8 套主题**（支持运行时切换）：
+dark-gold / cyber-frost / deep-space / cyberpunk / minimalist / forest-green / energetic-orange / ocean-blue
 
-### 3.4 WebSocket 配置
+**浮动按钮**：
+- 拨号按钮：右上角悬浮，可拖动，显示检测到的号码
+- 挂断按钮：椭圆形，可拖拽 + 左下角缩放手柄（36-100px）
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| ping_interval | 30s | WebSocket 协议层 ping |
-| ping_timeout | 90s | 协议层 pong 超时 |
-| close_timeout | 10s | 优雅关闭等待 |
+**CRM 检测**：
+- CSS 选择器优先检测坐席手机号
+- `MutationObserver` + 500ms debounce 监控 SPA 页面变化
+- 检测到本机手机号 → 自动静默续期 JWT
 
-### 3.5 频率限制
+### 6.3 popup.js（弹窗）
 
-- 每个 IP 每分钟最多 5 次 `phone_hello` / `pc_hello` 请求
-- 超频返回 `auth_fail`，1 分钟后自动重置
-
-### 3.6 消息统计
-
-`record_message()` 记录所有转发消息, 按 PIN、消息类型、日期分类统计, 通过 `/api/stats` 暴露。
-
-### 3.7 系统托盘
-
-- 绿色圆点: 运行中
-- 灰色圆点: 已停止
-- 菜单: 启停服务器、打开 Web 管理界面、打开日志、退出
+- 服务器地址配置 + 连通性测试
+- 手机号 + 密码登录
+- 登录状态显示（已登录手机号、连接模式）
 
 ---
 
-## 4. Android 端
+## 七、Android 端 v3 改造
 
-### 4.1 基本信息
+### 7.1 JWT 支持
 
-| 项目 | 值 |
-|------|-----|
-| 包名 | `com.autodial.app` |
-| 版本 | 4.52 (versionCode 452) |
-| 语言 | Kotlin |
-| minSdk / targetSdk | 24 / 34 |
-| WebSocket | OkHttp 4.12.0 |
+**ConnectionManager**：
+- `phone_hello` 支持 `auth_method: "jwt"` 模式
+- 有 JWT token 时自动使用 JWT 认证，fallback PIN
 
-### 4.2 核心组件
+**ConnectFragment**：
+- 输入 11 位手机号 → 检测是否有 JWT token
+- 有 token → 直接用 JWT 连接云中继 v3
+- 无 token → 弹出登录对话框 → POST `/api/v1/auth/login` → 保存 JWT + refresh_token
 
-| 类 | 职责 |
-|-----|------|
-| `DialService` | 前台服务, 管理连接生命周期, START_STICKY |
-| `ConnectionManager` | 双通道管理 (LAN + Cloud), 心跳, 重连 |
-| `CloudCtrl` | 云服务器配置 CRUD, 连通性测试, Gist 同步 |
-| `DialEngine` | SIM 卡选择 + 拨号执行 (TelecomManager) |
-| `PrefCtrl` | SharedPreferences 设置 + ConnectionStrategy 枚举 |
-| `ConnectFragment` | 连接选项卡 UI (发现、配对、云服务器) |
-| `CallLogDb` | SQLite 通话记录 + SIM 缓存 |
+**PrefCtrl**：
+- `getJwtToken()` / `setJwtToken()`
+- `getRefreshToken()` / `setRefreshToken()`
+- `getLoginPhone()` / `setLoginPhone()`
+- `getCloudServer()` — 兼容旧的 cloud_server 配置
 
-### 4.3 连接策略
+### 7.2 云中继地址自动转换
 
 ```kotlin
-enum class ConnectionStrategy {
-    AUTO("auto", "自动(LAN优先)"),    // 同时尝试 LAN + Cloud
-    LAN_ONLY("lan_only", "仅局域网"),
-    CLOUD_ONLY("cloud_only", "仅云中转")
+// ws://server:35440 → http://server:35441
+fun getCloudApiUrl(): String {
+    val server = prefs.getString("cloud_server", "") ?: ""
+    if (server.isNotEmpty()) {
+        return server.replace("ws://", "http://").replace("wss://", "https://")
+            .replace(":35440", ":35441")
+    }
+    return "http://262ao85kz470.vicp.fun:35441"
 }
 ```
 
-### 4.4 发现与连接
-
-#### LAN 发现
-
-- UDP 广播: `255.255.255.255:35433`
-- 消息: `{"type":"discover","pin":"<PIN>"}`
-- 重试: 3 次, 200ms 间隔, 8s 超时
-- 发现后连接: `ws://<ip>:35432`
-
-#### Cloud 连接
-
-- 多服务器列表, 按顺序尝试
-- 默认服务器: `ws://262ao85kz470.vicp.fun:55535`
-- 支持 Gist/Gitee 同步服务器列表
-- 认证: `{"type":"phone_hello","pin":"<PIN>","deviceName":"..."}`
-
-### 4.5 心跳机制
-
-双层心跳:
-
-| 层级 | 机制 | 间隔 | 超时 |
-|------|------|------|------|
-| 协议层 | OkHttp WebSocket ping | 30s | 45s (readTimeout) |
-| 应用层 | `{"type":"ping"}` → `{"type":"pong"}` | 30s | 15s |
-
-### 4.6 拨号引擎
-
-拨号模式 (DialMode):
-- `POPUP`: 每次弹窗选卡
-- `ROUND_SELECT`: 10 天内打过则弹窗, 否则轮选
-- `OPPOSITE`: 2 天内反向选卡
-- `SIM1` / `SIM2`: 始终指定卡
-- `ALTERNATE`: 交替
-- `SYSTEM`: 系统默认
-
-拨号流程:
-1. 调用 `TelecomManager.placeCall()` (推荐)
-2. 失败时回退到 `ACTION_CALL` intent
-3. 无障碍服务辅助点击小米 SIM 选择弹窗
-
-### 4.7 保活机制
-
-- **前台服务**: `startForeground()` + PARTIAL_WAKE_LOCK
-- **开机自启**: BootReceiver
-- **网络监控**: ConnectivityManager.NetworkCallback → 触发重连
-- **亮屏检查**: SCREEN_ON / USER_PRESENT → wakeAndReconnect()
-- **电池优化**: 提示用户关闭电池优化
-
-### 4.8 重连策略
-
-指数退避延迟: `0 → 1s → 3s → 5s(x3) → 10s(x4) → 30s(x5) → 60s(x5) → 5min`
-- LAN 最多 30 次
-- Cloud 最多 8 次
-- Cloud 在线时定期尝试 LAN (间隔 60s, 最多 10 次)
-
 ---
 
-## 5. 浏览器扩展
+## 八、安全架构总结
 
-### 5.1 基本信息
-
-| 项目 | 值 |
-|------|-----|
-| 框架 | Chrome Extension Manifest V3 |
-| 版本 | 2.1.0 |
-| 权限 | activeTab, storage, clipboardWrite |
-| 主机权限 | `guwen.zhudaicms.com`, `127.0.0.1:35432` |
-
-### 5.2 核心文件
-
-| 文件 | 职责 |
-|------|------|
-| `background.js` | Service Worker, HTTP API 代理 |
-| `content-script.js` | CRM 页面注入, 浮动按钮, 号码扫描 |
-| `popup.html` / `popup.js` | 工具栏弹窗, 状态轮询 |
-
-### 5.3 功能
-
-#### 浮动按钮
-
-- 可拖拽拨号按钮, 显示检测到的号码
-- 可拖拽挂断按钮, 支持左下角拖拽缩放
-- 右键菜单: 打开 PC 端、切换悬浮窗、切换主题 (8 种)
-
-#### 号码扫描
-
-- 自动扫描 CRM 页面中的手机号 (正则: `1[3-9]\d{9}`)
-- 子 iframe 中也扫描 (关键字: `"手机号码："`)
-- 拦截 `<a>` 链接替换为 AutoDial 拨号
-
-#### HTTP API 调用
-
-| 端点 | 用途 |
-|------|------|
-| `GET /dial?number=xxx` | 拨号 |
-| `GET /hangup` | 挂断 |
-| `GET /sms?number=xxx` | 短信 |
-| `GET /open` | 打开 PC 主界面 |
-| `GET /toggle-floatbar` | 切换悬浮横条 |
-| `GET /` | 状态检查 (3s 轮询) |
-
----
-
-## 6. 通信协议
-
-### 6.1 WebSocket 消息类型
-
-#### 认证握手
-
-```
-手机 → PC/Relay:  {"type":"phone_hello","pin":"1234","deviceName":"Xiaomi 14"}
-PC → Relay:      {"type":"pc_hello","pin":"1234","hostname":"DESKTOP-ABC"}
-Relay → 手机:     {"type":"auth_ok","pin":"1234","pcCount":1}
-Relay → PC:      {"type":"pc_auth_ok","pin":"1234","phoneCount":1}
-```
-
-#### 拨号 / 短信 / 挂断
-
-```
-PC → 手机:  {"type":"dial","number":"13800138000","messageId":"ack_..."}
-PC → 手机:  {"type":"sms","number":"13800138000","content":"你好"}
-PC → 手机:  {"type":"hangup"}
-手机 → PC:  {"type":"ack","messageId":"ack_...","originalType":"dial"}
-手机 → PC:  {"type":"dial_result","number":"13800138000","status":"ok"}
-手机 → PC:  {"type":"sms_result","number":"13800138000","status":"sent"}
-```
-
-#### 心跳
-
-```
-手机 → PC/Relay:  {"type":"ping"}
-PC/Relay → 手机:  {"type":"pong"}
-PC → Relay:      {"type":"ping"}
-Relay → PC:      {"type":"pong"}
-```
-
-#### 重连唤醒
-
-```
-PC → Relay:  {"type":"reconnect_request","targetDevice":"<deviceName>"}
-Relay → 手机: 转发 reconnect_request
-```
-
-### 6.2 UDP 发现
-
-```
-端口: 35433 (双向)
-PC 广播:  {"type":"discover","pin":"1234","hostname":"PC-NAME"}
-手机响应: {"type":"found","ip":"192.168.1.100","pin":"1234"}
-手机广播: {"type":"discover","pin":"1234"}
-PC 响应:  {"type":"announce","ip":"192.168.1.50","pin":"1234","port":35432}
-```
-
-### 6.3 HTTP API
-
-全部通过 PC 端 `127.0.0.1:35432` 提供:
-
-| 端点 | 方式 | 参数 | 响应 |
-|------|------|------|------|
-| `/dial` | GET | `number` | `{"success":true,"number":"..."}` |
-| `/hangup` | GET | — | `{"success":true}` |
-| `/sms` | GET | `number` | 打开 PC 端短信窗口 |
-| `/open` | GET | — | 打开 PC 端主窗口 |
-| `/toggle-floatbar` | GET | — | `{"success":true,"visible":bool}` |
-| `/cloud-servers` | GET | — | `{"servers":["url1","url2"]}` |
-| `/` | GET | — | `{"pin":"1234","ip":"...","connected":bool}` |
-
-所有响应均带 `Access-Control-Allow-Origin: *` CORS 头。
-
----
-
-## 7. 连接模式对比
-
-| 特性 | LAN 直连 | 云中继 |
-|------|----------|--------|
-| 延迟 | < 5ms | 50-200ms |
-| 网络要求 | 同局域网 | 有公网 IP 或 DDNS |
-| 手机发现 | UDP 广播 | WebSocket 直连 relay |
-| 多 PC 支持 | ❌ (单机) | ✅ (PIN 分组) |
-| 安全性 | 局域网隔离 | 依赖 relay 认证 |
-| 可靠性 | 高 | 依赖 relay 稳定性 |
-
----
-
-## 8. 项目文件结构
-
-```
-6-7bug/
-├── pc-app/                          # PC 端 (Electron)
-│   ├── main.js                      # 主进程 (~2100行)
-│   ├── preload.js                   # contextBridge IPC
-│   ├── phone-connection-manager.js  # 手机连接管理
-│   ├── pack.js                      # 打包脚本
-│   ├── renderer/
-│   │   ├── index.html               # 主界面 (HTML+CSS+JS)
-│   │   ├── sms.html                 # 短信窗口
-│   │   ├── settings.html            # 设置窗口
-│   │   └── floatbar.html           # 悬浮横条
-│   ├── themes/                      # 主题资源
-│   └── run.bat                      # 开发启动脚本
-│
-├── cloud-relay/                     # 云中继 (Python)
-│   ├── python/
-│   │   ├── cloud_relay_v2.py        # 主程序 (1000+行)
-│   │   ├── requirements.txt         # 依赖
-│   │   └── AutoDial-Cloud-Relay-v2.spec  # PyInstaller 配置
-│   └── dist/
-│       └── AutoDial-Cloud-Relay-v2.exe    # 打包后 exe
-│
-├── android/                         # Android 端 (Kotlin)
-│   └── app/src/main/java/com/autodial/app/
-│       ├── DialService.kt           # 前台服务
-│       ├── ConnectionManager.kt     # 连接管理 v7
-│       ├── CloudCtrl.kt             # 云服务器配置
-│       ├── DialEngine.kt            # 拨号引擎
-│       ├── PrefCtrl.kt              # 设置管理
-│       └── ...                      # 其他 UI/工具类
-│
-├── AutoDial-Extension/              # 浏览器扩展 (Chrome)
-│   ├── manifest.json                # Manifest V3
-│   ├── background.js                # Service Worker
-│   ├── content-script.js            # 页面注入脚本
-│   ├── popup.html / popup.js        # 弹出窗口
-│   └── AutoDial-API.md              # API 文档
-│
-└── docs/                            # 文档
-```
-
----
-
-## 9. 已知参数速查表
-
-| 参数 | PC 端 | 云中继 | Android |
-|------|-------|--------|---------|
-| 应用层 ping 间隔 | 15s | — | 30s |
-| pong 超时 | 20s | — | 15s |
-| WebSocket ping 间隔 | — | 30s | 30s (OkHttp) |
-| WebSocket ping 超时 | — | 90s | 45s (readTimeout) |
-| 手机心跳超时 | 120s (PC判断) | — | — |
-| UDP 发现端口 | 35433 | — | 35433 |
-| WebSocket 端口 | 35432 | 35430 | — |
-| 最大手机连接数 | 2 | 无限制 | — |
-| 频率限制 | — | 5次/分钟/IP | — |
-| 重连最大次数 | 20 | — | LAN:30, Cloud:8 |
+| 层面 | v3 (JWT) | v2 (PIN) |
+|------|----------|----------|
+| 认证 | bcrypt 哈希 + JWT(HS256, 15min) | 4 位数字 PIN |
+| 续期 | refresh_token (SHA-256 哈希, 30天, 可吊销) | 无，手动重连 |
+| 防爆破 | IP + 手机号双维度, 5次/15min | IP 频率限制, 5次/分钟 |
+| 密钥 | 环境变量 > 0600 文件 > 自动生成 | 无（PIN 够简单） |
+| 吊销 | `UPDATE refresh_tokens SET revoked=1` | 改端上的 PIN |
+| 审计 | audit_log 表记录 login/dial/register 等 | 日志文件 |

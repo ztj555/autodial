@@ -23,28 +23,31 @@ button {
   padding: 7px 12px; border: none; border-radius: 6px;
   font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.btn-primary { background: #C9A84C; color: #111318; }
+.btn-primary { background: #C9A84C; color: #111318; width: 100%; }
 .btn-primary:hover { background: #F0C040; }
-.btn-outline { background: transparent; color: #C9A84C; border: 1px solid #C9A84C; }
-.btn-outline:hover { background: rgba(201,168,76,0.1); }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.btn-sm { width: auto; font-size: 11px; padding: 4px 10px; background: #2A2E38; color: #A09070; }
+.btn-sm:hover { background: #3A3E48; }
 .btn-danger { background: transparent; color: #E74C3C; border: 1px solid #3A2020; font-size: 11px; padding: 4px 8px; }
-.btn-sm { font-size: 11px; padding: 4px 8px; }
-.btn-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1A1D24; border-radius: 6px; margin-bottom: 8px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.online { background: #2ECC71; box-shadow: 0 0 6px #2ECC71; }
 .status-dot.offline { background: #E74C3C; }
+.status-dot.checking { background: #F39C12; animation: pulse 0.8s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: #A09070; }
-.section-title { font-size: 11px; color: #707070; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.server-row { display: flex; gap: 6px; align-items: center; }
+.server-row input { flex: 1; margin-bottom: 0; }
+.server-status { font-size: 11px; margin-left: 4px; white-space: nowrap; }
+.server-status.ok { color: #2ECC71; }
+.server-status.err { color: #E74C3C; }
+.section-title { font-size: 11px; color: #707070; margin: 8px 0 4px; }
 .hint { font-size: 11px; color: #707070; text-align: center; margin-top: 6px; line-height: 1.5; }
-.collapsible { cursor: pointer; }
-.collapsible:hover { color: #C9A84C; }
+.hint a { color: #C9A84C; }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>AutoDial</h1>
-</div>
+<div class="header"><h1>AutoDial</h1></div>
 
 <!-- ===== 已登录面板 ===== -->
 <div id="statusPanel" style="display:none">
@@ -55,30 +58,26 @@ button {
   <div class="info-row"><span>手机号</span><span id="myPhone">--</span></div>
   <div class="info-row"><span>服务器</span><span id="myServer">--</span></div>
   <div class="info-row"><span>连接模式</span><span id="connMode">--</span></div>
-  <div class="section-title collapsible" id="settingsToggle">⚙ 设置</div>
-  <div id="settingsArea" style="display:none">
-    <input id="serverInputStatus" placeholder="服务器地址" />
-    <button class="btn-outline btn-sm" id="saveServerBtn">保存</button>
-  </div>
   <button class="btn-danger" id="logoutBtn" style="margin-top:8px">退出登录</button>
 </div>
 
 <!-- ===== 未登录面板 ===== -->
 <div id="loginForm">
-  <div class="section-title collapsible" id="serverToggle">⚙ 服务器设置（点击展开）</div>
-  <div id="serverArea" style="display:none">
-    <input id="serverInput" placeholder="http://你的IP:35441" />
-    <button class="btn-outline btn-sm" id="saveServerOnlyBtn" style="margin-bottom:6px">保存</button>
+  <div class="section-title">⚙ 服务器</div>
+  <div class="server-row">
+    <input id="serverInput" placeholder="http://IP:35441" />
+    <button class="btn-sm" id="testServerBtn">测试</button>
+  </div>
+  <div style="margin: 2px 0 8px 4px">
+    <span class="server-status" id="serverStatus"></span>
   </div>
 
   <input id="phoneInput" placeholder="手机号" maxlength="11" />
-  <input id="passwordInput" type="password" placeholder="密码（至少6位）" />
-  <div class="btn-row">
-    <button class="btn-primary" id="loginBtn" style="flex:1">登录</button>
-    <button class="btn-outline" id="registerBtn" style="flex:1">注册</button>
+  <input id="passwordInput" type="password" placeholder="密码" />
+  <button class="btn-primary" id="loginBtn">登录</button>
+  <div class="hint">
+    没有账号？在<a href="#" id="openRegisterLink">手机端注册</a>或访问 <span id="registerUrlHint"></span>
   </div>
-  <div class="hint">首次使用点「注册」；已有账号点「登录」</div>
-  <div class="hint" style="color:#C9A84C">打开CRM页面可自动登录（需先登录过一次）</div>
 </div>
 
 <script src="popup.js"></script>

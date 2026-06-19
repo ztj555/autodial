@@ -7,7 +7,8 @@
   "host_permissions": [
     "*://guwen.zhudaicms.com/*",
     "http://127.0.0.1:35432/*",
-    "https://your-server.com:35441/*"
+    "http://*:35441/*",
+    "https://*:35441/*"
   ],
   "action": {
     "default_popup": "popup.html",

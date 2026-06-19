@@ -290,7 +290,7 @@
         boxShadow: `0 2px 10px ${t.accent}33`,
         cursor: 'pointer',
         userSelect: 'none',
-        display: 'flex',
+        display: 'none',  // 默认隐藏，拨号后才显示
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'box-shadow .2s, background .2s',
@@ -315,7 +315,14 @@
             flashHangup('PC端未运行', false);
             return;
           }
-          if (resp && resp.success) flashHangup('已挂断', true);
+          if (resp && resp.success) {
+            flashHangup('已挂断', true);
+            // 挂断后 2 秒隐藏按钮
+            clearTimeout(window.__ad_hangup_timer);
+            window.__ad_hangup_timer = setTimeout(() => {
+              if (hangupEl) hangupEl.style.display = 'none';
+            }, 2000);
+          }
           else flashHangup(resp?.error || '挂断失败', false);
         });
       });
@@ -490,8 +497,6 @@
         }},
         { type: 'separator' },
         { label: '🎨 切换主题', action: showThemeMenu },
-        { type: 'separator' },
-        { label: '📍 获取当前位置', action: showPosition },
         { type: 'separator' },
         { label: '✕ 关闭菜单', action: () => {} },
       ];
@@ -792,12 +797,15 @@
       floatEl.style.boxShadow = ok
         ? `0 4px 16px ${t.green}44`
         : `0 4px 16px ${t.red}44`;
-      setTimeout(() => {
-        const lb = document.getElementById('__ad_dial_label');
-        if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
-        floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
-        floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
-      }, 2500);
+      // 成功 2.5 秒恢复；失败持续显示直到下次操作
+      if (ok) {
+        setTimeout(() => {
+          const lb = document.getElementById('__ad_dial_label');
+          if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
+          floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
+          floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
+        }, 2500);
+      }
     }
 
     // 等DOM就绪后创建
@@ -807,7 +815,20 @@
     // 监听来自background的消息（跨frame通信）
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg.type === 'updatePhone') updatePhone(msg.phone);
-      if (msg.type === 'dialResult') flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
+      if (msg.type === 'dialResult') {
+        flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
+        // 拨号成功显示挂断按钮，失败则隐藏
+        if (hangupEl) {
+          hangupEl.style.display = msg.ok ? 'flex' : 'none';
+        }
+        // 通话结束后 30 秒自动隐藏挂断按钮
+        if (msg.ok && hangupEl) {
+          clearTimeout(window.__ad_hangup_timer);
+          window.__ad_hangup_timer = setTimeout(() => {
+            hangupEl.style.display = 'none';
+          }, 30000);
+        }
+      }
     });
 
     // ========== v3: 检测当前用户手机号 → 自动登录 ==========
@@ -830,6 +851,7 @@
           if (p && p !== _lastPhone) {
             _lastPhone = p;
             console.log('[AutoDial v3] 检测到手机号变化:', p);
+            chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: p });
           }
         } catch(e) {}
       }, 500);

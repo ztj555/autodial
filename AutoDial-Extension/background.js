@@ -23,6 +23,7 @@ let pcAvailable = null;
 let pcFailCount = 0;
 let pcCheckTimer = null;
 let loginPromise = null;
+let loginError = null;
 let jwtToken = null;
 const tabPhones = {};
 
@@ -40,7 +41,7 @@ async function getToken() {
   // 尝试续期
   if (stored.refresh_token) {
     try {
-      const res = await fetch(``${await getCloudApi()}/api/v1/auth/refresh`, {
+      const res = await fetch(`${await getCloudApi()}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: stored.refresh_token })
@@ -127,9 +128,10 @@ function startPcRecheck() {
 // ==================== 登录 ====================
 
 async function manualLogin(phone, password) {
+  loginError = null;
   loginPromise = (async () => {
     try {
-      const res = await fetch(``${await getCloudApi()}/api/v1/auth/login`, {
+      const res = await fetch(`${await getCloudApi()}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
@@ -140,9 +142,11 @@ async function manualLogin(phone, password) {
         console.log('[AutoDial BG] 登录成功:', phone);
         return d.data.token;
       }
-      console.error('[AutoDial BG] 登录失败:', d.error);
+      loginError = d.error || '登录失败';
+      console.error('[AutoDial BG] 登录失败:', loginError);
       return null;
     } catch (e) {
+      loginError = '网络错误：' + e.message;
       console.error('[AutoDial BG] 登录网络错误:', e);
       return null;
     }
@@ -217,7 +221,7 @@ async function dial(phone, tabId) {
     return;
   }
   try {
-    const res = await fetch(``${await getCloudApi()}/api/v1/dial`, {
+    const res = await fetch(`${await getCloudApi()}/api/v1/dial`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -243,7 +247,7 @@ async function pollDialResult(reqId, timeoutMs, token) {
   while (Date.now() - start < timeoutMs) {
     await sleep(500);
     try {
-      const res = await fetch(``${await getCloudApi()}/api/v1/dial/result?req_id=${reqId}`, {
+      const res = await fetch(`${await getCloudApi()}/api/v1/dial/result?req_id=${reqId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const d = await res.json();
@@ -269,7 +273,7 @@ async function hangup(tabId) {
   }
   const token = await getToken();
   if (!token) return;
-  await fetch(``${await getCloudApi()}/api/v1/hangup`, {
+  await fetch(`${await getCloudApi()}/api/v1/hangup`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }
   }).catch(() => {});
@@ -287,7 +291,7 @@ async function sendSms(phone, tabId) {
     notifyTab(tabId, { type: 'dialResult', ok: false, err: '请先登录' });
     return;
   }
-  await fetch(``${await getCloudApi()}/api/v1/sms`, {
+  await fetch(`${await getCloudApi()}/api/v1/sms`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -315,7 +319,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'sendSms') { sendSms(msg.phone, tabId); return true; }
 
   if (msg.type === 'manualLogin') {
-    manualLogin(msg.phone, msg.password).then(token => sendResponse({ success: !!token }));
+    manualLogin(msg.phone, msg.password).then(token => {
+      if (token) {
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: loginError || '登录失败，请检查账号密码' });
+        loginError = null;
+      }
+    });
     return true;
   }
 

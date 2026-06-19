@@ -75,7 +75,7 @@ ws_connections = set()
 # JWT user devices（新）
 jwt_devices: dict[int, dict] = {}
 
-PHONE_TO_PC_TYPES = {"phone_hello", "dial_result", "sms_result", "ack", "dial_ack"}
+PHONE_TO_PC_TYPES = {"phone_hello", "dial_result", "sms_result", "ack"}
 PC_TO_PHONE_TYPES = {
     "auth_ok", "auth_fail", "dial", "sms", "hangup", "reconnect_request"
 }
@@ -140,6 +140,15 @@ async def forward_to_user_phones(user_id, message):
             await phone_ws.send(data)
         except Exception:
             devices["phones"].discard(phone_ws)
+
+async def forward_to_user_pcs(user_id, message):
+    devices = jwt_devices.get(user_id, {})
+    data = json.dumps(message, ensure_ascii=False)
+    for pc_ws in list(devices.get("pcs", set())):
+        try:
+            await pc_ws.send(data)
+        except Exception:
+            devices["pcs"].discard(pc_ws)
 
 def find_device_ws(device_name):
     for ws, meta in ws_meta.items():
@@ -329,15 +338,39 @@ async def handle_connection(ws, path=None):
                 }))
                 continue
 
-            # ==================== Phone → PC ====================
-            if msg_type in PHONE_TO_PC_TYPES:
-                if meta.get("user_id"):
-                    # JWT 路由
-                    await forward_to_pcs(meta.get("pin", ""), msg, ws)
+            # ==================== dial_ack → 更新拨号结果 ====================
+            if msg_type == "dial_ack":
+                req_id = msg.get("req_id", "")
+                if req_id in dial_results:
+                    old = dial_results[req_id]
+                    dial_results[req_id] = {
+                        "status": msg.get("status", "ok"),
+                        "number": old.get("number", ""),
+                        "error": msg.get("error", ""),
+                        "user_id": old.get("user_id")
+                    }
+                    _log("I", "DIAL_ACK", meta.get("user_id", meta.get("pin", "?")),
+                         f"req={req_id} status={msg.get('status','ok')}")
+                # 同时转发给该用户的 PC 端（JWT 路由）
+                user_id = meta.get("user_id")
+                if user_id is not None:
+                    await forward_to_user_pcs(user_id, msg)
                 else:
                     await forward_to_pcs(meta.get("pin", ""), msg, ws)
-                if msg_type == "ping":
-                    await ws.send(json.dumps({"type": "pong"}))
+                continue
+
+            # ==================== ping → pong ====================
+            if msg_type == "ping":
+                await ws.send(json.dumps({"type": "pong"}))
+                continue
+
+            # ==================== Phone → PC ====================
+            if msg_type in PHONE_TO_PC_TYPES:
+                user_id = meta.get("user_id")
+                if user_id is not None:
+                    await forward_to_user_pcs(user_id, msg)
+                else:
+                    await forward_to_pcs(meta.get("pin", ""), msg, ws)
                 continue
 
             # ==================== PC → Phone ====================
@@ -378,6 +411,53 @@ from collections import OrderedDict
 dial_results = OrderedDict()
 MAX_DIAL_RESULTS = 100
 
+REGISTER_PAGE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>注册 - AutoDial</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#111318;color:#E8DCC8;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.card{background:#1A1D24;border-radius:12px;padding:32px 28px;width:360px;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+h1{font-size:20px;color:#C9A84C;text-align:center;margin-bottom:24px}
+input{width:100%;padding:10px 12px;margin-bottom:12px;background:#111318;border:1px solid #2A2E38;border-radius:8px;color:#E8DCC8;font-size:14px;outline:none}
+input:focus{border-color:#C9A84C}
+button{width:100%;padding:10px;background:#C9A84C;color:#111318;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer}
+button:hover{background:#F0C040}
+button:disabled{opacity:.5}
+.msg{margin-top:12px;text-align:center;font-size:13px;min-height:20px}
+.msg.ok{color:#2ECC71}
+.msg.err{color:#E74C3C}
+</style></head>
+<body>
+<div class="card">
+<h1>AutoDial 注册</h1>
+<input id="phone" placeholder="手机号" maxlength="11">
+<input id="password" type="password" placeholder="密码（至少6位）">
+<button id="btn" onclick="doRegister()">注册</button>
+<div class="msg" id="msg"></div>
+</div>
+<script>
+async function doRegister(){
+  const phone=document.getElementById('phone').value.trim();
+  const password=document.getElementById('password').value;
+  if(!phone||phone.length!==11){msg('请输入正确手机号','err');return}
+  if(password.length<6){msg('密码至少6位','err');return}
+  const btn=document.getElementById('btn');btn.disabled=true;btn.textContent='注册中...';
+  try{
+    const res=await fetch('/api/v1/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,password})});
+    const d=await res.json();
+    if(d.ok){msg('注册成功！现在可以去插件登录了','ok')}
+    else{msg(d.error||'注册失败','err');btn.disabled=false;btn.textContent='注册'}
+  }catch(e){msg('网络错误: '+e.message,'err');btn.disabled=false;btn.textContent='注册'}
+}
+function msg(t,c){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+c}
+</script>
+</body></html>"""
+
+async def handle_register_page(request):
+    return web.Response(text=REGISTER_PAGE, content_type="text/html; charset=utf-8")
+
 
 async def handle_health(request):
     uptime = int(time.time() - SERVER_START_TIME)
@@ -385,12 +465,7 @@ async def handle_health(request):
         "ok": True,
         "data": {
             "service": "AutoDial Cloud Relay v3",
-            "ws_port": WS_PORT,
-            "http_port": HTTP_PORT,
-            "uptime_sec": uptime,
-            "total_connections": len(ws_connections),
-            "pin_groups": len(pin_groups),
-            "jwt_users": len(jwt_devices)
+            "uptime_sec": uptime
         }
     })
 
@@ -436,7 +511,7 @@ async def handle_rest_dial(request):
 
     import secrets as _s
     req_id = _s.token_hex(8)
-    dial_results[req_id] = {"status": "pending", "number": phone}
+    dial_results[req_id] = {"status": "pending", "number": phone, "user_id": user_id}
     while len(dial_results) > MAX_DIAL_RESULTS:
         dial_results.popitem(last=False)
 
@@ -452,13 +527,21 @@ async def handle_rest_dial(request):
 async def handle_dial_result(request):
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     try:
-        verify_jwt(token)
+        payload = verify_jwt(token)
+        user_id = payload["user_id"]
     except Exception:
         return web.json_response({"ok": False, "error": "未登录"}, status=401)
 
     req_id = request.query.get("req_id", "")
-    result = dial_results.get(req_id, {"status": "unknown"})
-    return web.json_response({"ok": True, "data": result})
+    result = dial_results.get(req_id)
+    if not result:
+        return web.json_response({"ok": True, "data": {"status": "unknown"}})
+    # 校验归属：只能查自己的拨号结果
+    if result.get("user_id") != user_id:
+        return web.json_response({"ok": False, "error": "无权访问"}, status=403)
+    # 不返回 user_id 给客户端
+    safe = {k: v for k, v in result.items() if k != "user_id"}
+    return web.json_response({"ok": True, "data": safe})
 
 
 async def handle_hangup(request):
@@ -506,6 +589,8 @@ async def handle_sms(request):
 
 async def start_http_server():
     app = web.Application()
+    # 注册页面
+    app.router.add_get("/register", handle_register_page)
     # 认证
     app.router.add_post("/api/v1/auth/register", handle_register)
     app.router.add_post("/api/v1/auth/login", handle_login)
