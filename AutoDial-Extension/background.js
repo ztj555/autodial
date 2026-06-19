@@ -150,28 +150,41 @@ async function manualLogin(phone, password) {
   return loginPromise;
 }
 
-async function autoRegisterThenLogin(phone, password, name) {
-  // 先尝试注册
+// ===== 注册（独立，注册成功自动登录） =====
+async function manualRegister(phone, password) {
   loginPromise = (async () => {
     try {
-      let res = await fetch(``${await getCloudApi()}/api/v1/auth/register`, {
+      const api = await getCloudApi();
+      const res = await fetch(`${api}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
       });
-      let d = await res.json();
+      const d = await res.json();
       if (d.ok && d.data.token) {
         await saveToken(d.data.token, d.data.refresh_token, phone);
-        return d.data.token;
+        console.log('[AutoDial BG] 注册成功:', phone);
+        return { success: true };
       }
-      // 已注册，走登录
-      if (!d.ok && d.error === '该手机号已注册') {
-        return manualLogin(phone, password);
-      }
-      return null;
-    } catch { return null; }
+      return { success: false, error: d.error || '注册失败' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   })();
   return loginPromise;
+}
+
+// ===== 自动登录：CRM检测到手机号 → 静默续期 =====
+async function autoLoginIfPhoneMatch(phone) {
+  const stored = await chrome.storage.local.get(['jwt_phone']);
+  if (stored.jwt_phone === phone) {
+    const token = await getToken();
+    if (token) {
+      console.log('[AutoDial BG] 自动登录续期成功:', phone);
+      return true;
+    }
+  }
+  return false;
 }
 
 async function logout() {
@@ -306,9 +319,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.type === 'autoRegisterAndLogin') {
-    autoRegisterThenLogin(msg.phone, msg.password).then(token => sendResponse({ success: !!token }));
+  if (msg.type === 'manualRegister') {
+    manualRegister(msg.phone, msg.password).then(result => sendResponse(result));
     return true;
+  }
+
+  if (msg.type === 'selfPhoneDetected') {
+    // CRM检测到手机号 → 尝试静默续期
+    autoLoginIfPhoneMatch(msg.phone);
+    return;
   }
 
   if (msg.type === 'logout') {

@@ -7,53 +7,46 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  width: 300px; min-height: 220px;
+  width: 300px; min-height: 260px;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: #111318; color: #E8DCC8; padding: 14px; font-size: 13px;
+  background: #111318; color: #E8DCC8; padding: 12px; font-size: 13px;
 }
-.header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .header h1 { font-size: 15px; font-weight: 600; color: #C9A84C; }
 input {
-  width: 100%; padding: 8px 10px; margin-bottom: 8px;
+  width: 100%; padding: 8px 10px; margin-bottom: 6px;
   background: #1A1D24; border: 1px solid #2A2E38; border-radius: 6px;
   color: #E8DCC8; font-size: 13px; outline: none;
 }
 input:focus { border-color: #C9A84C; }
 button {
-  width: 100%; padding: 8px; border: none; border-radius: 6px;
-  font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 6px;
+  padding: 7px 12px; border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
 }
 .btn-primary { background: #C9A84C; color: #111318; }
 .btn-primary:hover { background: #F0C040; }
-.btn-secondary { background: #2A2E38; color: #A09070; }
-.btn-danger { background: transparent; color: #E74C3C; border: 1px solid #3A2020; font-size: 11px; padding: 4px; width: auto; }
+.btn-outline { background: transparent; color: #C9A84C; border: 1px solid #C9A84C; }
+.btn-outline:hover { background: rgba(201,168,76,0.1); }
+.btn-danger { background: transparent; color: #E74C3C; border: 1px solid #3A2020; font-size: 11px; padding: 4px 8px; }
+.btn-sm { font-size: 11px; padding: 4px 8px; }
+.btn-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1A1D24; border-radius: 6px; margin-bottom: 8px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.online { background: #2ECC71; box-shadow: 0 0 6px #2ECC71; }
 .status-dot.offline { background: #E74C3C; }
-.info-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; color: #A09070; }
-.hint { font-size: 11px; color: #707070; text-align: center; margin-top: 8px; line-height: 1.5; }
+.info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: #A09070; }
+.section-title { font-size: 11px; color: #707070; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.hint { font-size: 11px; color: #707070; text-align: center; margin-top: 6px; line-height: 1.5; }
+.collapsible { cursor: pointer; }
+.collapsible:hover { color: #C9A84C; }
 </style>
 </head>
 <body>
 <div class="header">
-  <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-    <circle cx="16" cy="16" r="14" fill="#1A1D24" stroke="#C9A84C" stroke-width="2"/>
-    <path d="M10 14 L14 18 L22 10" stroke="#C9A84C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
   <h1>AutoDial</h1>
 </div>
 
-<!-- 登录表单 -->
-<div id="loginForm">
-  <input id="serverInput" placeholder="服务器地址（如 http://x.x.x.x:35441）" value="" />
-  <input id="phoneInput" placeholder="手机号" maxlength="11" />
-  <input id="passwordInput" type="password" placeholder="密码（至少6位）" />
-  <button class="btn-primary" id="loginBtn">登录 / 注册</button>
-  <div class="hint">首次使用自动注册，之后登录即可</div>
-</div>
-
-<!-- 已登录面板 -->
+<!-- ===== 已登录面板 ===== -->
 <div id="statusPanel" style="display:none">
   <div class="status-bar">
     <div class="status-dot online" id="statusDot"></div>
@@ -62,7 +55,30 @@ button {
   <div class="info-row"><span>手机号</span><span id="myPhone">--</span></div>
   <div class="info-row"><span>服务器</span><span id="myServer">--</span></div>
   <div class="info-row"><span>连接模式</span><span id="connMode">--</span></div>
-  <button class="btn-danger" id="logoutBtn">退出登录</button>
+  <div class="section-title collapsible" id="settingsToggle">⚙ 设置</div>
+  <div id="settingsArea" style="display:none">
+    <input id="serverInputStatus" placeholder="服务器地址" />
+    <button class="btn-outline btn-sm" id="saveServerBtn">保存</button>
+  </div>
+  <button class="btn-danger" id="logoutBtn" style="margin-top:8px">退出登录</button>
+</div>
+
+<!-- ===== 未登录面板 ===== -->
+<div id="loginForm">
+  <div class="section-title collapsible" id="serverToggle">⚙ 服务器设置（点击展开）</div>
+  <div id="serverArea" style="display:none">
+    <input id="serverInput" placeholder="http://你的IP:35441" />
+    <button class="btn-outline btn-sm" id="saveServerOnlyBtn" style="margin-bottom:6px">保存</button>
+  </div>
+
+  <input id="phoneInput" placeholder="手机号" maxlength="11" />
+  <input id="passwordInput" type="password" placeholder="密码（至少6位）" />
+  <div class="btn-row">
+    <button class="btn-primary" id="loginBtn" style="flex:1">登录</button>
+    <button class="btn-outline" id="registerBtn" style="flex:1">注册</button>
+  </div>
+  <div class="hint">首次使用点「注册」；已有账号点「登录」</div>
+  <div class="hint" style="color:#C9A84C">打开CRM页面可自动登录（需先登录过一次）</div>
 </div>
 
 <script src="popup.js"></script>

@@ -815,7 +815,7 @@
       const myPhone = getMyPhoneFromCRM();
       if (myPhone) {
         console.log('[AutoDial v3] 检测到当前用户手机号:', myPhone);
-        chrome.runtime.sendMessage({ type: 'manualLogin', phone: myPhone, password: '' });
+        chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
       }
     } catch(e) {}
 
