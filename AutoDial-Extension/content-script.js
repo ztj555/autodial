@@ -16,6 +16,7 @@
   // ========== v3: 检测当前用户手机号 ==========
   function getMyPhoneFromCRM() {
     const selectors = [
+      '.user-phone',                    // 融鑫汇 CRM (zhudaicms.com)
       '.user-info-bar span.phone',
       '[data-field="user_phone"]',
       '.header-user .phone-number',

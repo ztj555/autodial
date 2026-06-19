@@ -211,3 +211,37 @@ async def handle_refresh(request):
             "refresh_token": new_refresh_raw
         }
     })
+
+
+async def handle_auto_login(request):
+    """手机号即账号：首次自动创建用户，直接返回 JWT。无需密码。"""
+    body = await request.json()
+    phone = body.get("phone", "").strip()
+
+    if not phone or not (phone.startswith("1") and len(phone) == 11 and phone.isdigit()):
+        return web.json_response({"ok": False, "error": "手机号格式错误"}, status=400)
+
+    client_ip = get_client_ip(request)
+
+    user = await db.get_user_by_phone(phone)
+    if user:
+        user_id = user["id"]
+        await db.log_audit(user_id, "auto_login", f"phone={phone}", client_ip)
+    else:
+        # 首次使用：自动创建用户（用固定哈希占位，实际不校验密码）
+        pw_hash = bcrypt.hashpw(b"autodial", bcrypt.gensalt()).decode()
+        user_id = await db.create_user(phone, pw_hash)
+        await db.log_audit(user_id, "auto_register", f"phone={phone}", client_ip)
+
+    token = make_jwt(user_id, phone)
+    refresh_raw = await make_refresh_token(user_id)
+
+    return web.json_response({
+        "ok": True,
+        "data": {
+            "token": token,
+            "refresh_token": refresh_raw,
+            "phone": phone,
+            "new_user": not bool(user)
+        }
+    })

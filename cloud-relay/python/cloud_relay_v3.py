@@ -19,9 +19,17 @@ import websockets
 from websockets.legacy.server import serve
 from aiohttp import web
 
+# 系统托盘
+try:
+    from PIL import Image, ImageDraw
+    import pystray
+    _TRAY_AVAILABLE = True
+except ImportError:
+    _TRAY_AVAILABLE = False
+
 from db import db
 from auth import (JWT_SECRET, verify_jwt, handle_register, handle_login,
-                  handle_refresh, get_client_ip)
+                  handle_refresh, handle_auto_login, get_client_ip)
 
 # ==================== Config ====================
 WS_PORT = int(os.environ.get("AUTODIAL_WS_PORT", "35440"))
@@ -32,16 +40,17 @@ SERVER_START_TIME = time.time()
 
 # ==================== Logging ====================
 def setup_logging():
+    global _log_file_path
     app_data = os.path.join(
         os.environ.get("APPDATA", os.path.expanduser("~")),
         "autodial-cloud-relay-v3"
     )
     os.makedirs(app_data, exist_ok=True)
-    log_file = os.path.join(app_data, "cloud-relay-v3.log")
+    _log_file_path = os.path.join(app_data, "cloud-relay-v3.log")
 
     logger = logging.getLogger("relay")
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh = logging.FileHandler(_log_file_path, encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(message)s"))
     logger.addHandler(fh)
     return logger
@@ -585,6 +594,115 @@ async def handle_sms(request):
     return web.json_response({"ok": True, "data": {}}, status=202)
 
 
+# ==================== System Tray ====================
+
+_tray_icon = None
+_server_running = False
+_main_loop = None
+_log_file_path = None
+
+def _create_tray_icon(running=True):
+    """好看的托盘图标：圆环 + 内圆 + 高光，绿色运行/灰色停止"""
+    size = 32
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # 外圈深色环
+    draw.ellipse([0, 0, size - 1, size - 1], fill=(30, 30, 35, 255))
+    # 内圆（状态色）
+    cx, cy, r = 16, 16, 10
+    if running:
+        inner = (46, 204, 113, 255)   # 绿色
+        glow = (46, 204, 113, 40)
+    else:
+        inner = (120, 120, 130, 255)  # 灰色
+        glow = (120, 120, 130, 20)
+    # 微弱光晕
+    draw.ellipse([cx - r - 2, cy - r - 2, cx + r + 2, cy + r + 2], fill=glow)
+    # 渐变内圆
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=inner)
+    # 高光（左上角亮斑）
+    draw.ellipse([cx - 5, cy - 7, cx + 3, cy - 1], fill=(255, 255, 255, 90))
+
+    return img
+
+def _update_tray_status(running):
+    global _server_running, _tray_icon
+    _server_running = running
+    if not _TRAY_AVAILABLE or not _tray_icon:
+        return
+    try:
+        _tray_icon.icon = _create_tray_icon(running)
+        _tray_icon.title = (
+            f"AutoDial v3 云中转\n"
+            f"{'● 运行中' if running else '○ 已停止'} | WS:{WS_PORT} REST:{HTTP_PORT}"
+        )
+        _tray_icon.menu = _create_menu()
+    except Exception as e:
+        _log("E", "TRAY", None, f"更新托盘失败: {e}")
+
+def _create_menu():
+    status = f"● 运行中" if _server_running else "○ 已停止"
+    items = [
+        pystray.MenuItem(f"AutoDial v3 云中转 - {status}", None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(f"WebSocket: 0.0.0.0:{WS_PORT}", None, enabled=False),
+        pystray.MenuItem(f"REST API: 0.0.0.0:{HTTP_PORT}", None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            "停止服务器" if _server_running else "启动服务器",
+            _toggle_server, default=True
+        ),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("打开日志", _open_log),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("退出", _quit_app),
+    ]
+    return pystray.Menu(*items)
+
+def _toggle_server():
+    global _main_loop
+    if _server_running:
+        # 停止：关闭所有连接，停止事件循环
+        for ws in list(ws_connections):
+            try:
+                _main_loop.call_soon_threadsafe(
+                    lambda w=ws: asyncio.ensure_future(w.close(1001, "server shutdown"), loop=_main_loop)
+                )
+            except Exception:
+                pass
+        _update_tray_status(False)
+        _main_loop.call_soon_threadsafe(_main_loop.stop)
+    else:
+        # 启动：创建新线程和新事件循环
+        t = threading.Thread(target=_run_server_thread, daemon=True)
+        t.start()
+
+def _open_log():
+    global _log_file_path
+    if _log_file_path and os.path.exists(_log_file_path):
+        os.startfile(_log_file_path)
+
+def _quit_app():
+    if _tray_icon:
+        _tray_icon.stop()
+    os._exit(0)
+
+def _run_tray():
+    global _tray_icon
+    if not _TRAY_AVAILABLE:
+        print("[TRAY] pystray 未安装，无托盘模式运行")
+        return
+    _tray_icon = pystray.Icon(
+        "AutoDial v3",
+        icon=_create_tray_icon(False),
+        title=f"AutoDial v3 云中转\n启动中... | WS:{WS_PORT} REST:{HTTP_PORT}",
+        menu=pystray.Menu(
+            pystray.MenuItem("启动中...", None, enabled=False),
+        )
+    )
+    _tray_icon.run()
+
 # ==================== Start ====================
 
 async def start_http_server():
@@ -595,6 +713,7 @@ async def start_http_server():
     app.router.add_post("/api/v1/auth/register", handle_register)
     app.router.add_post("/api/v1/auth/login", handle_login)
     app.router.add_post("/api/v1/auth/refresh", handle_refresh)
+    app.router.add_post("/api/v1/auth/auto-login", handle_auto_login)
     # 业务
     app.router.add_get("/api/v1/status", handle_status)
     app.router.add_post("/api/v1/dial", handle_rest_dial)
@@ -609,6 +728,7 @@ async def start_http_server():
     site = web.TCPSite(runner, "0.0.0.0", HTTP_PORT)
     await site.start()
     _log("I", "HTTP", None, f"REST API on port {HTTP_PORT}")
+    _update_tray_status(True)
 
 
 async def start_ws_server():
@@ -626,18 +746,45 @@ async def start_ws_server():
         await asyncio.Future()
 
 
-async def main():
+def _run_server_thread():
+    """在后台线程运行 asyncio 服务器"""
+    global _main_loop
+    _main_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_main_loop)
+    try:
+        _main_loop.run_until_complete(_server_main())
+    except Exception as e:
+        import traceback
+        _log("E", "SERVER", None, f"Server error: {e}\n{traceback.format_exc()}")
+        _update_tray_status(False)
+
+async def _server_main():
     await db.init()
     await db.cleanup_devices_on_startup()
     _log("I", "SERVER", None, f"v3 booting WS={WS_PORT} HTTP={HTTP_PORT}")
-
     await asyncio.gather(
         start_ws_server(),
         start_http_server(),
     )
 
+def main():
+    print("")
+    print("=" * 40)
+    print("  AutoDial Cloud Relay Server v3")
+    print(f"  WS={WS_PORT} REST={HTTP_PORT}")
+    print(f"  PID={os.getpid()}")
+    print("=" * 40)
+    print("")
+
+    server_thread = threading.Thread(target=_run_server_thread, daemon=True)
+    server_thread.start()
+    _run_tray()
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
-        _log("I", "SERVER", None, "Shutdown")
+        _log("I", "SERVER", None, "Shutdown by keyboard")
+    except Exception as e:
+        print(f"FATAL: {e}")
+        import traceback; traceback.print_exc()

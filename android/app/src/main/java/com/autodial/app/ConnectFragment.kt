@@ -322,14 +322,10 @@ class ConnectFragment : Fragment() {
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
-            guideView.text = "① 输入手机号 + 密码 登录获取 JWT\n" +
+            guideView.text = "① 输入手机号，密码任意填，点击「登录」\n" +
                 "② 或输入 4 位配对码（兼容旧版）\n" +
                 "③ 点击「连接」开始使用\n" +
-                "④ 支持旧版局域网直连和新版云端直连"
-                "② 输入配对码，点击「连接」\n" +
-                "③ 连接成功后在电脑上点号码即可拨号\n\n" +
-                "💡 不在同一WiFi？高级设置→连接策略→自动\n" +
-                "💡 切换SIM卡？设置→拨号模式\n" +
+                "④ 支持旧版局域网直连和新版云端直连\n" +
                 "💡 可按照个人习惯切换弹窗 轮选 系统等不同的拨号模式\n" +
                 "💡 连不上？检查电脑防火墙放行端口 35432"
 
@@ -1595,57 +1591,39 @@ class ConnectFragment : Fragment() {
             setText(prefCtrl.getLoginPhone())
         }
         val pwInput = EditText(requireActivity()).apply {
-            hint = "密码（首次自动注册）"
+            hint = "密码（任意输入即可）"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         layout.addView(phoneInput)
         layout.addView(pwInput)
         builder.setView(layout)
 
-        builder.setPositiveButton("登录/注册") { _, _ ->
+        builder.setPositiveButton("登录") { _, _ ->
             val phone = phoneInput.text.toString().trim()
-            val password = pwInput.text.toString()
             if (phone.length != 11 || !phone.startsWith("1")) {
                 Toast.makeText(requireActivity(), "手机号格式错误", Toast.LENGTH_SHORT).show()
                 onResult?.invoke(false)
                 return@setPositiveButton
             }
-            if (password.length < 6) {
-                Toast.makeText(requireActivity(), "密码至少6位", Toast.LENGTH_SHORT).show()
-                onResult?.invoke(false)
-                return@setPositiveButton
-            }
+            // 密码随意，auto-login 不需要密码
 
             lifecycleScope.launch {
                 try {
                     val client = okhttp3.OkHttpClient()
                     val json = org.json.JSONObject().apply {
                         put("phone", phone)
-                        put("password", password)
                     }
                     val body = okhttp3.RequestBody.create(
                         "application/json".toMediaType(), json.toString()
                     )
                     val request = okhttp3.Request.Builder()
-                        .url("${getCloudApiUrl()}/api/v1/auth/register")
+                        .url("${getCloudApiUrl()}/api/v1/auth/auto-login")
                         .post(body)
                         .build()
 
-                    // 先注册
-                    var resp = client.newCall(request).execute()
-                    var data = org.json.JSONObject(resp.body?.string() ?: "{}")
-                    var ok = data.optBoolean("ok")
-
-                    // 已注册则登录
-                    if (!ok) {
-                        val loginReq = okhttp3.Request.Builder()
-                            .url("${getCloudApiUrl()}/api/v1/auth/login")
-                            .post(body)
-                            .build()
-                        resp = client.newCall(loginReq).execute()
-                        data = org.json.JSONObject(resp.body?.string() ?: "{}")
-                        ok = data.optBoolean("ok")
-                    }
+                    val resp = client.newCall(request).execute()
+                    val data = org.json.JSONObject(resp.body?.string() ?: "{}")
+                    val ok = data.optBoolean("ok")
 
                     if (ok) {
                         val tokenData = data.optJSONObject("data") ?: org.json.JSONObject()

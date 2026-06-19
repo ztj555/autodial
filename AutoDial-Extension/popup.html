@@ -7,7 +7,7 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  width: 300px; min-height: 260px;
+  width: 300px; min-height: 200px;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: #111318; color: #E8DCC8; padding: 12px; font-size: 13px;
 }
@@ -23,9 +23,6 @@ button {
   padding: 7px 12px; border: none; border-radius: 6px;
   font-size: 13px; font-weight: 500; cursor: pointer;
 }
-.btn-primary { background: #C9A84C; color: #111318; width: 100%; }
-.btn-primary:hover { background: #F0C040; }
-.btn-primary:disabled { opacity: 0.5; cursor: default; }
 .btn-sm { width: auto; font-size: 11px; padding: 4px 10px; background: #2A2E38; color: #A09070; }
 .btn-sm:hover { background: #3A3E48; }
 .btn-danger { background: transparent; color: #E74C3C; border: 1px solid #3A2020; font-size: 11px; padding: 4px 8px; }
@@ -33,8 +30,6 @@ button {
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .status-dot.online { background: #2ECC71; box-shadow: 0 0 6px #2ECC71; }
 .status-dot.offline { background: #E74C3C; }
-.status-dot.checking { background: #F39C12; animation: pulse 0.8s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: #A09070; }
 .server-row { display: flex; gap: 6px; align-items: center; }
 .server-row input { flex: 1; margin-bottom: 0; }
@@ -43,41 +38,32 @@ button {
 .server-status.err { color: #E74C3C; }
 .section-title { font-size: 11px; color: #707070; margin: 8px 0 4px; }
 .hint { font-size: 11px; color: #707070; text-align: center; margin-top: 6px; line-height: 1.5; }
-.hint a { color: #C9A84C; }
 </style>
 </head>
 <body>
 <div class="header"><h1>AutoDial</h1></div>
 
-<!-- ===== 已登录面板 ===== -->
+<!-- 已登录 -->
 <div id="statusPanel" style="display:none">
   <div class="status-bar">
     <div class="status-dot online" id="statusDot"></div>
     <span id="statusText">已登录</span>
   </div>
   <div class="info-row"><span>手机号</span><span id="myPhone">--</span></div>
-  <div class="info-row"><span>服务器</span><span id="myServer">--</span></div>
   <div class="info-row"><span>连接模式</span><span id="connMode">--</span></div>
   <button class="btn-danger" id="logoutBtn" style="margin-top:8px">退出登录</button>
 </div>
 
-<!-- ===== 未登录面板 ===== -->
-<div id="loginForm">
-  <div class="section-title">⚙ 服务器</div>
+<!-- 未登录 / 设置服务器 -->
+<div id="setupPanel">
+  <div class="hint" style="color:#C9A84C;margin-bottom:10px">打开 CRM 页面 (zhudaicms.com)，插件会自动识别您的手机号并登录</div>
+  <div class="section-title">⚙ 服务器地址</div>
   <div class="server-row">
     <input id="serverInput" placeholder="http://IP:35441" />
     <button class="btn-sm" id="testServerBtn">测试</button>
   </div>
-  <div style="margin: 2px 0 8px 4px">
-    <span class="server-status" id="serverStatus"></span>
-  </div>
-
-  <input id="phoneInput" placeholder="手机号" maxlength="11" />
-  <input id="passwordInput" type="password" placeholder="密码" />
-  <button class="btn-primary" id="loginBtn">登录</button>
-  <div class="hint">
-    没有账号？在<a href="#" id="openRegisterLink">手机端注册</a>或访问 <span id="registerUrlHint"></span>
-  </div>
+  <span class="server-status" id="serverStatus" style="margin-left:4px"></span>
+  <div class="hint">设置云中继 v3 REST API 地址后，首次打开 CRM 即自动登录</div>
 </div>
 
 <script src="popup.js"></script>
