@@ -28,6 +28,7 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import okhttp3.MediaType.Companion.toMediaType
 
 class ConnectFragment : Fragment() {
 
@@ -1622,10 +1623,8 @@ class ConnectFragment : Fragment() {
                         put("phone", phone)
                         put("password", password)
                     }
-                    @Suppress("DEPRECATION")
-                    val mediaType = okhttp3.MediaType.parse("application/json")
                     val body = okhttp3.RequestBody.create(
-                        mediaType, json.toString()
+                        "application/json".toMediaType(), json.toString()
                     )
                     val request = okhttp3.Request.Builder()
                         .url("${getCloudApiUrl()}/api/v1/auth/register")
