@@ -1,16 +1,13 @@
 {
   "manifest_version": 3,
   "name": "AutoDial",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "一键拨号 - CRM客户手机号自动拨打",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "clipboardWrite"
-  ],
+  "permissions": ["activeTab", "storage"],
   "host_permissions": [
     "*://guwen.zhudaicms.com/*",
-    "http://127.0.0.1:35432/*"
+    "http://127.0.0.1:35432/*",
+    "https://your-server.com:35441/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -25,9 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "*://guwen.zhudaicms.com/*"
-      ],
+      "matches": ["*://guwen.zhudaicms.com/*"],
       "js": ["content-script.js"],
       "run_at": "document_idle",
       "all_frames": true

@@ -1,52 +1,73 @@
 /**
- * AutoDial 浏览器插件 - Popup
- * 显示连接状态
+ * AutoDial Popup v3 — 登录 / 状态面板
  */
-
 document.addEventListener('DOMContentLoaded', () => {
-  const statusDot = document.getElementById('statusDot');
-  const statusText = document.getElementById('statusText');
-  const localIP = document.getElementById('localIP');
-  const pinCode = document.getElementById('pinCode');
-  const phoneStatus = document.getElementById('phoneStatus');
+  const loginForm = document.getElementById('loginForm');
+  const statusPanel = document.getElementById('statusPanel');
+  const phoneInput = document.getElementById('phoneInput');
+  const passwordInput = document.getElementById('passwordInput');
 
-  // 检查PC端状态
-  function checkStatus() {
-    fetch('http://127.0.0.1:35432/')
-      .then(response => response.json())
-      .then(data => {
-        // PC端运行中
-        statusDot.className = 'status-dot connected';
-        statusText.textContent = '✓ 已连接电脑主程序';
-        statusText.className = 'status-text connected';
-        localIP.textContent = data.ip;
-        pinCode.textContent = data.pin;
+  // 检查登录状态
+  chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
+    if (chrome.runtime.lastError) return showLogin();
+    if (status && status.loggedIn) {
+      showStatus(status);
+    } else {
+      showLogin();
+    }
+  });
 
-        const count = data.phoneCount || 0;
-        if (count > 0) {
-          const names = (data.phones || []).map(p => p.note || p.name).join(', ');
-          phoneStatus.textContent = '✓ ' + count + '部手机 (' + names + ')';
-          phoneStatus.style.color = '#2ECC71';
+  // 登录/注册按钮
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    const phone = phoneInput.value.trim();
+    const password = passwordInput.value;
+    if (!phone || phone.length !== 11 || !phone.startsWith('1')) {
+      alert('请输入正确的手机号');
+      return;
+    }
+    if (!password || password.length < 6) {
+      alert('密码至少6位');
+      return;
+    }
+
+    document.getElementById('loginBtn').textContent = '登录中...';
+    document.getElementById('loginBtn').disabled = true;
+
+    chrome.runtime.sendMessage(
+      { type: 'autoRegisterAndLogin', phone, password },
+      (resp) => {
+        document.getElementById('loginBtn').textContent = '登录 / 注册';
+        document.getElementById('loginBtn').disabled = false;
+        if (resp && resp.success) {
+          showStatus({ loggedIn: true, phone, pcAlive: null });
         } else {
-          phoneStatus.textContent = '✗ 未连接';
-          phoneStatus.style.color = '#E74C3C';
+          alert('登录失败，请检查账号密码');
         }
-      })
-      .catch(err => {
-        // PC端未运行
-        statusDot.className = 'status-dot error';
-        statusText.textContent = '✗ PC端未运行';
-        statusText.className = 'status-text';
-        statusText.style.color = '#E74C3C';
-        localIP.textContent = '--';
-        pinCode.textContent = '--';
-        phoneStatus.textContent = '--';
-      });
+      }
+    );
+  });
+
+  // 回车登录
+  passwordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('loginBtn').click();
+  });
+
+  // 退出
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'logout' }, () => showLogin());
+  });
+
+  function showLogin() {
+    loginForm.style.display = 'block';
+    statusPanel.style.display = 'none';
   }
 
-  // 初始检查
-  checkStatus();
-  
-  // 每3秒刷新状态
-  setInterval(checkStatus, 3000);
+  function showStatus(status) {
+    loginForm.style.display = 'none';
+    statusPanel.style.display = 'block';
+    document.getElementById('myPhone').textContent = status.phone || '--';
+    document.getElementById('connMode').textContent =
+      status.pcAlive === true ? 'PC 直连（局域网）' :
+      status.pcAlive === false ? '云端连接' : '检测中...';
+  }
 });

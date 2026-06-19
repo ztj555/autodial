@@ -13,6 +13,33 @@
   const isTopFrame = (window === window.top);
   console.log('[AutoDial v3]', isTopFrame ? '顶层页面' : '子iframe', window.location.href);
 
+  // ========== v3: 检测当前用户手机号 ==========
+  function getMyPhoneFromCRM() {
+    const selectors = [
+      '.user-info-bar span.phone',
+      '[data-field="user_phone"]',
+      '.header-user .phone-number',
+      '.sidebar .user-profile .phone',
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const m = el.textContent.match(/1[3-9]\d{9}/);
+        if (m) return m[0];
+      }
+    }
+    // 兜底：搜索顶部区域第一个手机号
+    const top = document.querySelector('.sidebar') || document.querySelector('.header') || document.querySelector('.user-info');
+    if (top) {
+      const w = document.createTreeWalker(top, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) {
+        const m = w.currentNode.textContent.match(/1[3-9]\d{9}/);
+        if (m) return m[0];
+      }
+    }
+    return null;
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // 主题数据（精选8套，适配插件端场景）
   // ═══════════════════════════════════════════════════════════════
@@ -782,6 +809,31 @@
       if (msg.type === 'updatePhone') updatePhone(msg.phone);
       if (msg.type === 'dialResult') flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
     });
+
+    // ========== v3: 检测当前用户手机号 → 自动登录 ==========
+    try {
+      const myPhone = getMyPhoneFromCRM();
+      if (myPhone) {
+        console.log('[AutoDial v3] 检测到当前用户手机号:', myPhone);
+        chrome.runtime.sendMessage({ type: 'manualLogin', phone: myPhone, password: '' });
+      }
+    } catch(e) {}
+
+    // SPA 页面切换时重新检测（debounce 500ms）
+    let _lastPhone = null;
+    let _debounceTimer = null;
+    new MutationObserver(() => {
+      clearTimeout(_debounceTimer);
+      _debounceTimer = setTimeout(() => {
+        try {
+          const p = getMyPhoneFromCRM();
+          if (p && p !== _lastPhone) {
+            _lastPhone = p;
+            console.log('[AutoDial v3] 检测到手机号变化:', p);
+          }
+        } catch(e) {}
+      }, 500);
+    }).observe(document.body, { childList: true, subtree: true });
 
     return; // 顶层页面只做浮动按钮，不做手机号扫描
   }

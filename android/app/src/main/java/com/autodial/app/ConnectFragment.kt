@@ -259,6 +259,16 @@ class ConnectFragment : Fragment() {
             // 读取保存的配对码
             pinInput.setText(prefCtrl.getPin())
 
+            // ========== v3: JWT 自动登录 ==========
+            val jwtToken = prefCtrl.getJwtToken()
+            if (jwtToken.isNotEmpty()) {
+                val phone = prefCtrl.getLoginPhone()
+                pinInput.setText(phone)
+                pinInput.hint = "已登录: $phone"
+                statusText.text = "已登录 · 点击连接"
+                // 不自动连接，用户仍需点「连接」按钮
+            }
+
             // v4: 绑定云管理回调
             cloudCtrl.onServerListChanged = { updateCloudServerCurrentText() }
 
@@ -311,7 +321,10 @@ class ConnectFragment : Fragment() {
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
-            guideView.text = "① 电脑端打开 跨屏拨号.exe，获取 4 位配对码\n" +
+            guideView.text = "① 输入手机号 + 密码 登录获取 JWT\n" +
+                "② 或输入 4 位配对码（兼容旧版）\n" +
+                "③ 点击「连接」开始使用\n" +
+                "④ 支持旧版局域网直连和新版云端直连"
                 "② 输入配对码，点击「连接」\n" +
                 "③ 连接成功后在电脑上点号码即可拨号\n\n" +
                 "💡 不在同一WiFi？高级设置→连接策略→自动\n" +
@@ -569,13 +582,35 @@ class ConnectFragment : Fragment() {
 
     /** 发起新连接 */
     private fun handleStartConnect() {
-        val pin = pinInput.text.toString().trim()
-        if (pin.length != 4) {
-            Toast.makeText(requireActivity(), "请输入4位配对码", Toast.LENGTH_SHORT).show()
+        val input = pinInput.text.toString().trim()
+        val jwtToken = prefCtrl.getJwtToken()
+
+        // v3: 如果有 JWT，用手机号连接
+        if (jwtToken.isNotEmpty() && input.length == 11 && input.startsWith("1")) {
+            prefCtrl.setLoginPhone(input)
+            doConnect("", input)
+            return
+        }
+
+        // v3: 输入手机号但没 JWT → 弹出登录对话框
+        if (input.length == 11 && input.startsWith("1") && jwtToken.isEmpty()) {
+            showLoginDialog { success ->
+                if (success) {
+                    requireActivity().runOnUiThread {
+                        doConnect("", input)
+                    }
+                }
+            }
+            return
+        }
+
+        // 老方式：4 位 PIN
+        if (input.length != 4) {
+            Toast.makeText(requireActivity(), "请输入4位配对码，或输入手机号自动登录", Toast.LENGTH_SHORT).show()
             return
         }
         prefCtrl.setManuallyDisconnected(false)
-        doConnect(discoveredIP, pin)
+        doConnect(discoveredIP, input)
     }
 
     /** 重连：保持当前 PIN，重置连接 */
@@ -1541,5 +1576,116 @@ class ConnectFragment : Fragment() {
         val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
         val index = dayOfYear % motivationalQuotes.size
         return motivationalQuotes[index]
+    }
+
+    // ========== v3: JWT 登录对话框 ==========
+
+    fun showLoginDialog(onResult: ((Boolean) -> Unit)? = null) {
+        val builder = AlertDialog.Builder(requireActivity())
+        builder.setTitle("AutoDial v3 登录")
+
+        val layout = LinearLayout(requireActivity()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 24)
+        }
+        val phoneInput = EditText(requireActivity()).apply {
+            hint = "手机号"
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+            setText(prefCtrl.getLoginPhone())
+        }
+        val pwInput = EditText(requireActivity()).apply {
+            hint = "密码（首次自动注册）"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        layout.addView(phoneInput)
+        layout.addView(pwInput)
+        builder.setView(layout)
+
+        builder.setPositiveButton("登录/注册") { _, _ ->
+            val phone = phoneInput.text.toString().trim()
+            val password = pwInput.text.toString()
+            if (phone.length != 11 || !phone.startsWith("1")) {
+                Toast.makeText(requireActivity(), "手机号格式错误", Toast.LENGTH_SHORT).show()
+                onResult?.invoke(false)
+                return@setPositiveButton
+            }
+            if (password.length < 6) {
+                Toast.makeText(requireActivity(), "密码至少6位", Toast.LENGTH_SHORT).show()
+                onResult?.invoke(false)
+                return@setPositiveButton
+            }
+
+            lifecycleScope.launch {
+                try {
+                    val client = okhttp3.OkHttpClient()
+                    val json = org.json.JSONObject().apply {
+                        put("phone", phone)
+                        put("password", password)
+                    }
+                    val body = okhttp3.RequestBody.create(
+                        okhttp3.MediaType.parse("application/json"), json.toString()
+                    )
+                    val request = okhttp3.Request.Builder()
+                        .url("${getCloudApiUrl()}/api/v1/auth/register")
+                        .post(body)
+                        .build()
+
+                    // 先注册
+                    var resp = client.newCall(request).execute()
+                    var data = org.json.JSONObject(resp.body?.string() ?: "{}")
+                    var ok = data.optBoolean("ok")
+
+                    // 已注册则登录
+                    if (!ok) {
+                        val loginReq = okhttp3.Request.Builder()
+                            .url("${getCloudApiUrl()}/api/v1/auth/login")
+                            .post(body)
+                            .build()
+                        resp = client.newCall(loginReq).execute()
+                        data = org.json.JSONObject(resp.body?.string() ?: "{}")
+                        ok = data.optBoolean("ok")
+                    }
+
+                    if (ok) {
+                        val tokenData = data.optJSONObject("data") ?: org.json.JSONObject()
+                        val token = tokenData.optString("token", "")
+                        val refresh = tokenData.optString("refresh_token", "")
+                        prefCtrl.setJwtToken(token)
+                        prefCtrl.setRefreshToken(refresh)
+                        prefCtrl.setLoginPhone(phone)
+                        pinInput.setText(phone)
+                        pinInput.hint = "已登录: $phone"
+
+                        requireActivity().runOnUiThread {
+                            Toast.makeText(requireActivity(), "登录成功！点击连接即可", Toast.LENGTH_SHORT).show()
+                            onResult?.invoke(true)
+                        }
+                    } else {
+                        requireActivity().runOnUiThread {
+                            Toast.makeText(requireActivity(), "登录失败: ${data.optString("error", "未知错误")}", Toast.LENGTH_LONG).show()
+                            onResult?.invoke(false)
+                        }
+                    }
+                } catch (e: Exception) {
+                    requireActivity().runOnUiThread {
+                        Toast.makeText(requireActivity(), "网络错误: ${e.message}", Toast.LENGTH_LONG).show()
+                        onResult?.invoke(false)
+                    }
+                }
+            }
+        }
+        builder.setNegativeButton("取消", null)
+        builder.show()
+    }
+
+    private fun getCloudApiUrl(): String {
+        val server = prefCtrl.getCloudServer()
+        if (server.isNotEmpty()) {
+            // ws://server:35440 → http://server:35441
+            return server.replace("ws://", "http://").replace("wss://", "https://")
+                .replace(":35440", ":35441")
+        }
+        // 默认云端地址
+        return "http://262ao85kz470.vicp.fun:35441"
     }
 }

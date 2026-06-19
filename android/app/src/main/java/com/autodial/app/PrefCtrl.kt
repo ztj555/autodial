@@ -69,6 +69,16 @@ class PrefCtrl(private val context: Context) {
     fun getPin() = prefs.getString("pin", "") ?: ""
     fun setPin(pin: String) = prefs.edit().putString("pin", pin).apply()
 
+    // ========== v3: JWT 登录 ==========
+    fun getJwtToken() = prefs.getString("jwt_token", "") ?: ""
+    fun setJwtToken(token: String) = prefs.edit().putString("jwt_token", token).apply()
+    fun getRefreshToken() = prefs.getString("refresh_token", "") ?: ""
+    fun setRefreshToken(token: String) = prefs.edit().putString("refresh_token", token).apply()
+    fun getLoginPhone() = prefs.getString("login_phone", "") ?: ""
+    fun setLoginPhone(phone: String) = prefs.edit().putString("login_phone", phone).apply()
+    fun getCloudServer() = prefs.getString("cloud_server", "") ?: ""
+    fun setCloudServer(server: String) = prefs.edit().putString("cloud_server", server).apply()
+
     fun isCloudEnabled() = prefs.getBoolean("cloud_enabled", false)
 
     fun getCardOpacity(): Int = prefs.getInt("card_opacity", 100)

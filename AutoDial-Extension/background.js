@@ -1,116 +1,337 @@
 /**
- * AutoDial Background Script v2.1
- * 负责：复制剪贴板 + HTTP拨号 + 跨frame通信 + 悬浮窗/短信控制
+ * AutoDial Background Script v3.0
+ * 双模路由：PC直连优先 → 云端兜底
+ * JWT认证 + 自动续期 + 自动登录
  */
-console.log('[AutoDial BG] v2.0 已加载');
+console.log('[AutoDial BG] v3.0 已加载');
 
-// 存储每个tab最新的客户手机号
+// ==================== 配置 ====================
+const CLOUD_API = 'https://your-server.com:35441';  // ⚠️ 部署时替换
+const PC_BASE = 'http://127.0.0.1:35432';
+const PC_PING_TIMEOUT = 2000;
+const PC_FAIL_THRESHOLD = 3;
+const PC_RECHECK_MS = 15000;
+
+// ==================== 状态 ====================
+let pcAvailable = null;
+let pcFailCount = 0;
+let pcCheckTimer = null;
+let loginPromise = null;
+let jwtToken = null;
 const tabPhones = {};
+
+// ==================== JWT 管理 ====================
+
+async function getToken() {
+  if (jwtToken && !isTokenExpired(jwtToken)) return jwtToken;
+
+  const stored = await chrome.storage.local.get(['jwt', 'refresh_token', 'jwt_phone']);
+  if (stored.jwt && !isTokenExpired(stored.jwt)) {
+    jwtToken = stored.jwt;
+    return jwtToken;
+  }
+
+  // 尝试续期
+  if (stored.refresh_token) {
+    try {
+      const res = await fetch(`${CLOUD_API}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: stored.refresh_token })
+      });
+      const d = await res.json();
+      if (d.ok) {
+        await saveToken(d.data.token, d.data.refresh_token, stored.jwt_phone);
+        return d.data.token;
+      }
+    } catch (e) {
+      console.warn('[AutoDial BG] refresh 失败:', e.message);
+    }
+  }
+  return null;
+}
+
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 < Date.now();
+  } catch { return true; }
+}
+
+async function saveToken(token, refresh_token, phone) {
+  jwtToken = token;
+  await chrome.storage.local.set({
+    jwt: token,
+    refresh_token: refresh_token || '',
+    jwt_phone: phone || ''
+  });
+}
+
+// ==================== PC 检测 ====================
+
+async function isPcAlive() {
+  if (pcAvailable === true) {
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
+      await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
+      pcFailCount = 0;
+      return true;
+    } catch {
+      pcFailCount++;
+      if (pcFailCount >= PC_FAIL_THRESHOLD) {
+        pcAvailable = false;
+        startPcRecheck();
+      }
+      return false;
+    }
+  }
+
+  if (pcAvailable === false) return false;
+
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
+    await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
+    pcAvailable = true;
+    pcFailCount = 0;
+  } catch {
+    pcAvailable = false;
+  }
+  return pcAvailable;
+}
+
+function startPcRecheck() {
+  if (pcCheckTimer) return;
+  console.log('[AutoDial BG] PC 离线，每 15s 重试');
+  pcCheckTimer = setInterval(async () => {
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 2000);
+      await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
+      pcAvailable = true;
+      pcFailCount = 0;
+      clearInterval(pcCheckTimer);
+      pcCheckTimer = null;
+      console.log('[AutoDial BG] PC 已恢复，切回本地模式');
+    } catch {}
+  }, PC_RECHECK_MS);
+}
+
+// ==================== 登录 ====================
+
+async function manualLogin(phone, password) {
+  loginPromise = (async () => {
+    try {
+      const res = await fetch(`${CLOUD_API}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+      const d = await res.json();
+      if (d.ok) {
+        await saveToken(d.data.token, d.data.refresh_token, phone);
+        console.log('[AutoDial BG] 登录成功:', phone);
+        return d.data.token;
+      }
+      console.error('[AutoDial BG] 登录失败:', d.error);
+      return null;
+    } catch (e) {
+      console.error('[AutoDial BG] 登录网络错误:', e);
+      return null;
+    }
+  })();
+  return loginPromise;
+}
+
+async function autoRegisterThenLogin(phone, password, name) {
+  // 先尝试注册
+  loginPromise = (async () => {
+    try {
+      let res = await fetch(`${CLOUD_API}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+      let d = await res.json();
+      if (d.ok && d.data.token) {
+        await saveToken(d.data.token, d.data.refresh_token, phone);
+        return d.data.token;
+      }
+      // 已注册，走登录
+      if (!d.ok && d.error === '该手机号已注册') {
+        return manualLogin(phone, password);
+      }
+      return null;
+    } catch { return null; }
+  })();
+  return loginPromise;
+}
+
+async function logout() {
+  jwtToken = null;
+  loginPromise = null;
+  await chrome.storage.local.remove(['jwt', 'refresh_token', 'jwt_phone']);
+  console.log('[AutoDial BG] 已退出登录');
+}
+
+// ==================== 双模拨号 ====================
+
+async function dial(phone, tabId) {
+  let token = await getToken();
+  if (!token && loginPromise) token = await loginPromise;
+
+  // 优先 PC 直连
+  if (await isPcAlive()) {
+    try {
+      const res = await fetch(`${PC_BASE}/dial?number=${encodeURIComponent(phone)}`);
+      if (res.ok) {
+        notifyTab(tabId, { type: 'dialResult', ok: true });
+        return;
+      }
+    } catch {}
+  }
+
+  // 云端兜底
+  if (!token) {
+    notifyTab(tabId, { type: 'dialResult', ok: false, err: '请先登录。点击插件图标输入账号密码。' });
+    return;
+  }
+  try {
+    const res = await fetch(`${CLOUD_API}/api/v1/dial`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ phone })
+    });
+    const d = await res.json();
+    if (d.ok && d.data.req_id) {
+      // 等待拨号结果
+      const result = await pollDialResult(d.data.req_id, 3000, token);
+      notifyTab(tabId, { type: 'dialResult', ok: result.status === 'ok', err: result.error || '' });
+    } else {
+      notifyTab(tabId, { type: 'dialResult', ok: false, err: d.error || '拨号失败' });
+    }
+  } catch (err) {
+    notifyTab(tabId, { type: 'dialResult', ok: false, err: '网络错误，请检查云端服务器是否运行' });
+  }
+}
+
+async function pollDialResult(reqId, timeoutMs, token) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await sleep(500);
+    try {
+      const res = await fetch(`${CLOUD_API}/api/v1/dial/result?req_id=${reqId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const d = await res.json();
+      if (d.ok && d.data && d.data.status !== 'pending') return d.data;
+    } catch {}
+  }
+  return { status: 'timeout', error: '手机未响应' };
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function notifyTab(tabId, msg) {
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }).catch(() => {});
+  }
+}
+
+// ==================== 挂断 + 短信 ====================
+
+async function hangup(tabId) {
+  if (await isPcAlive()) {
+    try { await fetch(`${PC_BASE}/hangup`); return; } catch {}
+  }
+  const token = await getToken();
+  if (!token) return;
+  await fetch(`${CLOUD_API}/api/v1/hangup`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` }
+  }).catch(() => {});
+}
+
+async function sendSms(phone, tabId) {
+  if (await isPcAlive()) {
+    try {
+      const r = await fetch(`${PC_BASE}/sms?number=${encodeURIComponent(phone)}`);
+      if (r.ok) return;
+    } catch {}
+  }
+  const token = await getToken();
+  if (!token) {
+    notifyTab(tabId, { type: 'dialResult', ok: false, err: '请先登录' });
+    return;
+  }
+  await fetch(`${CLOUD_API}/api/v1/sms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ phone })
+  }).catch(() => {});
+}
+
+// ==================== 消息路由 ====================
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender?.tab?.id;
 
-  // ── 子iframe检测到客户手机号 → 通知顶层页面浮动按钮 ──────────────
   if (msg.type === 'phoneDetected') {
     if (tabId) {
       tabPhones[tabId] = msg.phone;
-      // 发给顶层页面 (frameId: 0)
-      chrome.tabs.sendMessage(tabId, { type: 'updatePhone', phone: msg.phone }, { frameId: 0 })
-        .catch(() => {}); // 忽略错误（页面可能未准备好）
+      chrome.tabs.sendMessage(tabId, { type: 'updatePhone', phone: msg.phone }, { frameId: 0 }).catch(() => {});
     }
     return;
   }
 
-  // ── 打开PC端主界面 ────────────────────────────────────────────────
+  if (msg.type === 'dial') { dial(msg.phone, tabId); return true; }
+  if (msg.type === 'hangup') { hangup(tabId); return true; }
+  if (msg.type === 'sendSms') { sendSms(msg.phone, tabId); return true; }
+
+  if (msg.type === 'manualLogin') {
+    manualLogin(msg.phone, msg.password).then(token => sendResponse({ success: !!token }));
+    return true;
+  }
+
+  if (msg.type === 'autoRegisterAndLogin') {
+    autoRegisterThenLogin(msg.phone, msg.password).then(token => sendResponse({ success: !!token }));
+    return true;
+  }
+
+  if (msg.type === 'logout') {
+    logout().then(() => sendResponse({ success: true }));
+    return true;
+  }
+
+  if (msg.type === 'getStatus') {
+    getToken().then(token => {
+      chrome.storage.local.get(['jwt_phone'], (stored) => {
+        sendResponse({
+          loggedIn: !!token,
+          phone: stored.jwt_phone || '',
+          pcAlive: pcAvailable
+        });
+      });
+    });
+    return true;
+  }
+
   if (msg.type === 'openDesktop') {
-    fetch('http://127.0.0.1:35432/open')
-      .then(res => res.json())
-      .then(data => {
-        console.log('[AutoDial BG] ✓ 打开主界面:', data);
-        sendResponse({ success: data.success });
-      })
-      .catch(err => {
-        console.error('[AutoDial BG] ✗ 打开主界面失败:', err.message);
-        sendResponse({ success: false });
-      });
-    return true; // 异步 sendResponse
-  }
-
-  // ── 切换悬浮横条显示/隐藏 ────────────────────────────────────────
-  if (msg.type === 'toggleFloatbar') {
-    fetch('http://127.0.0.1:35432/toggle-floatbar')
-      .then(res => res.json())
-      .then(data => {
-        console.log('[AutoDial BG] ✓ 切换悬浮窗:', data);
-        sendResponse({ success: data.success, visible: data.visible });
-      })
-      .catch(err => {
-        console.error('[AutoDial BG] ✗ 切换悬浮窗失败:', err.message);
-        sendResponse({ success: false });
-      });
-    return true;
-  }
-
-  // ── 发送短信（打开短信窗口） ─────────────────────────────────────
-  if (msg.type === 'sendSms') {
-    const phone = msg.phone;
-    console.log('[AutoDial BG] 发短信:', phone);
-    fetch(`http://127.0.0.1:35432/sms?number=${encodeURIComponent(phone)}`)
-      .then(res => res.json())
-      .then(data => {
-        console.log('[AutoDial BG] ✓ 打开短信窗口:', data);
-        sendResponse({ success: data.success });
-      })
-      .catch(err => {
-        console.error('[AutoDial BG] ✗ 打开短信窗口失败:', err.message);
-        sendResponse({ success: false });
-      });
-    return true;
-  }
-
-  // ── 挂断电话 ──────────────────────────────────────────────────
-  if (msg.type === 'hangup') {
-    fetch('http://127.0.0.1:35432/hangup')
-      .then(res => res.json())
-      .then(data => {
-        console.log('[AutoDial BG] ✓ 挂断:', data);
-        sendResponse({ success: data.success, error: data.error });
-      })
-      .catch(err => {
-        console.error('[AutoDial BG] ✗ 挂断失败:', err.message);
-        sendResponse({ success: false, error: err.message });
-      });
-    return true;
-  }
-
-  // ── 拨号请求 ──────────────────────────────────────────────────────
-  if (msg.type === 'dial') {
-    const phone = msg.phone;
-    console.log('[AutoDial BG] 拨号:', phone);
-
-    fetch(`http://127.0.0.1:35432/dial?number=${encodeURIComponent(phone)}`)
-      .then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      })
-      .then(data => {
-        console.log('[AutoDial BG] ✓ 拨号成功:', data);
-        if (tabId) {
-          chrome.tabs.sendMessage(tabId, { type: 'dialResult', ok: true }, { frameId: 0 }).catch(() => {});
-        }
-      })
-      .catch(err => {
-        console.error('[AutoDial BG] ✗ 拨号失败:', err.message);
-        if (tabId) {
-          chrome.tabs.sendMessage(tabId, { type: 'dialResult', ok: false, err: err.message }, { frameId: 0 }).catch(() => {});
-        }
-      });
-
+    fetch(`${PC_BASE}/open`).then(r => r.json()).then(d => sendResponse({ success: d.success })).catch(() => sendResponse({ success: false }));
     return true;
   }
 });
 
-// tab关闭时清理缓存
-chrome.tabs.onRemoved.addListener((tabId) => {
-  delete tabPhones[tabId];
+chrome.tabs.onRemoved.addListener(tabId => { delete tabPhones[tabId]; });
+
+// 启动时检测 PC 状态
+isPcAlive().then(alive => {
+  console.log(`[AutoDial BG] PC ${alive ? '在线' : '离线'}，走${alive ? '本地' : '云端'}模式`);
 });
