@@ -1622,8 +1622,10 @@ class ConnectFragment : Fragment() {
                         put("phone", phone)
                         put("password", password)
                     }
+                    @Suppress("DEPRECATION")
+                    val mediaType = okhttp3.MediaType.parse("application/json")
                     val body = okhttp3.RequestBody.create(
-                        "application/json".toMediaType(), json.toString()
+                        mediaType, json.toString()
                     )
                     val request = okhttp3.Request.Builder()
                         .url("${getCloudApiUrl()}/api/v1/auth/register")
