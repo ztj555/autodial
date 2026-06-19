@@ -2,15 +2,21 @@
  * AutoDial Background Script v3.0
  * 双模路由：PC直连优先 → 云端兜底
  * JWT认证 + 自动续期 + 自动登录
+ * 服务器地址：点击插件图标 → 设置服务器URL（存chrome.storage）
  */
 console.log('[AutoDial BG] v3.0 已加载');
 
 // ==================== 配置 ====================
-const CLOUD_API = 'https://your-server.com:35441';  // ⚠️ 部署时替换
 const PC_BASE = 'http://127.0.0.1:35432';
 const PC_PING_TIMEOUT = 2000;
 const PC_FAIL_THRESHOLD = 3;
 const PC_RECHECK_MS = 15000;
+
+// 云端地址从 chrome.storage 读取（用户在 popup 设置）
+async function getCloudApi() {
+  const stored = await chrome.storage.local.get(['cloud_api']);
+  return stored.cloud_api || 'http://127.0.0.1:35441';  // 默认本机测试
+}
 
 // ==================== 状态 ====================
 let pcAvailable = null;
@@ -34,7 +40,7 @@ async function getToken() {
   // 尝试续期
   if (stored.refresh_token) {
     try {
-      const res = await fetch(`${CLOUD_API}/api/v1/auth/refresh`, {
+      const res = await fetch(``${await getCloudApi()}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: stored.refresh_token })
@@ -123,7 +129,7 @@ function startPcRecheck() {
 async function manualLogin(phone, password) {
   loginPromise = (async () => {
     try {
-      const res = await fetch(`${CLOUD_API}/api/v1/auth/login`, {
+      const res = await fetch(``${await getCloudApi()}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
@@ -148,7 +154,7 @@ async function autoRegisterThenLogin(phone, password, name) {
   // 先尝试注册
   loginPromise = (async () => {
     try {
-      let res = await fetch(`${CLOUD_API}/api/v1/auth/register`, {
+      let res = await fetch(``${await getCloudApi()}/api/v1/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
@@ -198,7 +204,7 @@ async function dial(phone, tabId) {
     return;
   }
   try {
-    const res = await fetch(`${CLOUD_API}/api/v1/dial`, {
+    const res = await fetch(``${await getCloudApi()}/api/v1/dial`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -224,7 +230,7 @@ async function pollDialResult(reqId, timeoutMs, token) {
   while (Date.now() - start < timeoutMs) {
     await sleep(500);
     try {
-      const res = await fetch(`${CLOUD_API}/api/v1/dial/result?req_id=${reqId}`, {
+      const res = await fetch(``${await getCloudApi()}/api/v1/dial/result?req_id=${reqId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const d = await res.json();
@@ -250,7 +256,7 @@ async function hangup(tabId) {
   }
   const token = await getToken();
   if (!token) return;
-  await fetch(`${CLOUD_API}/api/v1/hangup`, {
+  await fetch(``${await getCloudApi()}/api/v1/hangup`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` }
   }).catch(() => {});
@@ -268,7 +274,7 @@ async function sendSms(phone, tabId) {
     notifyTab(tabId, { type: 'dialResult', ok: false, err: '请先登录' });
     return;
   }
-  await fetch(`${CLOUD_API}/api/v1/sms`, {
+  await fetch(``${await getCloudApi()}/api/v1/sms`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

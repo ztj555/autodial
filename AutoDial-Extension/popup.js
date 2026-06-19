@@ -6,6 +6,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusPanel = document.getElementById('statusPanel');
   const phoneInput = document.getElementById('phoneInput');
   const passwordInput = document.getElementById('passwordInput');
+  const serverInput = document.getElementById('serverInput');
+
+  // 加载保存的服务器地址
+  chrome.storage.local.get(['cloud_api'], (stored) => {
+    if (stored.cloud_api) serverInput.value = stored.cloud_api;
+  });
 
   // 检查登录状态
   chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
@@ -19,8 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 登录/注册按钮
   document.getElementById('loginBtn').addEventListener('click', async () => {
+    const server = serverInput.value.trim();
     const phone = phoneInput.value.trim();
     const password = passwordInput.value;
+    if (!server) {
+      alert('请输入服务器地址（如 http://192.168.1.100:35441）');
+      return;
+    }
     if (!phone || phone.length !== 11 || !phone.startsWith('1')) {
       alert('请输入正确的手机号');
       return;
@@ -32,6 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('loginBtn').textContent = '登录中...';
     document.getElementById('loginBtn').disabled = true;
+
+    // 保存服务器地址
+    chrome.storage.local.set({ cloud_api: server });
 
     chrome.runtime.sendMessage(
       { type: 'autoRegisterAndLogin', phone, password },
@@ -66,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loginForm.style.display = 'none';
     statusPanel.style.display = 'block';
     document.getElementById('myPhone').textContent = status.phone || '--';
+    document.getElementById('myServer').textContent = (await new Promise(r => chrome.storage.local.get(['cloud_api'], s => r(s.cloud_api)))) || '--';
     document.getElementById('connMode').textContent =
       status.pcAlive === true ? 'PC 直连（局域网）' :
       status.pcAlive === false ? '云端连接' : '检测中...';
