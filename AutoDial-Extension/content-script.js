@@ -13,30 +13,15 @@
   const isTopFrame = (window === window.top);
   console.log('[AutoDial v3]', isTopFrame ? '顶层页面' : '子iframe', window.location.href);
 
-  // ========== v3: 检测当前用户手机号 ==========
+  // ========== v3: 检测坐席手机号（TreeWalker扫描body前部，<1ms）==========
+  // 融鑫汇CRM手机号是裸StaticText节点，在页面顶部，无class/id
+  // TreeWalker从body顶部向下扫，第一个命中的手机号就是坐席的
   function getMyPhoneFromCRM() {
-    const selectors = [
-      '.user-phone',                    // 融鑫汇 CRM (zhudaicms.com)
-      '.user-info-bar span.phone',
-      '[data-field="user_phone"]',
-      '.header-user .phone-number',
-      '.sidebar .user-profile .phone',
-    ];
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el) {
-        const m = el.textContent.match(/1[3-9]\d{9}/);
-        if (m) return m[0];
-      }
-    }
-    // 兜底：搜索顶部区域第一个手机号
-    const top = document.querySelector('.sidebar') || document.querySelector('.header') || document.querySelector('.user-info');
-    if (top) {
-      const w = document.createTreeWalker(top, NodeFilter.SHOW_TEXT);
-      while (w.nextNode()) {
-        const m = w.currentNode.textContent.match(/1[3-9]\d{9}/);
-        if (m) return m[0];
-      }
+    const PHONE_RE = /1[3-9]\d{9}/;
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) {
+      const m = w.currentNode.textContent.match(PHONE_RE);
+      if (m) return m[0];
     }
     return null;
   }
@@ -291,7 +276,7 @@
         boxShadow: `0 2px 10px ${t.accent}33`,
         cursor: 'pointer',
         userSelect: 'none',
-        display: 'none',  // 默认隐藏，拨号后才显示
+        display: 'flex',  // 始终显示
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'box-shadow .2s, background .2s',
@@ -499,6 +484,7 @@
         { type: 'separator' },
         { label: '🎨 切换主题', action: showThemeMenu },
         { type: 'separator' },
+        { type: 'account' },  // 占位，渲染时异步填充当前登录账号
         { label: '✕ 关闭菜单', action: () => {} },
       ];
 
@@ -507,6 +493,56 @@
           const sep = document.createElement('div');
           Object.assign(sep.style, { height: '1px', background: t.accent + '22', margin: '4px 8px' });
           contextMenu.appendChild(sep);
+          return;
+        }
+        if (item.type === 'account') {
+          const row = document.createElement('div');
+          row.style.cssText = 'padding:8px 14px;white-space:nowrap;font-size:12px;';
+          row.textContent = '👤 加载中...';
+          contextMenu.appendChild(row);
+          // 同步查登录状态 + PC状态
+          chrome.storage.local.get(['jwt_phone', 'self_phone'], (s) => {
+            chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
+              const pcOnline = status && status.pcAlive === true;
+              if (s.jwt_phone) {
+                // 已登录云端
+                row.textContent = '👤 ' + s.jwt_phone;
+                row.style.color = t.text2;
+                row.style.cursor = 'default';
+                // PC在线时追加一行
+                if (pcOnline) {
+                  const pcRow = document.createElement('div');
+                  pcRow.style.cssText = 'padding:0 14px 6px 14px;font-size:11px;color:' + t.text2 + ';';
+                  pcRow.textContent = '已登录，当前连接电脑端';
+                  row.parentNode.insertBefore(pcRow, row.nextSibling);
+                }
+              } else if (s.self_phone) {
+              // 检测到号码但服务器不通
+              row.innerHTML = '<span style="color:' + t.text2 + '">已登录，未</span><span style="color:' + t.red + ';font-weight:600">设置服务器</span>';
+              row.style.cursor = 'pointer';
+              row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
+              row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+              row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideContextMenu();
+                showServerDialog();
+              });
+            } else {
+              // 完全未检测到
+              row.textContent = '🔴 点击登录';
+              row.style.color = t.red;
+              row.style.fontWeight = '600';
+              row.style.cursor = 'pointer';
+              row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
+              row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+              row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideContextMenu();
+                detectAndLogin();
+              });
+            }
+          });
+          });
           return;
         }
         const row = document.createElement('div');
@@ -755,6 +791,86 @@
       setTimeout(() => document.addEventListener('mousedown', closeHandler, true), 100);
     }
 
+    function showServerDialog() {
+      const t = T();
+      // 遮罩
+      const overlay = document.createElement('div');
+      Object.assign(overlay.style, {
+        position: 'fixed', inset: '0', zIndex: '2147483646',
+        background: 'rgba(0,0,0,0.5)',
+      });
+      overlay.addEventListener('click', () => { overlay.remove(); dialog.remove(); });
+      document.body.appendChild(overlay);
+
+      const dialog = document.createElement('div');
+      Object.assign(dialog.style, {
+        position: 'fixed', left: '50%', top: '40%', transform: 'translate(-50%, -50%)',
+        zIndex: '2147483647', background: t.bg, borderRadius: '12px',
+        boxShadow: `0 8px 32px ${t.accent}33`, padding: '20px', width: '320px',
+        fontFamily: 'system-ui, sans-serif', color: t.text, fontSize: '13px',
+      });
+
+      const title = document.createElement('div');
+      title.textContent = '⚙ 服务器设置';
+      Object.assign(title.style, { fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: t.accent });
+      dialog.appendChild(title);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'http://127.0.0.1:35441';
+      Object.assign(input.style, {
+        width: '100%', padding: '8px 10px', background: t.bg2, border: `1px solid ${t.accent}33`,
+        borderRadius: '6px', color: t.text, fontSize: '13px', outline: 'none', marginBottom: '8px',
+      });
+      input.addEventListener('focus', () => { input.style.borderColor = t.accent; });
+      input.addEventListener('blur', () => { input.style.borderColor = t.accent + '33'; });
+      chrome.storage.local.get(['cloud_api'], (s) => { input.value = s.cloud_api || 'http://127.0.0.1:35441'; });
+      dialog.appendChild(input);
+
+      const status = document.createElement('div');
+      Object.assign(status.style, { fontSize: '11px', marginBottom: '12px', minHeight: '16px' });
+      dialog.appendChild(status);
+
+      const btnRow = document.createElement('div');
+      Object.assign(btnRow.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
+
+      const testBtn = document.createElement('button');
+      testBtn.textContent = '测试连接';
+      Object.assign(testBtn.style, {
+        padding: '6px 12px', background: t.bg3, color: t.text, border: 'none',
+        borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
+      });
+      testBtn.addEventListener('click', () => {
+        const addr = input.value.trim();
+        if (!addr) { status.textContent = '请输入地址'; status.style.color = t.red; return; }
+        status.textContent = '测试中...'; status.style.color = t.text2;
+        fetch(addr + '/health').then(r => r.json()).then(d => {
+          if (d.ok) { status.textContent = '✓ 连接成功'; status.style.color = '#2ECC71'; }
+          else { status.textContent = '✗ 服务器异常'; status.style.color = t.red; }
+        }).catch(() => { status.textContent = '✗ 无法连接'; status.style.color = t.red; });
+      });
+      btnRow.appendChild(testBtn);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = '保存';
+      Object.assign(saveBtn.style, {
+        padding: '6px 14px', background: t.gradAccent, color: t.bg, border: 'none',
+        borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+      });
+      saveBtn.addEventListener('click', () => {
+        const addr = input.value.trim();
+        chrome.storage.local.set({ cloud_api: addr }, () => {
+          overlay.remove(); dialog.remove();
+          flashFloat('服务器已保存', true);
+        });
+      });
+      btnRow.appendChild(saveBtn);
+
+      dialog.appendChild(btnRow);
+      document.body.appendChild(dialog);
+      setTimeout(() => input.focus(), 100);
+    }
+
     function openDesktopApp() {
       chrome.runtime.sendMessage({ type: 'openDesktop' }, (resp) => {
         if (chrome.runtime.lastError) { flashFloat('PC端未运行', false); return; }
@@ -798,65 +914,74 @@
       floatEl.style.boxShadow = ok
         ? `0 4px 16px ${t.green}44`
         : `0 4px 16px ${t.red}44`;
-      // 成功 2.5 秒恢复；失败持续显示直到下次操作
-      if (ok) {
-        setTimeout(() => {
-          const lb = document.getElementById('__ad_dial_label');
-          if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
-          floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
-          floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
-        }, 2500);
-      }
+      // 清理旧定时器，防止闪烁冲突
+      clearTimeout(window.__ad_flash_timer);
+      // 成功2.5秒恢复，失败6秒恢复
+      window.__ad_flash_timer = setTimeout(() => {
+        const lb = document.getElementById('__ad_dial_label');
+        if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
+        floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
+        floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
+      }, ok ? 2500 : 1000);
     }
 
-    // 等DOM就绪后创建
-    if (document.body) { createFloat(); createHangupBtn(); }
-    else document.addEventListener('DOMContentLoaded', () => { createFloat(); createHangupBtn(); });
+    // ========== v3: 检测当前用户手机号 → 自动登录 ==========
+    let _lastPhone = null;
+    let _debounceTimer = null;
 
-    // 监听来自background的消息（跨frame通信）
-    chrome.runtime.onMessage.addListener((msg) => {
+    function detectAndLogin() {
+      try {
+        const myPhone = getMyPhoneFromCRM();
+        if (myPhone && myPhone !== _lastPhone) {
+          _lastPhone = myPhone;
+          chrome.storage.local.set({ self_phone: myPhone });
+          console.log('[AutoDial v3] 检测到当前用户手机号:', myPhone);
+          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
+          return true;
+        }
+      } catch(e) {}
+      return false;
+    }
+
+    // DOM 就绪后立即检测一次（SPA可能还未渲染，加延迟重试）
+    function onDomReady() {
+      createFloat();
+      createHangupBtn();
+      // 每次页面加载时检测一次PC状态（后续拨号直接复用缓存）
+      chrome.runtime.sendMessage({ type: 'checkPc' });
+
+      if (!detectAndLogin()) {
+        // 首次未检出，SPA可能在异步渲染，500ms/1500ms后重试
+        setTimeout(() => { if (!detectAndLogin()) setTimeout(detectAndLogin, 1000); }, 500);
+      }
+
+      // SPA 页面切换时重新检测（debounce 500ms）
+      new MutationObserver(() => {
+        clearTimeout(_debounceTimer);
+        _debounceTimer = setTimeout(detectAndLogin, 500);
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    if (document.body) { onDomReady(); }
+    else { document.addEventListener('DOMContentLoaded', onDomReady); }
+
+    // 监听来自background的消息
+    chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === 'updatePhone') updatePhone(msg.phone);
       if (msg.type === 'dialResult') {
         flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
-        // 拨号成功显示挂断按钮，失败则隐藏
-        if (hangupEl) {
-          hangupEl.style.display = msg.ok ? 'flex' : 'none';
+      }
+      if (msg.type === 'reDetect') {
+        // 用户点拨号时background让重新扫手机号
+        const phone = getMyPhoneFromCRM();
+        if (phone) {
+          _lastPhone = phone;
+          chrome.storage.local.set({ self_phone: phone });
         }
-        // 通话结束后 30 秒自动隐藏挂断按钮
-        if (msg.ok && hangupEl) {
-          clearTimeout(window.__ad_hangup_timer);
-          window.__ad_hangup_timer = setTimeout(() => {
-            hangupEl.style.display = 'none';
-          }, 30000);
-        }
+        sendResponse({ phone: phone || null });
+        return true;
       }
     });
-
-    // ========== v3: 检测当前用户手机号 → 自动登录 ==========
-    try {
-      const myPhone = getMyPhoneFromCRM();
-      if (myPhone) {
-        console.log('[AutoDial v3] 检测到当前用户手机号:', myPhone);
-        chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
-      }
-    } catch(e) {}
-
-    // SPA 页面切换时重新检测（debounce 500ms）
-    let _lastPhone = null;
-    let _debounceTimer = null;
-    new MutationObserver(() => {
-      clearTimeout(_debounceTimer);
-      _debounceTimer = setTimeout(() => {
-        try {
-          const p = getMyPhoneFromCRM();
-          if (p && p !== _lastPhone) {
-            _lastPhone = p;
-            console.log('[AutoDial v3] 检测到手机号变化:', p);
-            chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: p });
-          }
-        } catch(e) {}
-      }, 500);
-    }).observe(document.body, { childList: true, subtree: true });
 
     return; // 顶层页面只做浮动按钮，不做手机号扫描
   }

@@ -134,14 +134,14 @@
             android:layout_marginTop="6dp"
             android:tag="bg2"
             android:background="#1A1D24"
-            android:hint="输入电脑屏幕上的4位数字"
+            android:hint="4位配对码 或 11位手机号"
             android:textSize="26sp"
             android:letterSpacing="0.3"
             android:gravity="center"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:inputType="number"
-            android:maxLength="4"
+            android:maxLength="11"
             android:singleLine="true" />
 
         <TextView
@@ -149,7 +149,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="🔍 请输入配对码开始搜索"
+            android:text="🔍 输入4位配对码或11位手机号开始搜索"
             android:tag="text2"
             android:textSize="12sp"
             android:visibility="visible" />

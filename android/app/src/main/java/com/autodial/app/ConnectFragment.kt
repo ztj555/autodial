@@ -322,10 +322,9 @@ class ConnectFragment : Fragment() {
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
-            guideView.text = "① 输入手机号，密码任意填，点击「登录」\n" +
-                "② 或输入 4 位配对码（兼容旧版）\n" +
-                "③ 点击「连接」开始使用\n" +
-                "④ 支持旧版局域网直连和新版云端直连\n" +
+            guideView.text = "① 输入 11 位手机号，自动登录新云端\n" +
+                "② 或输入 4 位配对码，连接旧版云端/局域网\n" +
+                "③ 点击「连接」开始使用" +
                 "💡 可按照个人习惯切换弹窗 轮选 系统等不同的拨号模式\n" +
                 "💡 连不上？检查电脑防火墙放行端口 35432"
 
@@ -437,7 +436,7 @@ class ConnectFragment : Fragment() {
                         discoveredIP = ""
                         foundPCInfo.visibility = View.GONE
                         if (pin.isEmpty()) {
-                            discoveryHint.text = "🔍 请输入配对码开始搜索"
+                            discoveryHint.text = "🔍 输入4位配对码或11位手机号开始搜索"
                         }
                     }
                 }
@@ -603,7 +602,7 @@ class ConnectFragment : Fragment() {
 
         // 老方式：4 位 PIN
         if (input.length != 4) {
-            Toast.makeText(requireActivity(), "请输入4位配对码，或输入手机号自动登录", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireActivity(), "请输入4位配对码，或输入11位手机号自动登录", Toast.LENGTH_SHORT).show()
             return
         }
         prefCtrl.setManuallyDisconnected(false)

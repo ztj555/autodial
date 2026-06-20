@@ -9,8 +9,6 @@ console.log('[AutoDial BG] v3.1 已加载');
 // ==================== 配置 ====================
 const PC_BASE = 'http://127.0.0.1:35432';
 const PC_PING_TIMEOUT = 2000;
-const PC_FAIL_THRESHOLD = 3;
-const PC_RECHECK_MS = 15000;
 
 async function getCloudApi() {
   const stored = await chrome.storage.local.get(['cloud_api']);
@@ -19,8 +17,6 @@ async function getCloudApi() {
 
 // ==================== 状态 ====================
 let pcAvailable = null;
-let pcFailCount = 0;
-let pcCheckTimer = null;
 let jwtToken = null;
 const tabPhones = {};
 
@@ -110,52 +106,30 @@ async function logout() {
 }
 
 // ==================== PC 检测 ====================
+// 页面加载时检测一次，结果缓存到下次刷新
 
 async function isPcAlive() {
-  if (pcAvailable === true) {
-    try {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
-      await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
-      pcFailCount = 0;
-      return true;
-    } catch {
-      pcFailCount++;
-      if (pcFailCount >= PC_FAIL_THRESHOLD) {
-        pcAvailable = false;
-        startPcRecheck();
-      }
-      return false;
-    }
-  }
-  if (pcAvailable === false) return false;
+  // 已有缓存，直接返回，不反复ping
+  if (pcAvailable !== null) return pcAvailable;
+
+  // 首次检测
   try {
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
     await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
     pcAvailable = true;
-    pcFailCount = 0;
+    console.log('[AutoDial BG] PC 在线，使用本地模式');
   } catch {
     pcAvailable = false;
+    console.log('[AutoDial BG] PC 离线，使用云端模式');
   }
   return pcAvailable;
 }
 
-function startPcRecheck() {
-  if (pcCheckTimer) return;
-  console.log('[AutoDial BG] PC 离线，每 15s 重试');
-  pcCheckTimer = setInterval(async () => {
-    try {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), 2000);
-      await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
-      pcAvailable = true;
-      pcFailCount = 0;
-      clearInterval(pcCheckTimer);
-      pcCheckTimer = null;
-      console.log('[AutoDial BG] PC 已恢复，切回本地模式');
-    } catch {}
-  }, PC_RECHECK_MS);
+// content-script 页面加载时触发一次PC检测，之后不再ping
+function resetPcStatus() {
+  pcAvailable = null;
+  isPcAlive(); // 后台异步检测
 }
 
 // ==================== 双模拨号 ====================
@@ -173,9 +147,30 @@ async function dial(phone, tabId) {
   }
 
   // 云端兜底
-  const token = await getToken();
+  let token = await getToken();
   if (!token) {
-    notifyTab(tabId, { type: 'dialResult', ok: false, err: '未登录：请先打开CRM页面，插件会自动识别您的手机号登录' });
+    // Token过期或从未登录 → 尝试自动续期
+    const stored = await chrome.storage.local.get(['jwt_phone']);
+    if (stored.jwt_phone) {
+      await autoLogin(stored.jwt_phone);
+      token = await getToken();
+    } else {
+      // 从未登录过 → 让 content-script 重新扫描手机号
+      const phone = await reDetectPhone(tabId);
+      if (phone) {
+        await autoLogin(phone);
+        token = await getToken();
+      }
+    }
+  }
+  if (!token) {
+    // 区分：从未检测到手机号 vs 服务器不可达
+    const stored = await chrome.storage.local.get(['jwt_phone', 'self_phone']);
+    const anyPhone = stored.jwt_phone || stored.self_phone;
+    const err = anyPhone
+      ? '服务器不可达 (端口35441)'
+      : '未登录，请右键菜单登录';
+    notifyTab(tabId, { type: 'dialResult', ok: false, err });
     return;
   }
   try {
@@ -221,13 +216,30 @@ function notifyTab(tabId, msg) {
   }
 }
 
+// 让 content-script 重新扫描手机号（用户点拨号时触发）
+async function reDetectPhone(tabId) {
+  if (!tabId) return null;
+  try {
+    const resp = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { type: 'reDetect' }, { frameId: 0 }, resolve);
+    });
+    return resp?.phone || null;
+  } catch {
+    return null;
+  }
+}
+
 // ==================== 挂断 + 短信 ====================
 
 async function hangup(tabId) {
   if (await isPcAlive()) {
     try { await fetch(`${PC_BASE}/hangup`); return; } catch {}
   }
-  const token = await getToken();
+  let token = await getToken();
+  if (!token) {
+    const stored = await chrome.storage.local.get(['jwt_phone']);
+    if (stored.jwt_phone) { await autoLogin(stored.jwt_phone); token = await getToken(); }
+  }
   if (!token) return;
   await fetch(`${await getCloudApi()}/api/v1/hangup`, {
     method: 'POST',
@@ -242,7 +254,11 @@ async function sendSms(phone, tabId) {
       if (r.ok) return;
     } catch {}
   }
-  const token = await getToken();
+  let token = await getToken();
+  if (!token) {
+    const stored = await chrome.storage.local.get(['jwt_phone']);
+    if (stored.jwt_phone) { await autoLogin(stored.jwt_phone); token = await getToken(); }
+  }
   if (!token) {
     notifyTab(tabId, { type: 'dialResult', ok: false, err: '请先打开CRM页面完成自动登录' });
     return;
@@ -280,6 +296,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
+  if (msg.type === 'manualLogin') {
+    // 手动输入手机号上传到云端（自动检测失败时的备选）
+    autoLogin(msg.phone).then(success => {
+      sendResponse({ success, error: success ? '' : '无法连接服务器' });
+    });
+    return true;
+  }
+
   if (msg.type === 'logout') {
     logout().then(() => sendResponse({ success: true }));
     return true;
@@ -302,11 +326,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     fetch(`${PC_BASE}/open`).then(r => r.json()).then(d => sendResponse({ success: d.success })).catch(() => sendResponse({ success: false }));
     return true;
   }
+
+  if (msg.type === 'checkPc') {
+    resetPcStatus();
+    return;
+  }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => { delete tabPhones[tabId]; });
-
-// 启动时检测 PC 状态
-isPcAlive().then(alive => {
-  console.log(`[AutoDial BG] PC ${alive ? '在线' : '离线'}，走${alive ? '本地' : '云端'}模式`);
-});

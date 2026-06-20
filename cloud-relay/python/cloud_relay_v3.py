@@ -3,6 +3,11 @@ AutoDial Cloud Relay Server v3
 ================================
 JWT-based + PIN-compatible WebSocket + REST API.
 Ports: WS=35440, REST=35441 (old relay stays on 35430/35431).
+
+⚠️ 双模认证（不可删除任一种）：
+  - auth_method="jwt": 新版本，手机号即账号，通过 REST /api/v1/auth/auto-login 获取 JWT
+  - auth_method="pin" (默认): 老版本兼容，4 位配对码，手机端/PC端均可使用
+  两套认证路由独立，互不冲突。
 """
 import asyncio
 import json
@@ -216,8 +221,7 @@ async def handle_connection(ws, path=None):
 
             # ==================== phone_hello ====================
             if msg_type == "phone_hello":
-                auth_method = msg.get("auth_method", "pin")
-
+                auth_method = msg.get("auth_method", "pin")  # ⚠️ 双模：PIN(老)/JWT(新)，不可删
                 if auth_method == "jwt":
                     token = msg.get("token", "")
                     try:
@@ -275,8 +279,7 @@ async def handle_connection(ws, path=None):
 
             # ==================== pc_hello ====================
             if msg_type == "pc_hello":
-                auth_method = msg.get("auth_method", "pin")
-
+                auth_method = msg.get("auth_method", "pin")  # ⚠️ 双模：PIN(老)/JWT(新)，不可删
                 if auth_method == "jwt":
                     token = msg.get("token", "")
                     try:
@@ -767,7 +770,58 @@ async def _server_main():
         start_http_server(),
     )
 
+def _force_restart():
+    """杀掉占用端口的旧进程"""
+    import subprocess
+    try:
+        r = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=5)
+        for line in r.stdout.split("\n"):
+            if f":{WS_PORT}" in line and "LISTENING" in line:
+                pid = line.strip().split()[-1]
+                if pid.isdigit() and pid != str(os.getpid()):
+                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=5)
+                    return True
+    except Exception:
+        pass
+    return False
+
 def main():
+    # 单实例保护：启动前检测端口是否已被占用
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    if sock.connect_ex(("127.0.0.1", WS_PORT)) == 0:
+        sock.close()
+        # 端口在用，检测是不是自己的实例
+        import urllib.request
+        import ctypes
+        is_own = False
+        try:
+            resp = urllib.request.urlopen(f"http://127.0.0.1:{HTTP_PORT}/health", timeout=2)
+            data = json.loads(resp.read())
+            is_own = data.get("ok") and "AutoDial" in str(data)
+        except Exception:
+            pass
+
+        if is_own:
+            r = ctypes.windll.user32.MessageBoxW(0,
+                "程序已在运行中，但托盘图标可能丢失\n\n点击「是」强制重启\n点击「否」取消",
+                "AutoDial — 已在运行", 0x04 | 0x30)
+            if r == 6:  # Yes — 强制重启
+                _force_restart()
+                # 继续往下走，正常启动
+            else:
+                return
+        else:
+            r = ctypes.windll.user32.MessageBoxW(0,
+                f"端口 {WS_PORT} 被其他程序占用\n\n点击「是」强制释放端口\n点击「否」取消",
+                "AutoDial — 端口冲突", 0x04 | 0x30)
+            if r == 6:
+                _force_restart()
+            else:
+                return
+    sock.close()
+
     print("")
     print("=" * 40)
     print("  AutoDial Cloud Relay Server v3")

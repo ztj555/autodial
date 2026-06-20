@@ -50,20 +50,27 @@ button {
     <span id="statusText">已登录</span>
   </div>
   <div class="info-row"><span>手机号</span><span id="myPhone">--</span></div>
-  <div class="info-row"><span>连接模式</span><span id="connMode">--</span></div>
+  <div class="info-row"><span>云端状态</span><span id="cloudStatus">--</span></div>
   <button class="btn-danger" id="logoutBtn" style="margin-top:8px">退出登录</button>
 </div>
 
 <!-- 未登录 / 设置服务器 -->
 <div id="setupPanel">
-  <div class="hint" style="color:#C9A84C;margin-bottom:10px">打开 CRM 页面 (zhudaicms.com)，插件会自动识别您的手机号并登录</div>
+  <div class="hint" id="setupHint" style="color:#C9A84C;margin-bottom:10px">打开 CRM 页面，插件会自动检测手机号并登录</div>
   <div class="section-title">⚙ 服务器地址</div>
   <div class="server-row">
     <input id="serverInput" placeholder="http://IP:35441" />
     <button class="btn-sm" id="testServerBtn">测试</button>
   </div>
   <span class="server-status" id="serverStatus" style="margin-left:4px"></span>
-  <div class="hint">设置云中继 v3 REST API 地址后，首次打开 CRM 即自动登录</div>
+  <div class="hint" style="margin-bottom:10px">设置云中继 REST API 地址后，首次打开 CRM 即自动登录</div>
+
+  <div class="section-title">📱 手动输入登录</div>
+  <div class="server-row">
+    <input id="manualPhoneInput" placeholder="输入您的手机号" maxlength="11" style="flex:1" />
+    <button class="btn-sm" id="manualLoginBtn" style="background:#C9A84C;color:#111318">登录</button>
+  </div>
+  <span class="server-status" id="manualLoginStatus"></span>
 </div>
 
 <script src="popup.js"></script>
