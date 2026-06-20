@@ -1653,12 +1653,12 @@ class ConnectFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("AutoDial", "auto-login failed: ${e.javaClass.name}: ${e.message}", e)
+                android.util.Log.e("AutoDial", "auto-login failed: ${e::class.java.name}: ${e.message}", e)
                 val errMsg = when {
                     e is java.net.ConnectException -> "无法连接服务器 $getCloudApiUrl()"
                     e is java.net.SocketTimeoutException -> "连接超时，请检查网络"
                     e is java.net.UnknownHostException -> "无法解析服务器地址"
-                    else -> "网络错误: ${e.javaClass.simpleName}"
+                    else -> "网络错误: ${e::class.java.simpleName}"
                 }
                 withContext(Dispatchers.Main) {
                     Toast.makeText(requireActivity(), errMsg, Toast.LENGTH_LONG).show()
