@@ -1710,16 +1710,26 @@ class ConnectFragment : Fragment() {
     }
 
     private fun getCloudApiUrl(): String {
+        // 优先从服务器列表取 new 类型的第一个，避开已失效的 cloud_server 单值
+        val cloudCtrl = CloudCtrl(requireContext())
+        val servers = cloudCtrl.getServerList()
+        val newServer = servers.firstOrNull { it.isNew } ?: servers.firstOrNull { it.isOld }
+        if (newServer != null) {
+            var url = newServer.url.replace(":35440", ":35441")
+            if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
+            else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
+            else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
+            return url.removeSuffix("/")
+        }
+        // 兜底：读旧的 cloud_server
         val server = prefCtrl.getCloudServer()
         if (server.isNotEmpty()) {
-            // ws://server:35440 → http://server:35441
             var url = server.replace(":35440", ":35441")
             if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
             else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
             else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
             return url.removeSuffix("/")
         }
-        // 默认云端地址
         return "http://262ao85kz470.vicp.fun:35441"
     }
 }
