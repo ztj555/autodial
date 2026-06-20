@@ -129,8 +129,8 @@ class CloudCtrl(private val context: Context) {
         } catch (_: Exception) { emptyList() }
     }
 
-    /** 向后兼容：仅返回 URL 列表 */
-    fun getServerUrls(): List<String> = getServerList().map { it.url }
+    /** 向后兼容：仅返回 URL 列表（可变） */
+    fun getServerUrls(): MutableList<String> = getServerList().map { it.url }.toMutableList()
 
     /** 向后兼容：保存 URL 列表（全部归类为 old） */
     fun saveServerUrls(urls: List<String>) {

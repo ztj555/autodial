@@ -1133,7 +1133,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i); servers.add(i - 1, server)
-                    cloudCtrl.saveServerUrls(servers)
+                    cloudCtrl.setServerList(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1144,7 +1144,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.saveServerUrls(servers)
+                    cloudCtrl.setServerList(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1213,7 +1213,7 @@ class ConnectFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
         val input = pinInput.text?.toString() ?: ""
-        val servers = cloudCtrl.getServersSortedBy(input)
+        val servers = cloudCtrl.getServersSortedBy(input).toMutableList()
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
         val isCloudOk = DialService.isCloudConnected
@@ -1258,7 +1258,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.saveServerUrls(servers)
+                    cloudCtrl.setServerList(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
