@@ -758,14 +758,6 @@ class ConnectionManager(private val context: Context) {
                     ws.send(JSONObject().apply {
                         put("type", "phone_hello"); put("pin", pin)
                         put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
-                        // v3: JWT 登录
-                        val prefs = context.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-                        val token = prefs.getString("jwt_token", "") ?: ""
-                        if (token.isNotEmpty()) {
-                            put("auth_method", "jwt")
-                            put("token", token)
-                            put("pin", prefs.getString("login_phone", "") ?: pin)
-                        }
                     }.toString())
                 } catch (e: Exception) { v6LogE(TAG, pin, "LAN hello 发送失败: ${e.message}") }
             }
@@ -900,13 +892,6 @@ class ConnectionManager(private val context: Context) {
                             put("type", "phone_hello"); put("pin", pin)
                             put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
                             put("messageId", probeId)
-                            // v3: JWT 登录（云模式同样支持）
-                            val token = prefs.getString("jwt_token", "") ?: ""
-                            if (token.isNotEmpty()) {
-                                put("auth_method", "jwt")
-                                put("token", token)
-                                put("pin", prefs.getString("login_phone", "") ?: pin)
-                            }
                         }.toString())
                     } catch (e: Exception) { v6LogE(TAG, pin, "Cloud hello 发送失败: ${e.message}") }
                 }

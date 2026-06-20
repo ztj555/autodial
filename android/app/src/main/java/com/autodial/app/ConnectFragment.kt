@@ -331,8 +331,8 @@ class ConnectFragment : Fragment() {
 
             // 使用说明书
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
-            guideView.text = "① 输入 11 位手机号，自动登录新云端\n" +
-                "② 或输入 4 位配对码，连接旧版云端/局域网\n" +
+            guideView.text = "① 输入 11 位手机号（推荐）或 4 位配对码\n" +
+                "② 点击「连接」开始使用\n" +
                 "③ 点击「连接」开始使用" +
                 "💡 可按照个人习惯切换弹窗 轮选 系统等不同的拨号模式\n" +
                 "💡 连不上？检查电脑防火墙放行端口 35432"
@@ -588,30 +588,11 @@ class ConnectFragment : Fragment() {
     /** 发起新连接 */
     private fun handleStartConnect() {
         val input = pinInput.text.toString().trim()
-        val jwtToken = prefCtrl.getJwtToken()
+        val is4Digit = input.length == 4 && input.all { it.isDigit() }
+        val is11Phone = input.length == 11 && input.startsWith("1") && input.all { it.isDigit() }
 
-        // v3: 如果有 JWT，用手机号连接
-        if (jwtToken.isNotEmpty() && input.length == 11 && input.startsWith("1")) {
-            prefCtrl.setLoginPhone(input)
-            doConnect("", input)
-            return
-        }
-
-        // v3: 输入手机号但没 JWT → 弹出登录对话框
-        if (input.length == 11 && input.startsWith("1") && jwtToken.isEmpty()) {
-            showLoginDialog(input) { success ->
-                if (success) {
-                    requireActivity().runOnUiThread {
-                        doConnect("", input)
-                    }
-                }
-            }
-            return
-        }
-
-        // 老方式：4 位 PIN
-        if (input.length != 4) {
-            Toast.makeText(requireActivity(), "请输入4位配对码，或输入11位手机号自动登录", Toast.LENGTH_SHORT).show()
+        if (!is4Digit && !is11Phone) {
+            Toast.makeText(requireActivity(), "请输入4位配对码或11位手机号", Toast.LENGTH_SHORT).show()
             return
         }
         prefCtrl.setManuallyDisconnected(false)
@@ -622,8 +603,10 @@ class ConnectFragment : Fragment() {
     private fun handleReconnectClick() {
         prefCtrl.setManuallyDisconnected(false)
         val pin = pinInput.text.toString().trim()
-        if (pin.length != 4) {
-            Toast.makeText(requireActivity(), "配对码为空，请输入4位配对码", Toast.LENGTH_SHORT).show()
+        val is4Digit = pin.length == 4 && pin.all { it.isDigit() }
+        val is11Phone = pin.length == 11 && pin.startsWith("1") && pin.all { it.isDigit() }
+        if (!is4Digit && !is11Phone) {
+            Toast.makeText(requireActivity(), "请重新输入4位配对码或11位手机号", Toast.LENGTH_SHORT).show()
             return
         }
         sendDisconnectCommand()
