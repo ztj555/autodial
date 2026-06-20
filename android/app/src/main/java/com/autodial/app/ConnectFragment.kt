@@ -1108,6 +1108,13 @@ class ConnectFragment : Fragment() {
                             Toast.makeText(requireActivity(), "请先在连接页输入配对码", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
+                        // v9 fix: 切换服务器时清除旧 JWT（不同服务器的 JWT secret 不同），
+                        // 让 phone_hello 走 PIN 模式，避免 token 验证失败
+                        val oldCloud = prefCtrl.getCloudServer()
+                        if (oldCloud.isNotEmpty() && oldCloud != server) {
+                            prefCtrl.setJwtToken("")
+                            prefCtrl.setRefreshToken("")
+                        }
                         requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE).edit()
                             .putString("cloud_server", server)
                             .putString("connection_strategy", "auto")
@@ -1709,27 +1716,41 @@ class ConnectFragment : Fragment() {
         builder.show()
     }
 
+    /**
+     * 获取云中继 REST API 地址（HTTP），用于 auto-login / 状态查询。
+     * 优先使用用户当前指定的服务器（cloud_server，即"连"按钮或手动输入），
+     * 再兜底服务器列表。
+     */
     private fun getCloudApiUrl(): String {
-        // 优先从服务器列表取 new 类型的第一个，避开已失效的 cloud_server 单值
+        // v9 fix: 优先使用当前正在连接的服务器（"连"按钮写入的 cloud_server），
+        // 避免 auto-login 打到外部默认服务器导致 JWT 签名与本机云端不匹配。
+        val currentServer = prefCtrl.getCloudServer()
+        if (currentServer.isNotEmpty()) {
+            return wsToHttp(currentServer, "35440", "35441")
+        }
+        // 兜底：从服务器列表取第一个
         val cloudCtrl = CloudCtrl(requireContext())
         val servers = cloudCtrl.getServerList()
-        val newServer = servers.firstOrNull { it.isNew } ?: servers.firstOrNull { it.isOld }
-        if (newServer != null) {
-            var url = newServer.url.replace(":35440", ":35441")
-            if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
-            else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
-            else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
-            return url.removeSuffix("/")
+        val firstServer = servers.firstOrNull { it.isNew } ?: servers.firstOrNull { it.isOld }
+        if (firstServer != null) {
+            return wsToHttp(firstServer.url)
         }
-        // 兜底：读旧的 cloud_server
-        val server = prefCtrl.getCloudServer()
-        if (server.isNotEmpty()) {
-            var url = server.replace(":35440", ":35441")
-            if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
-            else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
-            else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
-            return url.removeSuffix("/")
+        return "http://192.168.3.75:35441"
+    }
+
+    /** 将 ws://host:port 转为 http://host:apiPort，保留非标准端口不做替换 */
+    private fun wsToHttp(serverUrl: String, wsPort: String = "", apiPort: String = ""): String {
+        var url = serverUrl
+        // 如果有明确的对端端口号，做精确替换（如 :35440 → :35441）
+        if (wsPort.isNotEmpty() && apiPort.isNotEmpty() && url.contains(":$wsPort")) {
+            url = url.replace(":$wsPort", ":$apiPort")
         }
-        return "http://262ao85kz470.vicp.fun:35441"
+        // 协议转换
+        when {
+            url.startsWith("wss://") -> url = url.replace("wss://", "https://")
+            url.startsWith("ws://") -> url = url.replace("ws://", "http://")
+            !url.startsWith("http://") && !url.startsWith("https://") -> url = "http://$url"
+        }
+        return url.removeSuffix("/")
     }
 }
