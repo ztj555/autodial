@@ -37,6 +37,7 @@ from auth import (JWT_SECRET, verify_jwt, handle_register, handle_login,
                   handle_refresh, handle_auto_login, get_client_ip)
 
 # ==================== Config ====================
+__version__ = "0.02"
 WS_PORT = int(os.environ.get("AUTODIAL_WS_PORT", "35440"))
 HTTP_PORT = int(os.environ.get("AUTODIAL_HTTP_PORT", "35441"))
 HEARTBEAT_TIMEOUT = 45
@@ -477,6 +478,7 @@ async def handle_health(request):
         "ok": True,
         "data": {
             "service": "AutoDial Cloud Relay v3",
+            "version": __version__,
             "uptime_sec": uptime
         }
     })
@@ -864,7 +866,7 @@ def main():
 
     print("")
     print("=" * 40)
-    print("  AutoDial Cloud Relay Server v3")
+    print(f"  AutoDial Cloud Relay Server v3 ({__version__})")
     print(f"  WS={WS_PORT} REST={HTTP_PORT}")
     print(f"  PID={os.getpid()}")
     print("=" * 40)
