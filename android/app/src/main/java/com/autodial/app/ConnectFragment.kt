@@ -1133,7 +1133,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i); servers.add(i - 1, server)
-                    cloudCtrl.setServerList(servers)
+                    cloudCtrl.saveServerUrls(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1144,7 +1144,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.setServerList(servers)
+                    cloudCtrl.saveServerUrls(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
