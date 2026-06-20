@@ -597,6 +597,43 @@ async def handle_sms(request):
     return web.json_response({"ok": True, "data": {}}, status=202)
 
 
+# ==================== Firewall Auto-Config ====================
+
+def configure_firewall():
+    """自动配置 Windows 防火墙规则（需要管理员权限）"""
+    import subprocess
+    rules = [
+        (f"AutoDial v3 Cloud Relay (WebSocket {WS_PORT})", WS_PORT),
+        (f"AutoDial v3 Cloud Relay (REST API {HTTP_PORT})", HTTP_PORT),
+    ]
+    for rule_name, port in rules:
+        try:
+            subprocess.run([
+                "netsh", "advfirewall", "firewall", "delete", "rule",
+                f"name={rule_name}"
+            ], capture_output=True, encoding="gbk", errors="ignore", timeout=5)
+        except Exception:
+            pass
+        try:
+            result = subprocess.run([
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                f"name={rule_name}",
+                "dir=in",
+                "action=allow",
+                "protocol=TCP",
+                f"localport={port}"
+            ], capture_output=True, encoding="gbk", errors="ignore", timeout=5)
+            if result.returncode == 0:
+                _log("I", "FW", None, f"防火墙规则已添加: {rule_name} (端口 {port})")
+            else:
+                _log("W", "FW", None, f"防火墙规则添加失败: {rule_name} - {result.stderr}")
+        except subprocess.TimeoutExpired:
+            _log("E", "FW", None, f"防火墙规则添加超时: {rule_name}")
+        except Exception as e:
+            _log("E", "FW", None, f"防火墙规则添加错误: {rule_name} - {e}")
+    _log("I", "FW", None, "防火墙配置完成（如果失败，请以管理员身份运行）")
+
+
 # ==================== System Tray ====================
 
 _tray_icon = None
@@ -764,6 +801,9 @@ def _run_server_thread():
 async def _server_main():
     await db.init()
     await db.cleanup_devices_on_startup()
+    # 自动配置防火墙（放到 executor 中避免阻塞事件循环）
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, configure_firewall)
     _log("I", "SERVER", None, f"v3 booting WS={WS_PORT} HTTP={HTTP_PORT}")
     await asyncio.gather(
         start_ws_server(),

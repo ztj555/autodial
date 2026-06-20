@@ -1616,14 +1616,20 @@ class ConnectFragment : Fragment() {
     // ========== v3: JWT 登录对话框 ==========
 
     private fun doAutoLogin(phone: String, onResult: ((Boolean) -> Unit)? = null) {
-        lifecycleScope.launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val client = okhttp3.OkHttpClient()
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
                 val json = org.json.JSONObject().apply { put("phone", phone) }
                 val body = okhttp3.RequestBody.create("application/json".toMediaType(), json.toString())
+                val apiUrl = getCloudApiUrl()
                 val request = okhttp3.Request.Builder()
-                    .url("${getCloudApiUrl()}/api/v1/auth/auto-login")
+                    .url("$apiUrl/api/v1/auth/auto-login")
                     .post(body).build()
+                android.util.Log.d("AutoDial", "auto-login URL: $apiUrl/api/v1/auth/auto-login")
 
                 val resp = client.newCall(request).execute()
                 val data = org.json.JSONObject(resp.body?.string() ?: "{}")
@@ -1634,21 +1640,28 @@ class ConnectFragment : Fragment() {
                     prefCtrl.setJwtToken(tokenData.optString("token", ""))
                     prefCtrl.setRefreshToken(tokenData.optString("refresh_token", ""))
                     prefCtrl.setLoginPhone(phone)
-                    pinInput.setText(phone)
-                    pinInput.hint = "已登录: $phone"
-                    requireActivity().runOnUiThread {
+                    withContext(Dispatchers.Main) {
+                        pinInput.setText(phone)
+                        pinInput.hint = "已登录: $phone"
                         Toast.makeText(requireActivity(), "登录成功！点击连接即可", Toast.LENGTH_SHORT).show()
                         onResult?.invoke(true)
                     }
                 } else {
-                    requireActivity().runOnUiThread {
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(requireActivity(), "登录失败: ${data.optString("error", "未知错误")}", Toast.LENGTH_LONG).show()
                         onResult?.invoke(false)
                     }
                 }
             } catch (e: Exception) {
-                requireActivity().runOnUiThread {
-                    Toast.makeText(requireActivity(), "网络错误: ${e.message}", Toast.LENGTH_LONG).show()
+                android.util.Log.e("AutoDial", "auto-login failed: ${e.javaClass.name}: ${e.message}", e)
+                val errMsg = when {
+                    e is java.net.ConnectException -> "无法连接服务器 $getCloudApiUrl()"
+                    e is java.net.SocketTimeoutException -> "连接超时，请检查网络"
+                    e is java.net.UnknownHostException -> "无法解析服务器地址"
+                    else -> "网络错误: ${e.javaClass.simpleName}"
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(requireActivity(), errMsg, Toast.LENGTH_LONG).show()
                     onResult?.invoke(false)
                 }
             }
@@ -1700,8 +1713,11 @@ class ConnectFragment : Fragment() {
         val server = prefCtrl.getCloudServer()
         if (server.isNotEmpty()) {
             // ws://server:35440 → http://server:35441
-            return server.replace("ws://", "http://").replace("wss://", "https://")
-                .replace(":35440", ":35441")
+            var url = server.replace(":35440", ":35441")
+            if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
+            else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
+            else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
+            return url.removeSuffix("/")
         }
         // 默认云端地址
         return "http://262ao85kz470.vicp.fun:35441"
