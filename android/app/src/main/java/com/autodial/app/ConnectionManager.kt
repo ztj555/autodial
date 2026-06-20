@@ -846,13 +846,19 @@ class ConnectionManager(private val context: Context) {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     v6LogI(TAG, pin, "Cloud WebSocket 已打开: $currentCloudServer")
                     try {
-                        // v4.57: 带 messageId 的 phone_hello，PC 端需回 ACK 来证实可达
                         val probeId = "probe_" + System.currentTimeMillis()
                         pcProbeMessageId = probeId
                         ws.send(JSONObject().apply {
                             put("type", "phone_hello"); put("pin", pin)
                             put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
-                            put("messageId", probeId) // v4.57: PC 必须回 ACK
+                            put("messageId", probeId)
+                            // v3: JWT 登录（云模式同样支持）
+                            val token = prefs.getString("jwt_token", "") ?: ""
+                            if (token.isNotEmpty()) {
+                                put("auth_method", "jwt")
+                                put("token", token)
+                                put("pin", prefs.getString("login_phone", "") ?: pin)
+                            }
                         }.toString())
                     } catch (e: Exception) { v6LogE(TAG, pin, "Cloud hello 发送失败: ${e.message}") }
                 }
