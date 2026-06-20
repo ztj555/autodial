@@ -353,17 +353,31 @@ class ConnectionManager(private val context: Context) {
         lastPin = prefs.getString("pin", "") ?: ""
         lastLanIp = prefs.getString("ip", "") ?: ""
         currentCloudServer = prefs.getString("cloud_server", "") ?: ""
-        val serversJson = prefs.getString("cloud_servers", null)
+        // v9 fix: 优先读 CloudCtrl 使用的新 key "cloud_servers_v5"（带 type 的对象数组）
+        // 兼容旧 key "cloud_servers"（纯 URL 字符串数组）
+        val serversJsonV5 = prefs.getString("cloud_servers_v5", null)
+        val serversJsonOld = prefs.getString("cloud_servers", null)
 
-        cloudServerList = if (serversJson != null) {
-            try {
-                val arr = JSONArray(serversJson)
-                (0 until arr.length()).map { arr.getString(it) }
-            } catch (_: Exception) {
+        cloudServerList = when {
+            serversJsonV5 != null -> {
+                try {
+                    val arr = JSONArray(serversJsonV5)
+                    (0 until arr.length()).map { arr.getJSONObject(it).getString("url") }
+                } catch (_: Exception) {
+                    if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
+                }
+            }
+            serversJsonOld != null -> {
+                try {
+                    val arr = JSONArray(serversJsonOld)
+                    (0 until arr.length()).map { arr.getString(it) }
+                } catch (_: Exception) {
+                    if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
+                }
+            }
+            else -> {
                 if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
             }
-        } else {
-            if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
         }
 
         if (!isAnyNetworkAvailable()) {
