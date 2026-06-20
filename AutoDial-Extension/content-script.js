@@ -500,48 +500,36 @@
           row.style.cssText = 'padding:8px 14px;white-space:nowrap;font-size:12px;';
           row.textContent = '👤 加载中...';
           contextMenu.appendChild(row);
-          // 同步查登录状态 + PC状态
+          // 先用 storage 显示账号（快速、可靠），PC状态异步追加
           chrome.storage.local.get(['jwt_phone', 'self_phone'], (s) => {
-            chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
-              const pcOnline = status && status.pcAlive === true;
-              if (s.jwt_phone) {
-                // 已登录云端
-                row.textContent = '👤 ' + s.jwt_phone;
-                row.style.color = t.text2;
-                row.style.cursor = 'default';
-                // PC在线时追加一行
-                if (pcOnline) {
+            if (s.jwt_phone) {
+              row.textContent = '👤 ' + s.jwt_phone;
+              row.style.color = t.text2;
+              row.style.cursor = 'default';
+              // 异步查PC状态
+              chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
+                if (status && status.pcAlive === true) {
                   const pcRow = document.createElement('div');
                   pcRow.style.cssText = 'padding:0 14px 6px 14px;font-size:11px;color:' + t.text2 + ';';
                   pcRow.textContent = '已登录，当前连接电脑端';
                   row.parentNode.insertBefore(pcRow, row.nextSibling);
                 }
-              } else if (s.self_phone) {
-              // 检测到号码但服务器不通
+              });
+            } else if (s.self_phone) {
               row.innerHTML = '<span style="color:' + t.text2 + '">已登录，未</span><span style="color:' + t.red + ';font-weight:600">设置服务器</span>';
               row.style.cursor = 'pointer';
               row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
               row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
-              row.addEventListener('click', (e) => {
-                e.stopPropagation();
-                hideContextMenu();
-                showServerDialog();
-              });
+              row.addEventListener('click', (e) => { e.stopPropagation(); hideContextMenu(); showServerDialog(); });
             } else {
-              // 完全未检测到
               row.textContent = '🔴 点击登录';
               row.style.color = t.red;
               row.style.fontWeight = '600';
               row.style.cursor = 'pointer';
               row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
               row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
-              row.addEventListener('click', (e) => {
-                e.stopPropagation();
-                hideContextMenu();
-                detectAndLogin();
-              });
+              row.addEventListener('click', (e) => { e.stopPropagation(); hideContextMenu(); detectAndLogin(); });
             }
-          });
           });
           return;
         }
