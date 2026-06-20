@@ -2,6 +2,7 @@
 AutoDial v3 认证模块 — JWT + bcrypt + 防爆破限流
 """
 import hashlib
+import logging
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
@@ -10,6 +11,8 @@ import bcrypt
 import jwt
 
 from db import db
+
+log = logging.getLogger("relay")
 
 # ==================== JWT 密钥管理 ====================
 
@@ -217,8 +220,11 @@ async def handle_auto_login(request):
     """手机号即账号：首次自动创建用户，直接返回 JWT。无需密码。"""
     body = await request.json()
     phone = body.get("phone", "").strip()
+    client_ip = get_client_ip(request)
+    log.info(f"[AUTO_LOGIN] phone={phone} ip={client_ip}")
 
     if not phone or not (phone.startswith("1") and len(phone) == 11 and phone.isdigit()):
+        log.warning(f"[AUTO_LOGIN] invalid phone={phone} ip={client_ip}")
         return web.json_response({"ok": False, "error": "手机号格式错误"}, status=400)
 
     client_ip = get_client_ip(request)

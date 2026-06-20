@@ -58,6 +58,8 @@ def setup_logging():
     logger.setLevel(logging.DEBUG)
     fh = logging.FileHandler(_log_file_path, encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(message)s"))
+    # 立即刷新每条日志，防止缓冲区导致丢失连接记录
+    fh.stream.reconfigure(write_through=True) if hasattr(fh.stream, 'reconfigure') else None
     logger.addHandler(fh)
     return logger
 
