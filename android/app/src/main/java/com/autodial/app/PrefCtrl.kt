@@ -71,11 +71,11 @@ class PrefCtrl(private val context: Context) {
 
     // ========== v3: JWT 登录 ==========
     fun getJwtToken() = prefs.getString("jwt_token", "") ?: ""
-    fun setJwtToken(token: String) = prefs.edit().putString("jwt_token", token).apply()
+    fun setJwtToken(token: String) = prefs.edit().putString("jwt_token", token).commit()
     fun getRefreshToken() = prefs.getString("refresh_token", "") ?: ""
-    fun setRefreshToken(token: String) = prefs.edit().putString("refresh_token", token).apply()
+    fun setRefreshToken(token: String) = prefs.edit().putString("refresh_token", token).commit()
     fun getLoginPhone() = prefs.getString("login_phone", "") ?: ""
-    fun setLoginPhone(phone: String) = prefs.edit().putString("login_phone", phone).apply()
+    fun setLoginPhone(phone: String) = prefs.edit().putString("login_phone", phone).commit()
     fun getCloudServer() = prefs.getString("cloud_server", "") ?: ""
     fun setCloudServer(server: String) = prefs.edit().putString("cloud_server", server).apply()
 
