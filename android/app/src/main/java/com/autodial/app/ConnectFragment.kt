@@ -1056,6 +1056,7 @@ class ConnectFragment : Fragment() {
 
         servers.forEachIndexed { i, server ->
             val isCurrent = server == connectedServer && isCloudOk
+            val isConfigured = server == connectedServer
             val row = LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
@@ -1083,6 +1084,15 @@ class ConnectFragment : Fragment() {
                 }
             }
             row.addView(addrView)
+
+            // 当前服务器标签
+            if (isConfigured) {
+                row.addView(TextView(requireContext()).apply {
+                    text = "当前"; textSize = 10f
+                    setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.red))
+                    setPadding(4, 1, 4, 1)
+                })
+            }
 
             // 手动连接按钮
             row.addView(TextView(requireContext()).apply {
@@ -1251,6 +1261,16 @@ class ConnectFragment : Fragment() {
                 }))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
+
+            // 当前服务器标签
+            val isConfigured = server == connectedServer
+            if (isConfigured) {
+                row.addView(TextView(requireContext()).apply {
+                    text = "当前"; textSize = 10f
+                    setTextColor(Color.parseColor(if (isCloudOk) colors.green else colors.red))
+                    setPadding(4, 1, 4, 1)
+                })
+            }
 
             // 删除
             row.addView(TextView(requireContext()).apply {
