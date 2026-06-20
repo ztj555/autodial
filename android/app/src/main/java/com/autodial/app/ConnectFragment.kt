@@ -1733,7 +1733,7 @@ class ConnectFragment : Fragment() {
         val servers = cloudCtrl.getServerList()
         val firstServer = servers.firstOrNull { it.isNew } ?: servers.firstOrNull { it.isOld }
         if (firstServer != null) {
-            return wsToHttp(firstServer.url)
+            return wsToHttp(firstServer.url, "35440", "35441")
         }
         return "http://192.168.3.75:35441"
     }

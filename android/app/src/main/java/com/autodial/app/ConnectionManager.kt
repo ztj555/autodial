@@ -216,6 +216,11 @@ class ConnectionManager(private val context: Context) {
         lastPin = pin
         manualConnecting = true
 
+        // v9 fix: 每次 connect() 都刷新云服务器列表。
+        // loadSavedConfig() 在 onCreate() 时可能读不到 CloudCtrl 后写入的默认值，
+        // 导致 cloudServerList 为空，connectCloud() 被跳过。
+        refreshCloudServerList()
+
         val cloudAvailable = cloudServerList.isNotEmpty()
 
         when (strategy) {
@@ -431,6 +436,35 @@ class ConnectionManager(private val context: Context) {
     fun setCloudServers(servers: List<String>) {
         cloudServerList = servers
         if (servers.isNotEmpty()) currentCloudServer = servers[0]
+    }
+
+    /** v9: 从 SharedPreferences 重新加载云服务器列表（不触发自动连接） */
+    private fun refreshCloudServerList() {
+        currentCloudServer = prefs.getString("cloud_server", "") ?: ""
+        val serversJsonV5 = prefs.getString("cloud_servers_v5", null)
+        val serversJsonOld = prefs.getString("cloud_servers", null)
+
+        cloudServerList = when {
+            serversJsonV5 != null -> {
+                try {
+                    val arr = JSONArray(serversJsonV5)
+                    (0 until arr.length()).map { arr.getJSONObject(it).getString("url") }
+                } catch (_: Exception) {
+                    if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
+                }
+            }
+            serversJsonOld != null -> {
+                try {
+                    val arr = JSONArray(serversJsonOld)
+                    (0 until arr.length()).map { arr.getString(it) }
+                } catch (_: Exception) {
+                    if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
+                }
+            }
+            else -> {
+                if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
+            }
+        }
     }
 
     fun cleanup() {
