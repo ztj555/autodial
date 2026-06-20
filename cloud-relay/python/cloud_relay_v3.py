@@ -258,6 +258,18 @@ async def handle_connection(ws, path=None):
                 meta["device_name"] = msg.get("deviceName", f"Phone-{client_ip[-3:]}")
                 group = get_group(pin)
 
+                # v3 兼容：如果 PIN 是 11 位手机号，尝试绑定 JWT 用户
+                # 解决 Android apply() 异步导致 JWT token 未及时写入的竞态问题
+                if len(pin) == 11 and pin.startswith("1") and pin.isdigit():
+                    user = await db.get_user_by_phone(pin)
+                    if user:
+                        user_id = user["id"]
+                        meta["user_id"] = user_id
+                        await db.upsert_device(user_id, meta["device_name"], "phone")
+                        register_jwt_device(user_id, "phones", ws)
+                        _log("I", "PHONE_HELLO", user_id,
+                             f"PIN→JWT 绑定 device={meta['device_name']} phone={pin}")
+
                 old_phones = [
                     p for p in list(group.phones)
                     if p != ws and ws_meta.get(p, {}).get("device_name") == meta["device_name"]
