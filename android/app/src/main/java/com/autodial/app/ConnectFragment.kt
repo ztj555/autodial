@@ -273,6 +273,15 @@ class ConnectFragment : Fragment() {
             // v4: 绑定云管理回调
             cloudCtrl.onServerListChanged = { updateCloudServerCurrentText() }
 
+            // v5: 输入变化时自动排序服务器列表（4位→old优先，11位→new优先）
+            pinInput.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    updateCloudServerCurrentText()
+                }
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            })
+
             // v7: 拨号模式预填
             dialModeCurrent.text = DialMode.fromKey(prefCtrl.getDialModeKey()).label
             dialModeRow.setOnClickListener { showDialModeDialog() }
@@ -997,8 +1006,15 @@ class ConnectFragment : Fragment() {
 
     private fun updateCloudServerCurrentText() {
         if (!isAdded) return
-        val list = cloudCtrl.getServerList()
-        cloudServerCurrentText.text = if (list.isEmpty()) "未配置" else "${list.size} 台 · ${cloudCtrl.stripCloudPrefix(list.first())}"
+        val input = pinInput.text?.toString() ?: ""
+        val list = cloudCtrl.getServersSortedBy(input)
+        if (list.isEmpty()) {
+            cloudServerCurrentText.text = "未配置"
+        } else {
+            val first = list.first()
+            val tag = if (first.isNew) "🟢" else "🔵"
+            cloudServerCurrentText.text = "${list.size} 台 · $tag ${cloudCtrl.stripCloudPrefix(first.url)}"
+        }
     }
 
     /** 服务器标签: A/B/C/D/E/... */
@@ -1013,7 +1029,7 @@ class ConnectFragment : Fragment() {
             if (idx > 0) {
                 servers.removeAt(idx)
                 servers.add(0, lastServer)
-                cloudCtrl.saveServerList(servers)
+                cloudCtrl.saveServerUrls(servers)
             }
         }
     }
@@ -1023,7 +1039,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
-        val servers = cloudCtrl.getServerList()
+        val servers = cloudCtrl.getServerUrls()
         sortServers(servers)
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
@@ -1117,7 +1133,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i); servers.add(i - 1, server)
-                    cloudCtrl.saveServerList(servers)
+                    cloudCtrl.saveServerUrls(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1128,7 +1144,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.saveServerList(servers)
+                    cloudCtrl.saveServerUrls(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1152,12 +1168,12 @@ class ConnectFragment : Fragment() {
                 val raw = input.text.toString().trim()
                 if (raw.isEmpty()) return@setPositiveButton
                 val addr = cloudCtrl.normalizeServer(raw)
-                val list = cloudCtrl.getServerList()
+                val list = cloudCtrl.getServerUrls()
                 val normSet = list.map { cloudCtrl.stripCloudPrefix(it) }.toSet()
                 if (normSet.contains(cloudCtrl.stripCloudPrefix(addr))) {
                     Toast.makeText(requireActivity(), "该地址已存在", Toast.LENGTH_SHORT).show()
                 } else {
-                    list.add(addr); cloudCtrl.saveServerList(list)
+                    list.add(addr); cloudCtrl.saveServerUrls(list)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             }
@@ -1167,16 +1183,16 @@ class ConnectFragment : Fragment() {
     /** 测试全部服务器，在内联列表中更新状态 */
     private fun testAllServers() {
         if (!isAdded) return
-        val servers = cloudCtrl.getServerList()
+        val servers = cloudCtrl.getServerUrls()
         if (servers.isEmpty()) {
             Toast.makeText(requireActivity(), "暂无服务器", Toast.LENGTH_SHORT).show()
             return
         }
         Toast.makeText(requireActivity(), "正在测试 ${servers.size} 台...", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val results = cloudCtrl.testAllServers(servers)
+            val results = cloudCtrl.testAllServerUrls(servers)
             if (!isAdded) return@launch
-            refreshCloudServerListWithResults(results.toMap())
+            refreshCloudServerListWithResults(results)
         }
     }
 
@@ -1196,12 +1212,14 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         cloudServerListContainer.removeAllViews()
-        val servers = cloudCtrl.getServerList()
+        val input = pinInput.text?.toString() ?: ""
+        val servers = cloudCtrl.getServersSortedBy(input)
         val connectedServer = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
             .getString("cloud_server", "") ?: ""
         val isCloudOk = DialService.isCloudConnected
 
-        servers.forEachIndexed { i, server ->
+        servers.forEachIndexed { i, entry ->
+            val server = entry.url
             val isCurrent = server == connectedServer && isCloudOk
             val testOk = results[server]
             val row = LinearLayout(requireContext()).apply {
@@ -1224,7 +1242,8 @@ class ConnectFragment : Fragment() {
             })
 
             row.addView(TextView(requireContext()).apply {
-                text = cloudCtrl.stripCloudPrefix(server); textSize = 12f; isSingleLine = true
+                val tag = if (entry.isNew) "🟢 " else "🔵 "
+                text = tag + cloudCtrl.stripCloudPrefix(server); textSize = 12f; isSingleLine = true
                 setTextColor(Color.parseColor(when {
                     testOk == true -> colors.green
                     testOk == false -> colors.red
@@ -1239,7 +1258,7 @@ class ConnectFragment : Fragment() {
                 setTextColor(Color.parseColor(colors.text2))
                 setOnClickListener {
                     servers.removeAt(i)
-                    cloudCtrl.saveServerList(servers)
+                    cloudCtrl.saveServerUrls(servers)
                     refreshCloudServerList(); updateCloudServerCurrentText()
                 }
             })
@@ -1251,15 +1270,15 @@ class ConnectFragment : Fragment() {
     private var lastTestedServerCount = 0
 
     private fun autoTestServersOnStart() {
-        val servers = cloudCtrl.getServerList()
+        val servers = cloudCtrl.getServerUrls()
         if (servers.isEmpty()) return
         if (servers.size == lastTestedServerCount) return
         lastTestedServerCount = servers.size
         lifecycleScope.launch {
             if (!isAdded) return@launch
-            val results = cloudCtrl.testAllServers(servers)
+            val results = cloudCtrl.testAllServerUrls(servers)
             if (!isAdded) return@launch
-            refreshCloudServerListWithResults(results.toMap())
+            refreshCloudServerListWithResults(results)
         }
     }
 
@@ -1271,7 +1290,7 @@ class ConnectFragment : Fragment() {
             val list = cloudCtrl.fetchServerListFromGist()
             if (!isAdded) return@launch
             if (list != null && list.isNotEmpty()) {
-                cloudCtrl.saveServerList(list)
+                cloudCtrl.setServerList(list)
                 updateCloudServerCurrentText()
                 refreshCloudServerList()
                 lastTestedServerCount = 0
@@ -1291,7 +1310,7 @@ class ConnectFragment : Fragment() {
             val list = cloudCtrl.fetchServerListFromGist()
             if (!isAdded) return@launch
             if (list != null && list.isNotEmpty()) {
-                cloudCtrl.saveServerList(list)
+                cloudCtrl.setServerList(list)
                 updateCloudServerCurrentText()
                 refreshCloudServerList()
                 lastTestedServerCount = 0
