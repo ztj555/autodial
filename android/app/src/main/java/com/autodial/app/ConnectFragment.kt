@@ -599,7 +599,7 @@ class ConnectFragment : Fragment() {
 
         // v3: 输入手机号但没 JWT → 弹出登录对话框
         if (input.length == 11 && input.startsWith("1") && jwtToken.isEmpty()) {
-            showLoginDialog { success ->
+            showLoginDialog(input) { success ->
                 if (success) {
                     requireActivity().runOnUiThread {
                         doConnect("", input)
@@ -1615,9 +1615,56 @@ class ConnectFragment : Fragment() {
 
     // ========== v3: JWT 登录对话框 ==========
 
-    fun showLoginDialog(onResult: ((Boolean) -> Unit)? = null) {
+    private fun doAutoLogin(phone: String, onResult: ((Boolean) -> Unit)? = null) {
+        lifecycleScope.launch {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val json = org.json.JSONObject().apply { put("phone", phone) }
+                val body = okhttp3.RequestBody.create("application/json".toMediaType(), json.toString())
+                val request = okhttp3.Request.Builder()
+                    .url("${getCloudApiUrl()}/api/v1/auth/auto-login")
+                    .post(body).build()
+
+                val resp = client.newCall(request).execute()
+                val data = org.json.JSONObject(resp.body?.string() ?: "{}")
+                val ok = data.optBoolean("ok")
+
+                if (ok) {
+                    val tokenData = data.optJSONObject("data") ?: org.json.JSONObject()
+                    prefCtrl.setJwtToken(tokenData.optString("token", ""))
+                    prefCtrl.setRefreshToken(tokenData.optString("refresh_token", ""))
+                    prefCtrl.setLoginPhone(phone)
+                    pinInput.setText(phone)
+                    pinInput.hint = "已登录: $phone"
+                    requireActivity().runOnUiThread {
+                        Toast.makeText(requireActivity(), "登录成功！点击连接即可", Toast.LENGTH_SHORT).show()
+                        onResult?.invoke(true)
+                    }
+                } else {
+                    requireActivity().runOnUiThread {
+                        Toast.makeText(requireActivity(), "登录失败: ${data.optString("error", "未知错误")}", Toast.LENGTH_LONG).show()
+                        onResult?.invoke(false)
+                    }
+                }
+            } catch (e: Exception) {
+                requireActivity().runOnUiThread {
+                    Toast.makeText(requireActivity(), "网络错误: ${e.message}", Toast.LENGTH_LONG).show()
+                    onResult?.invoke(false)
+                }
+            }
+        }
+    }
+
+    fun showLoginDialog(phone: String = "", onResult: ((Boolean) -> Unit)? = null) {
+        // 如果已有手机号，直接调auto-login，不弹窗
+        if (phone.length == 11 && phone.startsWith("1")) {
+            doAutoLogin(phone, onResult)
+            return
+        }
+
         val builder = AlertDialog.Builder(requireActivity())
         builder.setTitle("AutoDial v3 登录")
+        // ... 弹窗部分保持不变 ...
 
         val layout = LinearLayout(requireActivity()).apply {
             orientation = LinearLayout.VERTICAL
@@ -1643,53 +1690,7 @@ class ConnectFragment : Fragment() {
                 onResult?.invoke(false)
                 return@setPositiveButton
             }
-            // 密码随意，auto-login 不需要密码
-
-            lifecycleScope.launch {
-                try {
-                    val client = okhttp3.OkHttpClient()
-                    val json = org.json.JSONObject().apply {
-                        put("phone", phone)
-                    }
-                    val body = okhttp3.RequestBody.create(
-                        "application/json".toMediaType(), json.toString()
-                    )
-                    val request = okhttp3.Request.Builder()
-                        .url("${getCloudApiUrl()}/api/v1/auth/auto-login")
-                        .post(body)
-                        .build()
-
-                    val resp = client.newCall(request).execute()
-                    val data = org.json.JSONObject(resp.body?.string() ?: "{}")
-                    val ok = data.optBoolean("ok")
-
-                    if (ok) {
-                        val tokenData = data.optJSONObject("data") ?: org.json.JSONObject()
-                        val token = tokenData.optString("token", "")
-                        val refresh = tokenData.optString("refresh_token", "")
-                        prefCtrl.setJwtToken(token)
-                        prefCtrl.setRefreshToken(refresh)
-                        prefCtrl.setLoginPhone(phone)
-                        pinInput.setText(phone)
-                        pinInput.hint = "已登录: $phone"
-
-                        requireActivity().runOnUiThread {
-                            Toast.makeText(requireActivity(), "登录成功！点击连接即可", Toast.LENGTH_SHORT).show()
-                            onResult?.invoke(true)
-                        }
-                    } else {
-                        requireActivity().runOnUiThread {
-                            Toast.makeText(requireActivity(), "登录失败: ${data.optString("error", "未知错误")}", Toast.LENGTH_LONG).show()
-                            onResult?.invoke(false)
-                        }
-                    }
-                } catch (e: Exception) {
-                    requireActivity().runOnUiThread {
-                        Toast.makeText(requireActivity(), "网络错误: ${e.message}", Toast.LENGTH_LONG).show()
-                        onResult?.invoke(false)
-                    }
-                }
-            }
+            doAutoLogin(phone, onResult)
         }
         builder.setNegativeButton("取消", null)
         builder.show()
