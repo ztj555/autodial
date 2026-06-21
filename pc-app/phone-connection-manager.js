@@ -14,7 +14,9 @@ const LOG_DIR = (() => {
         const { app } = require('electron');
         return path.join(app.getPath('userData'), 'autodial-logs');
     } catch (_) {
-        return path.join(process.env.APPDATA || '.', 'autodial-pc', 'autodial-logs');
+        // B40修复: 跨平台回退，非 Windows 也安全
+        const os = require('os');
+        return path.join(process.env.APPDATA || os.homedir(), 'autodial-pc', 'autodial-logs');
     }
 })();
 const MAX_LOG_SIZE = 10 * 1024 * 1024;  // 10MB 单文件上限
@@ -59,7 +61,12 @@ function _v6Log(level, module, pin, msg) {
 function v6LogInfo(module, pin, msg) { _v6Log('I', module, pin, msg); }
 function v6LogWarn(module, pin, msg) { _v6Log('W', module, pin, msg); }
 function v6LogError(module, pin, msg) { _v6Log('E', module, pin, msg); }
-function v6LogDebug(module, pin, msg) { /* 仅开发环境开启 */ }
+// B41修复: 通过 AUTODIAL_DEBUG=true 环境变量启用调试日志
+function v6LogDebug(module, pin, msg) {
+    if (process.env.AUTODIAL_DEBUG === 'true') {
+        _v6Log('D', module, pin, msg);
+    }
+}
 
 function v6LogMessage(direction, pin, msgType, content) {
     const truncated = content.length > 500 ? content.substring(0, 500) + '...(truncated)' : content;
@@ -121,16 +128,19 @@ class ReconnectScheduler {
         }, delay);
     }
 
-    /** 连接成功 / 用户手动 / 网络变化 → 立即重置 */
+    /** 连接成功 / 用户手动 → 立即重置（B42修复: 只重置计数，不触发重连） */
     reset(reason) {
         this._cancel();
         this._attempts = 0;
-        this.trigger(reason);
     }
 
     /** 达到最大次数后停止，需要手动触发 */
     pause() { this._paused = true; this._cancel(); }
-    resume(reason) { this._paused = false; this.trigger(reason); }
+    resume(reason) {
+        this._paused = false;
+        this._attempts = 0;  // B43修复: 恢复时重置计数，避免从高位延迟开始
+        this.trigger(reason);
+    }
 
     cancel() { this._cancel(); }
     get attempts() { return this._attempts; }

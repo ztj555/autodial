@@ -12,6 +12,7 @@ type Settings struct {
 	AutoStart    bool              `json:"autoStart"`
 	SilentStart  bool              `json:"silentStart"`
 	Theme        string            `json:"theme"`
+	PinCode      string            `json:"pinCode"`
 	Mode         string            `json:"mode"`
 	PhoneNotes   map[string]string `json:"phoneNotes"`
 	CloudServer  string            `json:"cloudServer"`

@@ -113,15 +113,10 @@ func startHTTPServer() *http.Server {
 			return
 		}
 		pin := strings.TrimSpace(body.Pin)
-		if len(pin) != 11 {
-			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "配对码必须为11位数字"})
+		// B11修复: 与 Chrome 扩展统一校验格式 (^1[3-9]\d{9}$)
+		if !isValidPhonePIN(pin) {
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "配对码必须为11位手机号(1开头)"})
 			return
-		}
-		for _, c := range pin {
-			if c < '0' || c > '9' {
-				json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "error": "配对码只能包含数字"})
-				return
-			}
 		}
 
 		// Disconnect all devices using old PIN before switching
@@ -310,14 +305,10 @@ func handleLocalWS(conn *websocket.Conn) {
 				fileLog("W", "WS", "", "reject: PIN not set yet from "+clientIP)
 				continue
 			}
-			if len(pin) != 11 {
-				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码必须为11位数字"})
-				fileLog("W", "WS", "", fmt.Sprintf("auth fail: invalid pin length from %s", clientIP))
-				continue
-			}
-			if !isNumeric(pin) {
-				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码只能包含数字"})
-				fileLog("W", "WS", "", fmt.Sprintf("auth fail: non-numeric pin from %s", clientIP))
+			// B11修复: 与 Chrome 扩展统一校验格式 (^1[3-9]\d{9}$)
+			if !isValidPhonePIN(pin) {
+				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码必须为11位手机号(1开头)"})
+				fileLog("W", "WS", "", fmt.Sprintf("auth fail: invalid pin format from %s", clientIP))
 				continue
 			}
 			if pin != pinCode {

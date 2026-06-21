@@ -32,6 +32,10 @@ func (a *App) startup(ctx context.Context) {
 	if err := initSettings(); err != nil {
 		fileLog("W", "Settings", "", "load error: "+err.Error())
 	}
+	// B24修复: 启动时从持久化 settings 恢复用户设置的 11 位 PIN
+	if appSettings.PinCode != "" {
+		pinCode = appSettings.PinCode
+	}
 	fileLog("I", "AutoDial", "", "=== AutoDial PC Go v1.0 ===")
 	fileLog("I", "AutoDial", "", "PIN: "+pinCode)
 
@@ -279,6 +283,9 @@ func (a *App) ConnectCloudServer(server string) {
 	if server == "" {
 		return
 	}
+	// B21+B23修复: 手动连接时清除用户断开标志，重置重连计数
+	cloudUserDisconnected = false
+	cloudReconnectCount = 0
 	// connectCloudServer() internally handles old connection cleanup (via generation)
 	// and device removal. Don't call disconnectCloud() here — it would tear down
 	// the active cloud connection needlessly, causing a visible disconnect/reconnect cycle.
@@ -290,6 +297,9 @@ func (a *App) UpdateCloudConfig(enabled bool, servers []string) {
 	appSettings.CloudServers = servers
 	saveSettings()
 	if enabled && len(servers) > 0 {
+		// B21+B23: 启用云时重置断开标志和计数
+		cloudUserDisconnected = false
+		cloudReconnectCount = 0
 		go connectCloudServer(servers[0])
 	} else if !enabled {
 		disconnectCloud()

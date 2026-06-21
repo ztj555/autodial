@@ -1,130 +1,147 @@
-# AutoDial API 文档
+# AutoDial v4 API 文档
 
-## v3 REST API（云中继端口 35441）
+> 整合版 | 云中继端口 35430 | 全链路 11 位 PIN
 
-所有 v3 API 以 `/api/v1/` 为前缀。响应统一格式：`{"ok": true/false, "data": {...}, "error": "..."}`。
+## REST API（云中继 35430）
 
-需要 JWT 认证的端点需在请求头携带 `Authorization: Bearer <JWT>`。
+所有响应：`{"ok": bool, "code": "xxx", "message": "xxx"}`
 
-### 认证
+PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query 传递。全部使用 GET 方法（`process_request` 不接收 POST body）。
 
-#### POST /api/v1/auth/register — 注册
+### 业务端点
 
-**无需认证**
+#### GET /api/v1/dial?number=13900139000 — 拨号
 
-```json
-// Request
-{"phone": "13800138000", "password": "123456"}
-// Response 201
-{"ok": true, "data": {"token": "eyJ...", "refresh_token": "abc...", "phone": "13800138000"}}
-// 错误 409
-{"ok": false, "error": "该手机号已注册"}
+```
+Header: X-AutoDial-PIN: 13800138000
 ```
 
-#### POST /api/v1/auth/login — 登录
-
-**无需认证**。IP + 手机号双维度限流，15 分钟内最多 5 次失败。
-
 ```json
-// Request
-{"phone": "13800138000", "password": "123456"}
-// Response 200
-{"ok": true, "data": {"token": "eyJ...", "refresh_token": "abc...", "phone": "13800138000"}}
-// 错误 401
-{"ok": false, "error": "手机号或密码错误"}
-// 错误 429
-{"ok": false, "error": "请求过于频繁，请15分钟后再试"}
+// 成功
+{"ok": true, "code": "ACCEPTED"}
+// PIN 格式错误
+{"ok": false, "code": "INVALID_PIN", "message": "PIN 格式错误"}
+// PC 在线，应走本地
+{"ok": false, "code": "PC_CONNECTED", "message": "PC 端在线，请走本地直连"}
+// 手机离线
+{"ok": false, "code": "PHONE_OFFLINE", "message": "手机未连接"}
+// 5 秒内同号码
+{"ok": false, "code": "DUPLICATE_DIAL", "message": "相同号码正在拨号中"}
+// 号码不合法
+{"ok": false, "code": "INVALID_NUMBER", "message": "号码不合法"}
 ```
 
-#### POST /api/v1/auth/refresh — 续期
+处理流程：PIN 强校验 → 检查 PC 在线 → 检查手机在线 → 5s 去重 → 异步转发 → 返回 ACCEPTED。
 
-```json
-// Request
-{"refresh_token": "上次登录获得的 refresh_token"}
-// Response 200
-{"ok": true, "data": {"token": "新JWT", "refresh_token": "新refresh_token"}}
-// refresh_token 只能用一次，续期后旧 token 立即吊销
+#### GET /api/v1/hangup — 挂断
+
+```
+Header: X-AutoDial-PIN: 13800138000
 ```
 
-### 业务
+```json
+{"ok": true, "code": "ACCEPTED"}
+```
+
+错误码同 dial：`INVALID_PIN` / `PC_CONNECTED` / `PHONE_OFFLINE`。
 
 #### GET /api/v1/status — 设备状态
 
-**需要 JWT 认证**
-
-```json
-// Response 200
-{"ok": true, "data": {"phone_online": true, "device_name": "Redmi K40"}}
+```
+Header: X-AutoDial-PIN: 13800138000
 ```
 
-#### POST /api/v1/dial — 拨号
-
-**需要 JWT 认证**
-
 ```json
-// Request
-{"phone": "13800138000"}
-// Response 202（手机在线）
-{"ok": true, "data": {"req_id": "a1b2c3d4", "status": "pending"}}
-// 错误 409（手机离线）
-{"ok": false, "error": "没有在线的手机"}
-// 错误 401（未登录）
-{"ok": false, "error": "未登录"}
+{
+  "ok": true,
+  "pin": "13800138000",
+  "pcConnected": true,
+  "phoneConnected": true,
+  "phoneCount": 1
+}
 ```
 
-#### GET /api/v1/dial/result?req_id=xxx — 查拨号结果
+### 管理端点
 
-**需要 JWT 认证**。只能查自己的拨号结果。
+| 端点 | 说明 | CORS |
+|------|------|:---:|
+| GET `/health` | 健康检查（版本/端口/运行时间/连接数） | ✅ |
+| GET `/api/status` | 仪表盘状态（服务/端口/消息数/流量） | — |
+| GET `/api/clients` | 客户端列表（设备名/角色/PIN/IP/连接时间） | — |
+| GET `/api/stats` | 流量统计（总消息数/上下行流量/按天） | — |
+| GET `/api/logs` | 系统日志（最近 100 条） | — |
+| GET `/` | Web 管理面板 HTML | — |
 
-```json
-// Response 200
-{"ok": true, "data": {"status": "ok", "number": "13800138000"}}
-// status 可能值: "pending" | "ok" | "error" | "timeout" | "unknown"
-```
+> 仅 `/health` 有 CORS（供 popup 测试连接）。其余端点不加——MV3 扩展 `background.js` 的 `fetch()` 有 `host_permissions` 时不受 CORS 限制。
 
-#### POST /api/v1/hangup — 挂断
+### 错误码枚举
 
-**需要 JWT 认证**
-
-```json
-// Response 202
-{"ok": true, "data": {}}
-```
-
-#### POST /api/v1/sms — 发短信
-
-**需要 JWT 认证**
-
-```json
-// Request
-{"phone": "13800138000"}
-// Response 202
-{"ok": true, "data": {}}
-```
+| code | 含义 | 扩展处理 |
+|------|------|---------|
+| `ACCEPTED` | 指令已接受 | 正常 |
+| `INVALID_PIN` | PIN 非 11 位数字 | 提示检查 PIN 设置 |
+| `PHONE_OFFLINE` | PIN 组存在但手机不在线 | 提示手机未连接云中继 |
+| `PC_CONNECTED` | PC 在线，应走本地 | 刷新缓存，切回 localhost |
+| `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
+| `RATE_LIMITED` | 频率限制 | 1 分钟后重试 |
+| `INVALID_NUMBER` | 号码不合法 | 提示用户 |
 
 ---
 
-## v2 HTTP API（PC 端端口 35432）
+## PC 端 HTTP API（端口 35432）
 
-过渡期保留，供 PC 直连模式使用。无需认证。
+局域网直连，无需认证。
 
 | 端点 | 说明 |
 |------|------|
 | `GET /dial?number=xxx` | 拨号 |
 | `GET /hangup` | 挂断 |
-| `GET /sms?number=xxx&content=xxx` | 短信 |
+| `GET /sms?number=xxx` | 发短信（仅 PC 直连支持） |
 | `GET /open` | 打开 PC 端主窗口 |
 | `GET /` | 获取 PC 端状态 |
+| `POST /api/set-pin` | 设置 11 位 PIN（body: `{"pin":"13800138000"}`） |
 
-## 浏览器扩展集成
+---
 
-扩展 v3 在 `background.js` 中实现双模路由：
+## WebSocket 协议（端口 35430）
+
+### 消息类型
+
+| type | 方向 | 说明 |
+|------|------|------|
+| `phone_hello` | 手机→云 | PIN 握手（含 deviceName） |
+| `pc_hello` | PC→云 | PC 注册（含 hostname） |
+| `auth_ok` | 云→客户端 | 认证成功 |
+| `auth_fail` | 云→客户端 | 认证失败 |
+| `dial` | PC/云→手机 | 拨号指令（含 number） |
+| `dial_result` | 手机→云→PC | 拨号结果 |
+| `hangup` | PC/云→手机 | 挂断 |
+| `sms` / `sms_result` | PC⇌手机 | 短信 |
+| `ping` / `pong` | 双向 | 心跳（30s 间隔） |
+| `ack` | 手机→PC | 确认 |
+| `pc_online` / `pc_offline` | 云→手机 | PC 上线/离线通知 |
+
+### 握手示例
+
+```
+→ {"type": "phone_hello", "pin": "13800138000", "deviceName": "Redmi K40"}
+← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
+
+→ {"type": "pc_hello", "pin": "13800138000", "hostname": "DESKTOP-ABC"}
+← {"type": "pc_auth_ok", "pin": "13800138000", "phoneCount": 0}
+```
+
+## 扩展双模路由
 
 ```
 拨号请求
-  ├── 检测 PC 可用（GET 127.0.0.1:35432/）
-  │   ├── PC 在线 → 使用 v2 HTTP API
-  │   └── PC 离线 → 使用 v3 REST API (JWT)
-  │        └── POST /api/v1/dial → 202 → pollDialResult(req_id, 3000)
-  └── 无 JWT → 提示登录
+├── 检测 PC 可用（GET 127.0.0.1:35432/，缓存复用）
+│   ├── PC 在线 → GET /dial?number=xxx（局域网直连）
+│   └── PC 离线/超时 → GET 云中继 /api/v1/dial?number=xxx（X-AutoDial-PIN Header）
+│        ├── code=PC_CONNECTED → PC 实际在线，切回本地
+│        ├── code=PHONE_OFFLINE → 提示手机未连
+│        └── code=ACCEPTED → 完成
+└── 无 PIN → 提示打开 CRM 页面自动检测
 ```
+
+> 短信仅支持 PC 直连模式。云端无短信转发端点（`process_request` 不接收 POST body）。

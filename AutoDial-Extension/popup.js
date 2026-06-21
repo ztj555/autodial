@@ -102,9 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // 异步检查云端 API 状态
     chrome.storage.local.get(['cloud_api'], (s) => {
       const addr = s.cloud_api || 'http://127.0.0.1:35430';
+      // B35修复: 加超时和 HTTP 错误码检查
       fetch(`${addr}/api/v1/status`, {
-        headers: { 'X-AutoDial-PIN': pin || '' }
-      }).then(r => r.json()).then(d => {
+        headers: { 'X-AutoDial-PIN': pin || '' },
+        signal: AbortSignal.timeout(8000)
+      }).then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }).then(d => {
         const el = document.getElementById('cloudStatus');
         if (d.ok) {
           const pcStr = d.pcConnected ? 'PC在线' : 'PC离线';

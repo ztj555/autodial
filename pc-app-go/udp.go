@@ -11,6 +11,7 @@ import (
 
 var udpConn *net.UDPConn
 var udpMu sync.Mutex
+var udpDone = make(chan struct{}) // B26/B27: goroutine exit signal
 
 // Neighbor PCs on LAN (keyed by IP)
 var neighbors = make(map[string]time.Time)
@@ -30,6 +31,10 @@ func startUDPDiscovery() error {
 		for {
 			n, remote, err := conn.ReadFromUDP(buf)
 			if err != nil {
+				// B27修复: conn close 后退出而非忙等
+				if isClosedError(err) {
+					return
+				}
 				continue
 			}
 
@@ -72,7 +77,14 @@ func startUDPDiscovery() error {
 	// Periodic announce broadcast (对齐原版 10s 间隔)
 	go func() {
 		broadAddr := &net.UDPAddr{IP: net.IPv4(255, 255, 255, 255), Port: DiscoveryPort}
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
 		for {
+			select {
+			case <-udpDone:
+				return
+			case <-ticker.C:
+			}
 			hostname, _ := os.Hostname()
 			broadcast, _ := json.Marshal(map[string]string{
 				"type":     "announce",
@@ -86,14 +98,19 @@ func startUDPDiscovery() error {
 				conn.WriteToUDP(broadcast, broadAddr)
 				udpMu.Unlock()
 			}
-			time.Sleep(10 * time.Second)
 		}
 	}()
 
 	// Cleanup stale neighbors every 30s
 	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(30 * time.Second)
+			select {
+			case <-udpDone:
+				return
+			case <-ticker.C:
+			}
 			neighborsMu.Lock()
 			for ip, lastSeen := range neighbors {
 				if time.Since(lastSeen) > NeighborTTL {
@@ -108,12 +125,29 @@ func startUDPDiscovery() error {
 }
 
 func stopUDPDiscovery() {
+	// B26/B27修复: 通知所有 goroutine 退出
+	select {
+	case <-udpDone:
+	default:
+		close(udpDone)
+	}
 	udpMu.Lock()
 	defer udpMu.Unlock()
 	if udpConn != nil {
 		udpConn.Close()
 		udpConn = nil
 	}
+}
+
+// isClosedError detects whether a net error is due to the connection being closed.
+func isClosedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if opErr, ok := err.(*net.OpError); ok {
+		return opErr.Err.Error() == "use of closed network connection"
+	}
+	return false
 }
 
 // GetNeighborCount returns the number of other AutoDial PCs on LAN

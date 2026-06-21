@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	cloudGeneration     int
-	cloudReconnectCount int
+	cloudGeneration        int
+	cloudReconnectCount    int
+	cloudUserDisconnected  bool // B21: 用户主动断开时不自动重连
 )
 
 // ladderDelay returns reconnect delay based on attempt count (exponential backoff)
@@ -37,7 +38,9 @@ func ladderDelay() time.Duration {
 }
 
 func connectCloudServer(serverURL string) {
-	cloudReconnectCount++
+	// B23修复: 不在 connectCloudServer 中递增计数。
+	// 调用方负责递增：scheduleCloudReconnect 在周期开始 +1，
+	// 手动连接调用方（app.go）重置计数为 0。
 	gen := cloudGeneration + 1
 	cloudGeneration = gen
 
@@ -229,6 +232,10 @@ func connectCloudServer(serverURL string) {
 }
 
 func scheduleCloudReconnect() {
+	// B21修复: 用户主动断开时不重连
+	if cloudUserDisconnected {
+		return
+	}
 	if cloudReconnectTimer != nil {
 		cloudReconnectTimer.Stop()
 	}
@@ -243,6 +250,8 @@ func scheduleCloudReconnect() {
 		return
 	}
 	cloudWsMu.Unlock()
+	// B23修复: 每个重连周期只递增一次计数（而非每个服务器都递增）
+	cloudReconnectCount++
 	servers := appSettings.CloudServers
 	delay := ladderDelay()
 	fileLog("I", "Cloud", "", fmt.Sprintf("scheduling reconnect in %v (attempt=%d)", delay, cloudReconnectCount))
@@ -269,6 +278,8 @@ func scheduleCloudReconnect() {
 }
 
 func disconnectCloud() {
+	// B21修复: 用户主动断开时阻止自动重连
+	cloudUserDisconnected = true
 	cloudWsMu.Lock()
 	defer cloudWsMu.Unlock()
 	if cloudWs != nil {

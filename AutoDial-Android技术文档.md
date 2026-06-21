@@ -32,7 +32,7 @@ android/app/src/main/java/com/autodial/app/
 
 ---
 
-## 二、v3 JWT 登录支持
+## 二、连接方式（PIN + JWT 双兼容）
 
 ### PrefCtrl — JWT 字段
 
@@ -68,7 +68,7 @@ if (token.isNotEmpty()) {
 // ws://server:35440 → http://server:35441
 fun getCloudApiUrl(): String {
     return server.replace("ws://", "http://")
-        .replace(":35440", ":35441")
+        .replace(":35440", ":35430")  // v4: 云中继统一到 35430
 }
 ```
 

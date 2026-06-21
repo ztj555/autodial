@@ -19,8 +19,9 @@ function _getLogDir() {
       _LOG_DIR = path.join(app.getPath('userData'), 'autodial-logs');
       fs.mkdirSync(_LOG_DIR, { recursive: true });
     } catch (e) {
-      // app 尚未就绪时返回空，调用方 (fileLog) 有兜底逻辑
-      return '';
+      // B36修复: 回退到安全目录而非 CWD
+      const fallback = process.env.APPDATA || os.homedir();
+      return path.join(fallback, 'autodial-pc', 'autodial-logs');
     }
   }
   return _LOG_DIR;
@@ -45,11 +46,21 @@ function fileLog(level, module, pin, msg) {
         const line = `${ts} [${level}] [${module}] ${pinStr} ${msg}\n`;
 
         const logFile = _getLogFilePath();
-        // 10MB 滚动
+        // B37修复: 5级编号轮转（.1 → .2 → ... → .5），不再覆盖旧备份
         if (fs.existsSync(logFile)) {
             const stat = fs.statSync(logFile);
             if (stat.size >= MAX_LOG_SIZE) {
+                const MAX_BACKUPS = 5;
                 const extIdx = logFile.lastIndexOf('.log');
+                for (let i = MAX_BACKUPS; i >= 1; i--) {
+                    const oldFile = logFile.slice(0, extIdx) + '.' + i + logFile.slice(extIdx);
+                    if (i === MAX_BACKUPS) {
+                        try { fs.unlinkSync(oldFile); } catch (_) {}
+                    } else {
+                        const olderFile = logFile.slice(0, extIdx) + '.' + (i + 1) + logFile.slice(extIdx);
+                        try { fs.renameSync(olderFile, oldFile); } catch (_) {}
+                    }
+                }
                 const altFile = logFile.slice(0, extIdx) + '.1' + logFile.slice(extIdx);
                 try { fs.renameSync(logFile, altFile); } catch (_) {}
             }
@@ -92,7 +103,8 @@ function cleanOldLogs() {
     } catch (_) {}
 }
 
-setInterval(cleanOldLogs, 6 * 60 * 60 * 1000);
+// B38修复: 保存引用以便 quit 时清除
+const _logCleanupTimer = setInterval(cleanOldLogs, 6 * 60 * 60 * 1000);
 
 // ==================== 设置管理 ====================
 let _SETTINGS_FILE = null;
@@ -181,9 +193,9 @@ function _flushLogBuffer(win) {
 const _origLog = console.log.bind(console);
 const _origError = console.error.bind(console);
 const _origWarn = console.warn.bind(console);
-console.log = (...args) => { const t = args.join(' '); _origLog(t); _pushLog('info', t); };
-console.error = (...args) => { const t = args.join(' '); _origError(t); _pushLog('error', t); };
-console.warn = (...args) => { const t = args.join(' '); _origWarn(t); _pushLog('warn', t); };
+console.log = (...args) => { try { const t = args.join(' '); _origLog(t); _pushLog('info', t); } catch(e) { _origLog('[console.log error]', e.message); } };
+console.error = (...args) => { try { const t = args.join(' '); _origError(t); _pushLog('error', t); } catch(e) { _origError('[console.error error]', e.message); } };
+console.warn = (...args) => { try { const t = args.join(' '); _origWarn(t); _pushLog('warn', t); } catch(e) { _origWarn('[console.warn error]', e.message); } };
 
 // ==================== 常量与工具函数 ====================
 // v6: 多网络适配器过滤关键词
@@ -2125,6 +2137,8 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // 有托盘且未标记退出，保持程序运行
   if (tray && !app.isQuitting) return;
+  // B38修复: 退出时清除定时器
+  if (_logCleanupTimer) clearInterval(_logCleanupTimer);
   app.quit();
 });
 

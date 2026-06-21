@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -80,12 +78,11 @@ type DialQueueEntry struct {
 }
 
 func generatePinCode() string {
-	mac := getMacAddress()
-	h := sha256.Sum256([]byte(mac))
-	hexStr := hex.EncodeToString(h[:])
-	num, _ := strconv.ParseInt(hexStr[:8], 16, 64)
-	pin := fmt.Sprintf("%04d", int(num)%9000+1000)
-	return pin
+	// B15修复: v4 架构要求 11 位手机号作为 PIN，不再生成 4 位短码。
+	// 首次启动时 pinCode 为空，所有手机连接被拒绝，
+	// 用户必须通过 /api/set-pin 或前端设置 11 位手机号。
+	// 重启后由 B24 修复从 appSettings.PinCode 恢复。
+	return ""
 }
 
 func getMacAddress() string {
@@ -406,6 +403,55 @@ func notifyUpdate() {
 			"phoneIP":   "",
 		})
 	}()
+}
+
+// getStringField safely extracts a string value from a JSON map.
+// JSON numbers may be decoded as float64, so both string and numeric types are handled.
+func getStringField(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		return fmt.Sprintf("%.0f", val)
+	case int:
+		return strconv.Itoa(val)
+	case int64:
+		return strconv.FormatInt(val, 10)
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+// isNumeric checks if a string consists entirely of digit characters.
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidPhonePIN checks if the PIN matches the 11-digit Chinese mobile format (^1[3-9]\d{9}$).
+// B11修复: 与 Chrome 扩展的 PIN 校验保持一致。
+func isValidPhonePIN(pin string) bool {
+	if len(pin) != 11 {
+		return false
+	}
+	if pin[0] != '1' {
+		return false
+	}
+	if pin[1] < '3' || pin[1] > '9' {
+		return false
+	}
+	return isNumeric(pin)
 }
 
 func checkHeartbeats() {

@@ -52,8 +52,9 @@ def setup_logging():
     logger = logging.getLogger('relay')
     logger.setLevel(logging.INFO)
 
-    # 文件日志
-    fh = logging.FileHandler(log_file_path, encoding='utf-8')
+    # 文件日志（轮转：10MB × 5个备份文件）
+    from logging.handlers import RotatingFileHandler
+    fh = RotatingFileHandler(log_file_path, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
     fh.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s',
                                        datefmt='%Y-%m-%dT%H:%M:%S'))
     logger.addHandler(fh)
@@ -123,6 +124,7 @@ def remove_from_group(ws):
 
 # ==================== 心跳超时检测 ====================
 HEARTBEAT_TIMEOUT = 90  # 90秒没收到消息就断开
+MAX_TOTAL_CONNECTIONS = 500  # 全局连接上限（腾讯云中等配置安全值）
 
 async def check_heartbeats():
     """定期检查心跳超时，关闭超时的连接"""
@@ -218,6 +220,13 @@ ws_connections = set()
 
 async def handle_connection(ws, path=None):
     client_ip = ws.remote_address[0] if ws.remote_address else 'unknown'
+    
+    # 连接数上限保护
+    if len(ws_connections) >= MAX_TOTAL_CONNECTIONS:
+        log.warning(f'REJECTED max_connections={MAX_TOTAL_CONNECTIONS} ip={client_ip}')
+        await ws.close(1013, '服务器连接数已达上限')
+        return
+    
     ws_meta[ws] = {
         'pin': None,
         'role': None,
@@ -487,7 +496,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <body>
     <div class="header">
         <h1>🚀 AutoDial 云中转服务器</h1>
-        <p>版本 2.0.0 | <span id="port">-</span> | 运行时间: <span id="uptime">-</span></p>
+        <p>版本 4.00 | <span id="port">-</span> | 运行时间: <span id="uptime">-</span></p>
     </div>
 
     <div class="nav">
@@ -818,7 +827,7 @@ async def health_check_handler(path, request_headers):
     if path == '/health':
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '2.0.0',
+            'version': '4.00',
             'port': PORT,
             'web_port': WEB_PORT,
             'uptime_seconds': get_uptime_seconds(),
@@ -831,7 +840,7 @@ async def health_check_handler(path, request_headers):
     if path == '/api/status':
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '2.0.0',
+            'version': '4.00',
             'port': PORT,
             'web_port': WEB_PORT,
             'uptime_seconds': get_uptime_seconds(),
@@ -1128,7 +1137,7 @@ def main():
     print('')
     print('========================================')
     print('  AutoDial Cloud Relay Server')
-    print('  版本: 2.0.0 (带 Web 管理界面)')
+    print('  版本: 4.00 (带 Web 管理界面)')
     print('========================================')
     print(f'  Port:     {PORT}')
     print(f'  Web Port: {WEB_PORT}')
