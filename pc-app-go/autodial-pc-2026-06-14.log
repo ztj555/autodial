@@ -1,0 +1,6 @@
+21:29:12.668 [I] [DevMgr] [6625] new device: name=TestPhone ip=192.168.1.100
+21:29:12.697 [I] [DevMgr] [1234] new device: name=Phone1 ip=192.168.1.1
+21:29:12.698 [I] [DevMgr] [5678] new device: name=Phone2 ip=192.168.1.2
+21:29:12.698 [W] [DevMgr] [9012] registration rejected: max connections reached
+21:29:12.698 [I] [DevMgr] [6625] new device: name=TestPhone ip=192.168.1.100
+21:29:12.699 [W] [DevMgr] [6625] heartbeat timeout (121s)
