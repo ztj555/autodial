@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "AutoDial",
+  "outputfilename": "AutoDial",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "echo 'watching...'",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "ztj555",
+    "email": "1051702771@qq.com"
+  },
+  "info": {
+    "productName": "AutoDial",
+    "productVersion": "1.0.0",
+    "copyright": "ztj555"
+  }
+}
