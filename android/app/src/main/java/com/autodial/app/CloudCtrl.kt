@@ -9,14 +9,14 @@ import java.net.URL
  * v5: 云服务器配置管理 — 纯后端 CRUD + 连通测试 + Gist同步
  * UI 全部由 ConnectFragment 负责，CloudCtrl 只提供数据和操作
  *
- * 服务器列表格式规范（用于 Gist/Gitee 维护）：
+ * 服务器列表格式规范（纯 IP:PORT，不带协议前缀，代码自动补全 ws://）：
  * ```
  * [old]
- * ws://262ao85kz470.vicp.fun:55535
- * ws://backup.example.com:35430
+ * 262ao85kz470.vicp.fun:55535
+ * backup.example.com:35430
  *
  * [new]
- * ws://your-server.com:35440
+ * your-server.com:35440
  * ```
  * - [old]: 4位PIN配对的老云端（端口通常35430）
  * - [new]: 11位手机号JWT认证的新云端（端口通常35440）
@@ -39,7 +39,7 @@ class CloudCtrl(private val context: Context) {
 
     fun getServerList(): List<ServerEntry> {
         return loadServerEntries().ifEmpty {
-            val default = listOf(ServerEntry("ws://192.168.3.75:35440", "new"))
+            val default = listOf(ServerEntry("192.168.3.75:35440", "new"))
             saveServerEntries(default)
             default
         }
@@ -224,9 +224,12 @@ class CloudCtrl(private val context: Context) {
                         .replace("[new]", "").replace("[old]", "")
                         .trim()
                     if (serverUrl.isNotEmpty()) {
+                        // 没有端口号则默认补 35430
+                        var url = serverUrl
+                        if (!url.contains(":")) url = "$url:35430"
                         // 自动补 ws:// 前缀
-                        val fullUrl = if (serverUrl.startsWith("ws://") || serverUrl.startsWith("wss://")) serverUrl
-                        else "ws://$serverUrl"
+                        val fullUrl = if (url.startsWith("ws://") || url.startsWith("wss://")) url
+                        else "ws://$url"
                         allServers.add(ServerEntry(fullUrl, tag))
                     }
                 }

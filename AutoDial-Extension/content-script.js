@@ -1,8 +1,8 @@
 /**
- * AutoDial Content Script v3.0
+ * AutoDial Content Script v4.0
  * 1. 主题系统（参考手机端/PC端16套主题）
  * 2. 拨号悬浮按钮 + 挂断悬浮按钮（均主题化、可拖动）
- * 3. 右键菜单（含主题切换入口）
+ * 3. 右键菜单（含 PIN 状态 + 主题切换）
  * 4. 子iframe扫描手机号
  */
 (function () {
@@ -11,7 +11,7 @@
   window.__adv2 = true;
 
   const isTopFrame = (window === window.top);
-  console.log('[AutoDial v3]', isTopFrame ? '顶层页面' : '子iframe', window.location.href);
+  console.log('[AutoDial v4]', isTopFrame ? '顶层页面' : '子iframe', window.location.href);
 
   // ========== v3: 检测坐席手机号（TreeWalker扫描body前部，<1ms）==========
   // 融鑫汇CRM手机号是裸StaticText节点，在页面顶部，无class/id
@@ -523,7 +523,7 @@
               row.style.cursor = 'pointer';
               row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
               row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
-              row.addEventListener('click', (e) => { e.stopPropagation(); hideContextMenu(); detectAndLogin(); });
+              row.addEventListener('click', (e) => { e.stopPropagation(); hideContextMenu(); detectPin(); });
             }
           });
           return;
@@ -800,14 +800,14 @@
 
       const input = document.createElement('input');
       input.type = 'text';
-      input.placeholder = 'http://127.0.0.1:35441';
+      input.placeholder = '262ao85kz470.vicp.fun:55535';
       Object.assign(input.style, {
         width: '100%', padding: '8px 10px', background: t.bg2, border: `1px solid ${t.accent}33`,
         borderRadius: '6px', color: t.text, fontSize: '13px', outline: 'none', marginBottom: '8px',
       });
       input.addEventListener('focus', () => { input.style.borderColor = t.accent; });
       input.addEventListener('blur', () => { input.style.borderColor = t.accent + '33'; });
-      chrome.storage.local.get(['cloud_api'], (s) => { input.value = s.cloud_api || 'http://127.0.0.1:35441'; });
+      chrome.storage.local.get(['cloud_api'], (s) => { input.value = s.cloud_api || '262ao85kz470.vicp.fun:55535'; });
       dialog.appendChild(input);
 
       const status = document.createElement('div');
@@ -824,11 +824,13 @@
         borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
       });
       testBtn.addEventListener('click', () => {
-        const addr = input.value.trim();
+        let addr = input.value.trim();
         if (!addr) { status.textContent = '请输入地址'; status.style.color = t.red; return; }
         status.textContent = '测试中...'; status.style.color = t.text2;
+        // 自动补全 http://
+        if (!/^https?:\/\//i.test(addr)) addr = 'http://' + addr;
         fetch(addr + '/health').then(r => r.json()).then(d => {
-          if (d.ok) { status.textContent = '✓ 连接成功'; status.style.color = '#2ECC71'; }
+          if (d.ok || d.service) { status.textContent = '✓ 连接成功'; status.style.color = '#2ECC71'; }
           else { status.textContent = '✗ 服务器异常'; status.style.color = t.red; }
         }).catch(() => { status.textContent = '✗ 无法连接'; status.style.color = t.red; });
       });
@@ -841,7 +843,11 @@
         borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
       });
       saveBtn.addEventListener('click', () => {
-        const addr = input.value.trim();
+        let addr = input.value.trim();
+        // 保存：https:// 保留，http:// 去掉（默认协议），裸地址直接存
+        if (!/^https:\/\//i.test(addr)) {
+          addr = addr.replace(/^https?:\/\//i, '');
+        }
         chrome.storage.local.set({ cloud_api: addr }, () => {
           overlay.remove(); dialog.remove();
           flashFloat('服务器已保存', true);
@@ -908,17 +914,17 @@
       }, ok ? 2500 : 1000);
     }
 
-    // ========== v3: 检测当前用户手机号 → 自动登录 ==========
+    // ========== v4: 检测坐席手机号 → 存为 PIN ==========
     let _lastPhone = null;
     let _debounceTimer = null;
 
-    function detectAndLogin() {
+    function detectPin() {
       try {
         const myPhone = getMyPhoneFromCRM();
         if (myPhone && myPhone !== _lastPhone) {
           _lastPhone = myPhone;
           chrome.storage.local.set({ self_phone: myPhone });
-          console.log('[AutoDial v3] 检测到当前用户手机号:', myPhone);
+          console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', myPhone);
           chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
           return true;
         }
@@ -933,15 +939,15 @@
       // 每次页面加载时检测一次PC状态（后续拨号直接复用缓存）
       chrome.runtime.sendMessage({ type: 'checkPc' });
 
-      if (!detectAndLogin()) {
+      if (!detectPin()) {
         // 首次未检出，SPA可能在异步渲染，500ms/1500ms后重试
-        setTimeout(() => { if (!detectAndLogin()) setTimeout(detectAndLogin, 1000); }, 500);
+        setTimeout(() => { if (!detectPin()) setTimeout(detectPin, 1000); }, 500);
       }
 
-      // Fix D5: SPA 页面切换时重新检测（debounce 800ms, 减少不必要触发）
+      // SPA 页面切换时重新检测（debounce 500ms）
       new MutationObserver(() => {
         clearTimeout(_debounceTimer);
-        _debounceTimer = setTimeout(detectAndLogin, 800);
+        _debounceTimer = setTimeout(detectPin, 500);
       }).observe(document.body, { childList: true, subtree: true });
     }
 
@@ -998,7 +1004,7 @@
       const phone = raw.match(/^(1[3-9]\d{9})/)?.[1];
       if (!phone) continue;
 
-      console.log('[AutoDial v3] ✓ 检测到客户手机号:', phone);
+      console.log('[AutoDial v4] ✓ 检测到客户手机号:', phone);
 
       chrome.runtime.sendMessage({ type: 'phoneDetected', phone });
 
@@ -1008,12 +1014,12 @@
         dialLink.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('[AutoDial v3] 点击拨打:', phone);
+          console.log('[AutoDial v4] 点击拨打:', phone);
           chrome.runtime.sendMessage({ type: 'dial', phone });
         });
         dialLink.classList.add('__ad-dial-link');
         dialLink.style.cssText += `;color:${T().accent}!important;font-weight:bold;`;
-        console.log('[AutoDial v3] ✓ 已拦截"点击拨打"链接');
+        console.log('[AutoDial v4] ✓ 已拦截"点击拨打"链接');
       }
 
       return phone;
@@ -1033,10 +1039,9 @@
 
   setTimeout(scan, 100);
 
-  // Fix D5: iframe 内只保留客户手机号扫描的 observer (debounce 300ms)
   const obs = new MutationObserver(() => {
     clearTimeout(scan._timer);
-    scan._timer = setTimeout(scan, 300);
+    scan._timer = setTimeout(scan, 150);
   });
   if (document.body) {
     obs.observe(document.body, { childList: true, subtree: true });

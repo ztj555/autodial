@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -277,6 +279,63 @@ func (a *App) TestCloudServers(servers []string) []map[string]interface{} {
 		}
 	}
 	return results
+}
+
+// FetchCloudServers 从 Gist/Gitee 一键获取云服务器列表
+// 格式：每行一个 IP:PORT，支持 [old] / [new] 分区标签，# 注释
+func (a *App) FetchCloudServers() []string {
+	sources := []string{
+		"https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt",
+		"https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt",
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var servers []string
+
+	for _, url := range sources {
+		resp, err := client.Get(url)
+		if err != nil {
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		for _, line := range strings.Split(string(body), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			// 跳过 [old] / [new] 分区标签
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				continue
+			}
+			// 去掉行尾标签（如 "新云端"、"老云端"）
+			line = strings.ReplaceAll(line, "新云端", "")
+			line = strings.ReplaceAll(line, "老云端", "")
+			line = strings.ReplaceAll(line, "[new]", "")
+			line = strings.ReplaceAll(line, "[old]", "")
+			line = strings.TrimSpace(line)
+			if line != "" {
+				// 没有端口号则默认补 35430
+				if !strings.Contains(line, ":") {
+					line = line + ":35430"
+				}
+				servers = append(servers, line)
+			}
+		}
+		if len(servers) > 0 {
+			fileLog("I", "Cloud", "", fmt.Sprintf("从 %s 获取到 %d 个服务器", url, len(servers)))
+			break // 主源成功就不走备源
+		}
+	}
+
+	if len(servers) == 0 {
+		fileLog("W", "Cloud", "", "所有服务器列表源均不可达")
+	}
+	return servers
 }
 
 func (a *App) ConnectCloudServer(server string) {

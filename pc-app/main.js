@@ -127,9 +127,9 @@ const DEFAULT_SETTINGS = {
   theme: 'dark-gold',        // 主题ID
   mode: 'dark',              // 显示模式 dark/dusk/dawn/twilight/warm/mist/light
   phoneNotes: {},            // 手机备注 { "ip|name": "备注" }
-  cloudServer: '',           // 云中转服务器地址，如 wss://relay.example.com:35430
+  cloudServer: '',           // 云中转服务器地址，如 262ao85kz470.vicp.fun:55535
   cloudEnabled: false,       // 是否启用云中转
-  cloudServers: []           // 多云服务器列表，如 ["1.2.3.4:35430", "5.6.7.8:35430"]
+  cloudServers: []           // 多云服务器列表，如 ["262ao85kz470.vicp.fun:55535", "192.168.3.75:35430"]
 };
 
 function loadSettings() {
@@ -204,10 +204,8 @@ const ADAPTER_ETHERNET_KEYWORDS = ['eth', 'en', '以太', 'ethernet', 'pci'];
 const ADAPTER_WIFI_KEYWORDS = ['wlan', 'wl', '无线', 'wifi'];
 
 function generatePinCode() {
-  const mac = getMacAddress();
-  const hash = crypto.createHash('sha256').update(mac).digest('hex');
-  const num = parseInt(hash.substring(0, 8), 16);
-  return String(num % 9000 + 1000);
+  // v4: 不再自动生成4位PIN，需要用户在设置中手动输入11位手机号
+  return '';
 }
 
 function getMacAddress() {
@@ -267,7 +265,53 @@ function getSubnet() {
   return parts[0] + '.' + parts[1] + '.' + parts[2] + '.';
 }
 
-const PIN_CODE = generatePinCode();
+let PIN_CODE = generatePinCode(); // 4.0: 初始为空，需手动设置11位手机号
+
+// v4: 地址标准化 — 纯 IP:PORT 自动补协议
+function normalizeCloudUrl(addr) {
+  if (!addr) return '';
+  const clean = (addr || '').trim().replace(/^(https?|wss?):\/\//i, '');
+  if (/^ws:\/\//i.test(addr)) return addr; // 已完整的 ws://
+  if (/^wss:\/\//i.test(addr)) return addr; // 已完整的 wss://
+  return 'ws://' + clean;
+}
+
+// v4: 一键获取云服务器列表（从 Gist/Gitee）
+function fetchCloudServers() {
+  const sources = [
+    'https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt',
+    'https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt'
+  ];
+  for (const url of sources) {
+    try {
+      require('https').get(url, { timeout: 10000 }, (res) => {
+        if (res.statusCode !== 200) return;
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => {
+          const servers = [];
+          for (let line of body.split('\n')) {
+            line = line.trim();
+            if (!line || line.startsWith('#')) continue;
+            if (/^\[.+\]$/.test(line)) continue;
+            line = line.replace(/新云端|老云端/g, '').trim();
+            if (!line) continue;
+            line = line.replace(/^(https?|wss?):\/\//i, '');
+            if (!line.includes(':')) line += ':35430';
+            servers.push(line);
+          }
+          if (servers.length > 0) {
+            appSettings.cloudServers = servers;
+            appSettings.cloudServer = servers[0];
+            saveSettings(appSettings);
+            console.log('[云端] 一键获取到 ' + servers.length + ' 个服务器: ' + servers.join(', '));
+          }
+        });
+      }).on('error', () => {});
+      return;
+    } catch (e) {}
+  }
+}
 const LOCAL_IP = getLocalIP();
 const SUBNET = getSubnet();
 const PORT = 35432;
@@ -977,11 +1021,12 @@ ipcMain.on('rename-phone', (event, { id, pin, note }) => {
 // 云端配置更新
 ipcMain.on('update-cloud-config', (event, { enabled, server, servers }) => {
   appSettings.cloudEnabled = !!enabled;
-  if (server !== undefined) appSettings.cloudServer = server;
-  if (servers !== undefined) appSettings.cloudServers = servers;
+  // v4: 去协议前缀存储
+  if (server !== undefined) appSettings.cloudServer = (server || '').replace(/^(https?|wss?):\/\//i, '');
+  if (servers !== undefined) appSettings.cloudServers = (servers || []).map(s => (s || '').replace(/^(https?|wss?):\/\//i, ''));
   // 同步：如果有多个服务器，cloudServer 保存第一个（向后兼容）
   if (Array.isArray(servers) && servers.length > 0 && !server) {
-    appSettings.cloudServer = servers[0];
+    appSettings.cloudServer = appSettings.cloudServers[0];
   }
   saveSettings(appSettings);
   console.log('[云端] 配置更新: enabled=' + appSettings.cloudEnabled + ' servers=' + JSON.stringify(appSettings.cloudServers) + ' server=' + appSettings.cloudServer);
@@ -996,6 +1041,12 @@ ipcMain.on('update-cloud-config', (event, { enabled, server, servers }) => {
   } else {
     disconnectCloudServer();
   }
+});
+
+// v4: 一键获取服务器列表
+ipcMain.on('fetch-cloud-servers', () => {
+  console.log('[云端] 用户触发一键获取服务器列表');
+  fetchCloudServers();
 });
 
 // 获取云端状态

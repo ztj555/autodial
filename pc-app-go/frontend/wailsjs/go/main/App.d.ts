@@ -7,6 +7,8 @@ export function CloseWindow():Promise<void>;
 
 export function ConnectCloudServer(arg1:string):Promise<void>;
 
+export function FetchCloudServers():Promise<Array<string>>;
+
 export function ForceReconnect(arg1:string):Promise<string>;
 
 export function GetActivePhoneID():Promise<string>;

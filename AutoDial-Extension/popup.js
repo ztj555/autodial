@@ -1,6 +1,7 @@
 /**
  * AutoDial Popup v4.0
  * 整合版：设云中继地址 + 设 PIN（坐席手机号）+ 测试连接
+ * 服务器地址统一为纯 IP:PORT 格式（自动补全 http://）
  */
 document.addEventListener('DOMContentLoaded', () => {
   const serverInput = document.getElementById('serverInput');
@@ -8,34 +9,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const pinInput = document.getElementById('pinInput');
   const pinStatus = document.getElementById('pinStatus');
 
-  // 加载保存的服务器地址和 PIN
-  chrome.storage.local.get(['cloud_api', 'self_phone', 'pin'], (s) => {
-    serverInput.value = s.cloud_api || 'http://127.0.0.1:35430';
+  // 提取纯地址用于显示（去掉 http:// ws:// 等协议前缀，https:// 保留）
+  function cleanAddr(addr) {
+    addr = (addr || '').trim();
+    if (/^https:\/\//i.test(addr)) return addr;
+    return addr.replace(/^(https?|wss?):\/\//i, '');
+  }
+
+  // 补全协议前缀，返回完整 URL
+  function fullUrl(addr) {
+    if (!addr) return '';
+    addr = addr.trim();
+    // 已有完整协议的直接用
+    if (/^https?:\/\//i.test(addr)) return addr;
+    return 'http://' + addr;
+  }
+
+  // 加载保存的服务器地址和 PIN（手动设置优先，其次自动获取）
+  chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched', 'self_phone', 'pin'], (s) => {
+    serverInput.value = cleanAddr(s.cloud_api) ||
+                        (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '262ao85kz470.vicp.fun:55535');
     if (s.pin || s.self_phone) {
       pinInput.value = s.pin || s.self_phone || '';
       showStatus(s.pin || s.self_phone);
     } else {
       showSetup();
     }
-    testServer(serverInput.value);
+    testServer(fullUrl(serverInput.value));
   });
 
   // 测试服务器连接
   document.getElementById('testServerBtn').addEventListener('click', () => {
-    const addr = serverInput.value.trim();
-    if (!addr) { setServerStatus('请输入地址', 'err'); return; }
-    chrome.storage.local.set({ cloud_api: addr });
-    testServer(addr);
+    const cleaned = cleanAddr(serverInput.value);
+    if (!cleaned) { setServerStatus('请输入地址', 'err'); return; }
+    // 保存纯 IP:PORT 格式
+    chrome.storage.local.set({ cloud_api: cleaned });
+    serverInput.value = cleaned;
+    testServer(fullUrl(cleaned));
   });
 
   async function testServer(addr) {
+    if (!addr) { setServerStatus('请输入地址', 'err'); return; }
     setServerStatus('测试中...', '');
     try {
       const ctrl = new AbortController();
       setTimeout(() => ctrl.abort(), 5000);
       const res = await fetch(`${addr}/health`, { signal: ctrl.signal });
       const d = await res.json();
-      // /health 返回的字段（兼容 v2.0 格式）
       if (d.service) {
         setServerStatus('✓ 已连接 (' + d.service + ' v' + (d.version || '') + ')', 'ok');
       } else {
@@ -81,6 +101,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // 修改服务器（PIN 保持不动）
+  document.getElementById('editServerBtn').addEventListener('click', () => {
+    document.getElementById('setupPanel').style.display = 'block';
+    document.getElementById('statusPanel').style.display = 'none';
+    document.getElementById('pinInput').style.display = 'none';
+    document.getElementById('savePinBtn').style.display = 'none';
+    document.getElementById('pinStatus').style.display = 'none';
+    document.getElementById('backToStatusBtn').style.display = 'inline-block';
+  });
+
+  // 返回状态面板（不改 PIN）
+  document.getElementById('backToStatusBtn').addEventListener('click', () => {
+    document.getElementById('pinInput').style.display = '';
+    document.getElementById('savePinBtn').style.display = '';
+    document.getElementById('pinStatus').style.display = '';
+    document.getElementById('backToStatusBtn').style.display = 'none';
+    chrome.storage.local.get(['pin', 'self_phone'], (s) => {
+      showStatus(s.pin || s.self_phone);
+    });
+  });
+
   function showSetup() {
     document.getElementById('setupPanel').style.display = 'block';
     document.getElementById('statusPanel').style.display = 'none';
@@ -99,11 +140,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('statusPanel').style.display = 'block';
     document.getElementById('myPhone').textContent = pin || '--';
 
+    // 显示当前云端地址（手动设置优先，其次自动获取）
+    chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {
+      const addr = cleanAddr(s.cloud_api) ||
+                   (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] + ' [自动]' : '262ao85kz470.vicp.fun:55535');
+      document.getElementById('cloudAddr').textContent = addr;
+      document.getElementById('cloudAddr').onclick = () => {
+        document.getElementById('editServerBtn').click();
+      };
+    });
+
     // 异步检查云端 API 状态
-    chrome.storage.local.get(['cloud_api'], (s) => {
-      const addr = s.cloud_api || 'http://127.0.0.1:35430';
-      // B35修复: 加超时和 HTTP 错误码检查
-      fetch(`${addr}/api/v1/status`, {
+    chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {
+      const apiUrl = fullUrl(cleanAddr(s.cloud_api) || 
+                             (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '262ao85kz470.vicp.fun:55535'));
+      fetch(`${apiUrl}/api/v1/status`, {
         headers: { 'X-AutoDial-PIN': pin || '' },
         signal: AbortSignal.timeout(8000)
       }).then(r => {

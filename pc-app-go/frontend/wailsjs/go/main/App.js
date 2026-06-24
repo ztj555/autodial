@@ -14,6 +14,10 @@ export function ConnectCloudServer(arg1) {
   return window['go']['main']['App']['ConnectCloudServer'](arg1);
 }
 
+export function FetchCloudServers() {
+  return window['go']['main']['App']['FetchCloudServers']();
+}
+
 export function ForceReconnect(arg1) {
   return window['go']['main']['App']['ForceReconnect'](arg1);
 }
