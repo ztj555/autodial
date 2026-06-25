@@ -1,0 +1,13 @@
+{
+  "name": "autodial-cloud-relay",
+  "version": "2.0.0",
+  "_comment": "Node.js version DEPRECATED as of 2026-06-06. Use python/cloud_relay.py instead.",
+  "main": "server.js.deprecated",
+  "scripts": {
+    "start": "echo 'DEPRECATED: Use python/cloud_relay.py' && exit 1",
+    "dev": "echo 'DEPRECATED: Use python/cloud_relay.py' && exit 1"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
