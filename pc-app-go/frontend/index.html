@@ -702,6 +702,7 @@ input[type=checkbox]:checked + .sw-track i { display:none; }
     <div class="status-dot" id="statusDot"></div>
     <div class="status-text" id="statusText">等待连接</div>
     <span class="restart-icon" id="restartCloudIcon" title="重连云端">☁</span>
+    <span class="restart-icon" id="restartAppIcon" title="重启软件">⟳</span>
     <label class="topmost-switch" title="窗口置顶">
       <input type="checkbox" id="topmostToggle">
       <span class="sw-track"></span>
@@ -790,7 +791,11 @@ let currentActiveId = null;  // 当前活跃手机ID
 
 // ==================== 标题栏按钮 ====================
 document.getElementById('btnSettings').addEventListener('click', () => {
-  // v4: 设置11位手机号作为PIN（替代4位自动配对码）
+  openSettings();
+});
+
+// 配对码点击修改 PIN
+document.getElementById('pinCode').addEventListener('click', function() {
   var newPin = prompt('输入坐席手机号（11位）作为配对码:\n\n当前配对码: ' + (document.getElementById('pinCode').textContent), '');
   if (newPin && newPin.trim()) {
     var pin = newPin.trim();
@@ -805,10 +810,13 @@ document.getElementById('btnSettings').addEventListener('click', () => {
   }
 });
 
-// v4: PIN显示区点击也可修改
-document.getElementById('pinCode').addEventListener('click', function() {
-  document.getElementById('btnSettings').click();
-});
+// 设置面板开关
+function openSettings() {
+  document.getElementById('settingsOverlay').style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').style.display = 'none';
+}
 document.getElementById('pinCode').style.cursor = 'pointer';
 document.getElementById('pinCode').title = '点击修改配对码';
 document.getElementById('btnMinimize').addEventListener('click', () => {
@@ -969,6 +977,9 @@ async function init() {
     window.api.send('restart-cloud');
     setTimeout(() => icon.classList.remove('spinning'), 3000);
     addLog('info', '云端重连已触发');
+  });
+  document.getElementById('restartAppIcon').addEventListener('click', () => {
+    window.api.send('restart-app');
   });
   _ipcCleanupFns.push(window.api.on('hangup-sent', () => {
     addLog('info', '已发送挂断');
@@ -1715,11 +1726,15 @@ async function updateCloudConfig(){try{await window.go.main.App.UpdateCloudConfi
 
 <!-- 浮动横条右键菜单 -->
 <div id="fbMenu" style="display:none;position:fixed;min-width:160px;background:rgba(26,29,36,0.9);border:1px solid rgba(201,168,76,0.25);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:9999;">
+  <div class="fb-menu-item" onclick="restoreMain()">🏠 显示主窗口</div>
+  <div class="fb-menu-item" onclick="openSettings()">⚙ 打开设置</div>
+  <div class="fb-menu-sep"></div>
   <div class="fb-menu-item" onclick="fbDial()">📞 拨打</div>
   <div class="fb-menu-item" onclick="fbHangup()">📵 挂断</div>
   <div class="fb-menu-item" onclick="fbSms()">💬 短信</div>
   <div class="fb-menu-sep"></div>
   <div class="fb-menu-item fb-menu-danger" onclick="fbClear()">✕ 清空号码</div>
+  <div class="fb-menu-item fb-menu-danger" onclick="fbExit()">⟳ 退出</div>
 </div>
 
 <style>
