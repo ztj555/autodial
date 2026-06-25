@@ -25,7 +25,9 @@
           case 'hangup':
             return window.go.main.App.Send('hangup');
           case 'open-sms':
-            return window.go.main.App.SendSMS(args[0], '');
+            var n = (typeof args[0] === 'object') ? (args[0].number || '') : String(args[0] || '');
+            var c = (typeof args[0] === 'object') ? (args[0].content || '') : '';
+            return window.go.main.App.SendSMS(n, c);
           case 'open-settings':
             return;
           case 'select-phone':
@@ -44,8 +46,14 @@
             return window.go.main.App.RestartApp();
           case 'dial-failed-trigger-recovery':
             return window.go.main.App.RestartCloud();
+          case 'floatbar-minimize':
+            return window.go.main.App.MinimizeToFloatbar();
+          case 'floatbar-restore':
+            return window.go.main.App.RestoreMainWindow();
+          case 'update-cloud-config':
+            return window.go.main.App.UpdateCloudConfig(args[0], args[1] || []);
           default:
-            console.warn('[WailsAdapter] unknown send channel:', channel);
+            try { return window.go.main.App.Send(channel, args[0]); } catch(e) { console.warn('[WailsAdapter] unknown:', channel); }
         }
       } catch (e) {
         console.error('[WailsAdapter] send error:', channel, e);
@@ -90,32 +98,68 @@
     }
   };
 
-  // Poll for phone list + status updates (since Wails doesn't have push events easily)
+  // Poll for phone list + status updates
   let lastPhoneList = '[]';
   let lastConnected = false;
-  setTimeout(function pollState() {
+  setTimeout(async function pollState() {
     try {
-      if (window.go && window.go.main && window.go.main.App) {
-        var phones = window.go.main.App.GetPhoneList();
-        var activeId = window.go.main.App.GetActivePhoneID();
+      var App = window['go'] && window['go']['main'] && window['go']['main']['App'];
+      if (App) {
+        var phones = await App.GetPhoneList();
+        var activeId = await App.GetActivePhoneID();
         var phonesStr = JSON.stringify(phones);
 
         if (phonesStr !== lastPhoneList) {
+          console.log('[WailsAdapter] phones changed:', phonesStr.substring(0, 200));
           lastPhoneList = phonesStr;
           if (phonesCallback) {
-            try { phonesCallback({ phones: phones, activeId: activeId }); } catch(e) {}
+            try { phonesCallback({ phones: phones, activeId: activeId }); } catch(e) { console.error('[WailsAdapter] phonesCallback error:', e); }
           }
         }
 
-        var connected = phones && phones.length > 0;
+        var connected = !!(phones && Array.isArray(phones) && phones.length > 0);
         if (connected !== lastConnected) {
+          console.log('[WailsAdapter] connected changed:', connected);
           lastConnected = connected;
           if (statusCallback) {
-            try { statusCallback({ connected: connected, phoneIP: null }); } catch(e) {}
+            try { statusCallback({ connected: connected, phoneIP: (phones && phones.length > 0 && phones[0].ip) || null }); } catch(e) { console.error('[WailsAdapter] statusCallback error:', e); }
           }
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error('[WailsAdapter] pollState error:', e);
+    }
     setTimeout(pollState, 1000);
   }, 500);
+
+  // Listen for Wails backend events (Go pushToRenderer) and forward to stored callbacks
+  if (window.runtime && window.runtime.EventsOn) {
+    window.runtime.EventsOn('dial-sent', function(data) {
+      if (dialSentCallback) dialSentCallback(data);
+      if (dialResultCallback) dialResultCallback({ ok: true, number: (data && data.number) || '' });
+    });
+    window.runtime.EventsOn('dial-waking', function(data) {
+      if (dialWakingCallback) dialWakingCallback(data);
+    });
+    window.runtime.EventsOn('info-push', function(data) {
+      if (infoCallback) infoCallback(data);
+    });
+    window.runtime.EventsOn('dial-timeout', function(data) {
+      if (dialTimeoutCallback) dialTimeoutCallback(data);
+      if (dialResultCallback) dialResultCallback({ ok: false, number: (data && data.number) || '', error: '超时' });
+    });
+    window.runtime.EventsOn('hangup-sent', function(data) {
+      if (hangupSentCallback) hangupSentCallback(data);
+    });
+    window.runtime.EventsOn('force-reconnect-result', function(data) {
+      if (forceReconnectCallback) forceReconnectCallback(data);
+    });
+    window.runtime.EventsOn('error', function(data) {
+      if (errorCallback) errorCallback(data);
+      if (dialResultCallback && data && data.message) dialResultCallback({ ok: false, error: data.message });
+    });
+    window.runtime.EventsOn('server-log', function(data) {
+      if (serverLogCallback) serverLogCallback(data);
+    });
+  }
 })();

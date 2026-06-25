@@ -51,6 +51,8 @@ export function SendSMS(arg1:string,arg2:string):Promise<string>;
 
 export function SetAutoStart(arg1:boolean):Promise<void>;
 
+export function SetPin(arg1:string):Promise<void>;
+
 export function SetTopmost(arg1:boolean):Promise<void>;
 
 export function TestCloudServers(arg1:Array<string>):Promise<Array<Record<string, any>>>;

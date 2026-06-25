@@ -26,7 +26,6 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	rendererCtx = ctx // for pushToRenderer to emit Wails events
-	writePin(generatePinCode())
 
 	if err := initLogger(); err != nil {
 		println("logger init failed:", err.Error())
@@ -34,10 +33,8 @@ func (a *App) startup(ctx context.Context) {
 	if err := initSettings(); err != nil {
 		fileLog("W", "Settings", "", "load error: "+err.Error())
 	}
-	// B24修复: 启动时从持久化 settings 恢复用户设置的 11 位 PIN
-	if appSettings.PinCode != "" {
-		writePin(appSettings.PinCode)
-	}
+	// 从持久化 settings 恢复用户设置的 PIN（无存储时为空，需手动设11位手机号）
+	writePin(appSettings.PinCode)
 	fileLog("I", "AutoDial", "", "=== AutoDial PC Go v1.0 ===")
 	fileLog("I", "AutoDial", "", "PIN: "+readPin())
 
@@ -284,58 +281,62 @@ func (a *App) TestCloudServers(servers []string) []map[string]interface{} {
 // FetchCloudServers 从 Gist/Gitee 一键获取云服务器列表
 // 格式：每行一个 IP:PORT，支持 [old] / [new] 分区标签，# 注释
 func (a *App) FetchCloudServers() []string {
-	sources := []string{
-		"https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt",
-		"https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt",
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	var servers []string
-
-	for _, url := range sources {
-		resp, err := client.Get(url)
-		if err != nil {
-			continue
+	result := make(chan []string, 1)
+	go func() {
+		sources := []string{
+			"https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt",
+			"https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt",
 		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
+		client := &http.Client{Timeout: 10 * time.Second}
+		var servers []string
 
-		for _, line := range strings.Split(string(body), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
+		for _, url := range sources {
+			resp, err := client.Get(url)
+			if err != nil {
 				continue
 			}
-			// 跳过 [old] / [new] 分区标签
-			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
 				continue
 			}
-			// 去掉行尾标签（如 "新云端"、"老云端"）
-			line = strings.ReplaceAll(line, "新云端", "")
-			line = strings.ReplaceAll(line, "老云端", "")
-			line = strings.ReplaceAll(line, "[new]", "")
-			line = strings.ReplaceAll(line, "[old]", "")
-			line = strings.TrimSpace(line)
-			if line != "" {
-				// 没有端口号则默认补 35430
-				if !strings.Contains(line, ":") {
-					line = line + ":35430"
+			for _, line := range strings.Split(string(body), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
 				}
-				servers = append(servers, line)
+				if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+					continue
+				}
+				line = strings.ReplaceAll(line, "新云端", "")
+				line = strings.ReplaceAll(line, "老云端", "")
+				line = strings.ReplaceAll(line, "[new]", "")
+				line = strings.ReplaceAll(line, "[old]", "")
+				line = strings.TrimSpace(line)
+				if line != "" {
+					if !strings.Contains(line, ":") {
+						line = line + ":35430"
+					}
+					servers = append(servers, line)
+				}
+			}
+			if len(servers) > 0 {
+				fileLog("I", "Cloud", "", fmt.Sprintf("从 %s 获取到 %d 个服务器", url, len(servers)))
+				break
 			}
 		}
-		if len(servers) > 0 {
-			fileLog("I", "Cloud", "", fmt.Sprintf("从 %s 获取到 %d 个服务器", url, len(servers)))
-			break // 主源成功就不走备源
+		if len(servers) == 0 {
+			fileLog("W", "Cloud", "", "所有服务器列表源均不可达")
 		}
+		result <- servers
+	}()
+	select {
+	case servers := <-result:
+		return servers
+	case <-time.After(12 * time.Second):
+		fileLog("W", "Cloud", "", "获取服务器列表超时")
+		return nil
 	}
-
-	if len(servers) == 0 {
-		fileLog("W", "Cloud", "", "所有服务器列表源均不可达")
-	}
-	return servers
 }
 
 func (a *App) ConnectCloudServer(server string) {
@@ -363,6 +364,17 @@ func (a *App) UpdateCloudConfig(enabled bool, servers []string) {
 	} else if !enabled {
 		disconnectCloud()
 	}
+}
+
+func (a *App) SetPin(pin string) {
+	writePin(pin)
+	appSettings.PinCode = pin
+	saveSettings()
+	fileLog("I", "App", "", "PIN updated: "+pin)
+	// 通知前端更新 PIN 显示
+	pushToRenderer("info-push", map[string]interface{}{
+		"pin": pin,
+	})
 }
 
 func (a *App) SendDial(number string) string {

@@ -102,6 +102,10 @@ export function SetAutoStart(arg1) {
   return window['go']['main']['App']['SetAutoStart'](arg1);
 }
 
+export function SetPin(arg1) {
+  return window['go']['main']['App']['SetPin'](arg1);
+}
+
 export function SetTopmost(arg1) {
   return window['go']['main']['App']['SetTopmost'](arg1);
 }
