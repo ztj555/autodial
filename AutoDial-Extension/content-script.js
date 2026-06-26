@@ -620,6 +620,7 @@
         { type: 'separator' },
         { label: '🎨 切换主题', action: showThemeMenu },
         { label: '📱 手动拨号', action: toggleManualDial },
+        { label: '⚙ 设置', action: showSettingsDialog },
         { type: 'separator' },
         { type: 'account' },  // 占位，渲染时异步填充当前登录账号
         { label: '✕ 关闭菜单', action: () => {} },
@@ -913,90 +914,261 @@
       setTimeout(() => document.addEventListener('mousedown', closeHandler, true), 100);
     }
 
-    function showServerDialog() {
+    function showSettingsDialog() {
       const t = T();
+
+      // 关闭已打开的
+      const old = document.getElementById('__ad_settings');
+      if (old) { old.remove(); document.getElementById('__ad_settings_overlay')?.remove(); }
+
       // 遮罩
       const overlay = document.createElement('div');
+      overlay.id = '__ad_settings_overlay';
       Object.assign(overlay.style, {
         position: 'fixed', inset: '0', zIndex: '2147483646',
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.45)',
+        backdropFilter: 'blur(2px)',
       });
-      overlay.addEventListener('click', () => { overlay.remove(); dialog.remove(); });
+      overlay.addEventListener('click', closeSettings);
       document.body.appendChild(overlay);
 
+      // 弹窗主体
       const dialog = document.createElement('div');
+      dialog.id = '__ad_settings';
       Object.assign(dialog.style, {
-        position: 'fixed', left: '50%', top: '40%', transform: 'translate(-50%, -50%)',
-        zIndex: '2147483647', background: t.bg, borderRadius: '12px',
-        boxShadow: `0 8px 32px ${t.accent}33`, padding: '20px', width: '320px',
-        fontFamily: 'system-ui, sans-serif', color: t.text, fontSize: '13px',
+        position: 'fixed', left: '50%', top: '50%',
+        transform: 'translate(-50%, -50%) scale(0.95)',
+        zIndex: '2147483647',
+        width: '380px', maxWidth: 'calc(100vw - 32px)',
+        background: t.bg2,
+        borderRadius: '14px',
+        boxShadow: `0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px ${t.accent}22`,
+        padding: '24px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        color: t.text,
+        fontSize: '14px',
+        backdropFilter: 'blur(24px)',
+        opacity: '0',
+        transition: 'opacity .2s ease, transform .2s ease',
       });
 
+      // 入场动画
+      requestAnimationFrame(() => {
+        dialog.style.opacity = '1';
+        dialog.style.transform = 'translate(-50%, -50%) scale(1)';
+      });
+
+      function closeSettings() {
+        dialog.style.opacity = '0';
+        dialog.style.transform = 'translate(-50%, -50%) scale(0.95)';
+        setTimeout(() => { overlay.remove(); dialog.remove(); }, 200);
+      }
+      document.addEventListener('keydown', function escClose(e) {
+        if (e.key === 'Escape') { closeSettings(); document.removeEventListener('keydown', escClose); }
+      });
+
+      // ── 标题 ──
       const title = document.createElement('div');
-      title.textContent = '⚙ 服务器设置';
-      Object.assign(title.style, { fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: t.accent });
+      title.textContent = '⚙ 设置';
+      Object.assign(title.style, {
+        fontSize: '17px', fontWeight: '700', marginBottom: '20px',
+        color: t.accent, letterSpacing: '0.5px',
+      });
       dialog.appendChild(title);
 
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = '262ao85kz470.vicp.fun:55535';
-      Object.assign(input.style, {
-        width: '100%', padding: '8px 10px', background: t.bg2, border: `1px solid ${t.accent}33`,
-        borderRadius: '6px', color: t.text, fontSize: '13px', outline: 'none', marginBottom: '8px',
-      });
-      input.addEventListener('focus', () => { input.style.borderColor = t.accent; });
-      input.addEventListener('blur', () => { input.style.borderColor = t.accent + '33'; });
-      chrome.storage.local.get(['cloud_api'], (s) => { input.value = s.cloud_api || '262ao85kz470.vicp.fun:55535'; });
-      dialog.appendChild(input);
+      // ═══════════════════ PIN 区 ═══════════════════
+      const pinSection = mkSection('📞 配对码 (PIN)', '11位手机号，用于配对和标识');
+      dialog.appendChild(pinSection);
 
-      const status = document.createElement('div');
-      Object.assign(status.style, { fontSize: '11px', marginBottom: '12px', minHeight: '16px' });
-      dialog.appendChild(status);
-
-      const btnRow = document.createElement('div');
-      Object.assign(btnRow.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
-
-      const testBtn = document.createElement('button');
-      testBtn.textContent = '测试连接';
-      Object.assign(testBtn.style, {
-        padding: '6px 12px', background: t.bg3, color: t.text, border: 'none',
-        borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
+      const pinRow = document.createElement('div');
+      Object.assign(pinRow.style, { display: 'flex', gap: '8px', marginBottom: '4px' });
+      const pinInput = document.createElement('input');
+      pinInput.type = 'tel';
+      pinInput.maxLength = 11;
+      pinInput.placeholder = '请输入11位手机号';
+      Object.assign(pinInput.style, {
+        flex: '1', padding: '10px 12px', fontSize: '15px', fontWeight: '500', letterSpacing: '1px',
+        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',
+        color: t.text, outline: 'none', textAlign: 'center',
       });
-      testBtn.addEventListener('click', () => {
-        let addr = input.value.trim();
-        if (!addr) { status.textContent = '请输入地址'; status.style.color = t.red; return; }
-        status.textContent = '测试中...'; status.style.color = t.text2;
-        // 自动补全 http://
-        if (!/^https?:\/\//i.test(addr)) addr = 'http://' + addr;
-        fetch(addr + '/health').then(r => r.json()).then(d => {
-          if (d.ok || d.service) { status.textContent = '✓ 连接成功'; status.style.color = '#2ECC71'; }
-          else { status.textContent = '✗ 服务器异常'; status.style.color = t.red; }
-        }).catch(() => { status.textContent = '✗ 无法连接'; status.style.color = t.red; });
-      });
-      btnRow.appendChild(testBtn);
+      pinInput.addEventListener('input', () => { pinInput.value = pinInput.value.replace(/\D/g, ''); });
+      pinInput.addEventListener('focus', () => { pinInput.style.borderColor = t.accent; });
+      pinInput.addEventListener('blur', () => { pinInput.style.borderColor = t.accent + '33'; });
 
-      const saveBtn = document.createElement('button');
-      saveBtn.textContent = '保存';
-      Object.assign(saveBtn.style, {
-        padding: '6px 14px', background: t.gradAccent, color: t.bg, border: 'none',
-        borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
-      });
-      saveBtn.addEventListener('click', () => {
-        let addr = input.value.trim();
-        // 保存：https:// 保留，http:// 去掉（默认协议），裸地址直接存
-        if (!/^https:\/\//i.test(addr)) {
-          addr = addr.replace(/^https?:\/\//i, '');
+      const pinSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
+      pinSaveBtn.addEventListener('click', () => {
+        const v = pinInput.value.trim();
+        if (!/^1[3-9]\d{9}$/.test(v)) {
+          pinStatus.textContent = '请输入正确的11位手机号'; pinStatus.style.color = t.red;
+          return;
         }
-        chrome.storage.local.set({ cloud_api: addr }, () => {
-          overlay.remove(); dialog.remove();
-          flashFloat('服务器已保存', true);
+        chrome.runtime.sendMessage({ type: 'setPin', pin: v }, (resp) => {
+          if (chrome.runtime.lastError || !resp?.success) {
+            pinStatus.textContent = '保存失败'; pinStatus.style.color = t.red;
+          } else {
+            pinStatus.textContent = '✓ 已保存'; pinStatus.style.color = '#2ECC71';
+            setTimeout(() => { pinStatus.textContent = ''; }, 2000);
+          }
         });
       });
-      btnRow.appendChild(saveBtn);
+      pinRow.appendChild(pinInput);
+      pinRow.appendChild(pinSaveBtn);
+      dialog.appendChild(pinRow);
 
-      dialog.appendChild(btnRow);
+      const pinStatus = document.createElement('div');
+      Object.assign(pinStatus.style, { fontSize: '11px', minHeight: '16px', marginBottom: '16px', paddingLeft: '4px', color: t.text2 });
+      dialog.appendChild(pinStatus);
+
+      // 加载当前 PIN
+      chrome.storage.local.get(['pin', 'self_phone'], (s) => {
+        pinInput.value = s.pin || s.self_phone || '';
+      });
+
+      // ═══════════════════ 云端服务器区 ═══════════════════
+      const srvSection = mkSection('☁ 云端服务器', '默认端口 35430，可保留为空走直连');
+      dialog.appendChild(srvSection);
+
+      const srvRow = document.createElement('div');
+      Object.assign(srvRow.style, { display: 'flex', gap: '8px', marginBottom: '4px' });
+      const srvInput = document.createElement('input');
+      srvInput.type = 'text';
+      srvInput.placeholder = '例: 262ao85kz470.vicp.fun:55535';
+      Object.assign(srvInput.style, {
+        flex: '1', padding: '10px 12px', fontSize: '14px',
+        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',
+        color: t.text, outline: 'none',
+      });
+      srvInput.addEventListener('focus', () => { srvInput.style.borderColor = t.accent; });
+      srvInput.addEventListener('blur', () => { srvInput.style.borderColor = t.accent + '33'; });
+
+      const srvSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
+      srvSaveBtn.addEventListener('click', () => {
+        chrome.storage.local.set({ cloud_api: srvInput.value.trim() }, () => {
+          srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = '#2ECC71';
+          setTimeout(() => { srvStatus.textContent = ''; }, 2000);
+        });
+      });
+      srvRow.appendChild(srvInput);
+      srvRow.appendChild(srvSaveBtn);
+      dialog.appendChild(srvRow);
+
+      const srvStatus = document.createElement('div');
+      Object.assign(srvStatus.style, { fontSize: '11px', minHeight: '16px', marginBottom: '8px', paddingLeft: '4px', color: t.text2 });
+      dialog.appendChild(srvStatus);
+
+      // 加载当前服务器
+      chrome.storage.local.get(['cloud_api'], (s) => {
+        srvInput.value = s.cloud_api || '';
+      });
+
+      // 按钮行: 测试连接 + 一键获取
+      const actionRow = document.createElement('div');
+      Object.assign(actionRow.style, { display: 'flex', gap: '8px', marginBottom: '8px' });
+
+      const testBtn = mkBtn('测试连接', t.bg3, t.text, `1px solid ${t.accent}33`);
+      testBtn.addEventListener('click', async () => {
+        let addr = srvInput.value.trim();
+        if (!addr) { srvStatus.textContent = '请输入服务器地址'; srvStatus.style.color = t.red; return; }
+        if (!/^https?:\/\//i.test(addr)) addr = 'http://' + addr;
+        srvStatus.textContent = '测试中...'; srvStatus.style.color = t.text2;
+        try {
+          const start = Date.now();
+          const r = await fetch(addr + '/health');
+          const d = await r.json();
+          const ms = Date.now() - start;
+          if (d.service) {
+            srvStatus.textContent = `✓ 连接成功 (${ms}ms)`; srvStatus.style.color = '#2ECC71';
+          } else {
+            srvStatus.textContent = '✗ 服务异常'; srvStatus.style.color = t.red;
+          }
+        } catch (_) {
+          srvStatus.textContent = '✗ 无法连接'; srvStatus.style.color = t.red;
+        }
+      });
+      actionRow.appendChild(testBtn);
+
+      const fetchBtn = mkBtn('一键获取', t.bg3, t.text, `1px solid ${t.accent}33`);
+      fetchBtn.addEventListener('click', async () => {
+        srvStatus.textContent = '获取中...'; srvStatus.style.color = t.text2;
+        const sources = [
+          'https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt',
+          'https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt'
+        ];
+        let servers = [];
+        for (const url of sources) {
+          try {
+            const ctrl = new AbortController();
+            setTimeout(() => ctrl.abort(), 8000);
+            const r = await fetch(url, { signal: ctrl.signal });
+            if (!r.ok) continue;
+            const text = await r.text();
+            for (let line of text.split('\n')) {
+              line = line.trim();
+              if (!line || line.startsWith('#') || /^\[.+\]$/.test(line)) continue;
+              line = line.replace(/新云端|老云端/g, '').replace(/^(https?|wss?):\/\//i, '').trim();
+              if (!line) continue;
+              if (!line.includes(':')) line += ':35430';
+              servers.push(line);
+            }
+            if (servers.length > 0) {
+              chrome.storage.local.set({ cloud_apis_fetched: servers });
+              srvInput.value = servers[0];
+              chrome.storage.local.set({ cloud_api: servers[0] });
+              srvStatus.textContent = `✓ 获取到 ${servers.length} 个服务器`; srvStatus.style.color = '#2ECC71';
+              return;
+            }
+          } catch (_) { continue; }
+        }
+        srvStatus.textContent = '获取失败，请检查网络'; srvStatus.style.color = t.red;
+      });
+      actionRow.appendChild(fetchBtn);
+      dialog.appendChild(actionRow);
+
+      // ── 关闭按钮 ──
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '关闭';
+      Object.assign(closeBtn.style, {
+        display: 'block', margin: '12px auto 0', padding: '8px 32px',
+        background: 'transparent', color: t.text2, border: `1px solid ${t.accent}33`,
+        borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+      });
+      closeBtn.addEventListener('click', closeSettings);
+      dialog.appendChild(closeBtn);
+
       document.body.appendChild(dialog);
-      setTimeout(() => input.focus(), 100);
+    }
+
+    // ── 辅助：区块标题 ──
+    function mkSection(icon, subtitle) {
+      const t = T();
+      const el = document.createElement('div');
+      Object.assign(el.style, { marginBottom: '10px' });
+      const head = document.createElement('div');
+      Object.assign(head.style, { fontSize: '13px', fontWeight: '600', color: t.accent, marginBottom: '2px' });
+      head.textContent = icon;
+      el.appendChild(head);
+      if (subtitle) {
+        const sub = document.createElement('div');
+        Object.assign(sub.style, { fontSize: '11px', color: t.text2 });
+        sub.textContent = subtitle;
+        el.appendChild(sub);
+      }
+      return el;
+    }
+
+    // ── 辅助：按钮 ──
+    function mkBtn(text, bg, color, border) {
+      const btn = document.createElement('button');
+      btn.textContent = text;
+      Object.assign(btn.style, {
+        padding: '10px 16px', fontSize: '13px', fontWeight: '600',
+        background: bg || 'transparent', color: color || '#fff',
+        border: border || 'none', borderRadius: '8px',
+        cursor: 'pointer', whiteSpace: 'nowrap', transition: 'opacity .15s',
+      });
+      btn.addEventListener('mouseenter', () => { btn.style.opacity = '0.8'; });
+      btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+      return btn;
     }
 
     function openDesktopApp() {
