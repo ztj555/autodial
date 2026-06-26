@@ -1,0 +1,236 @@
+# AutoDial 浏览器插件端技术文档
+
+> 基于实际代码 | MV3 Chrome 扩展 v4.0.0 | PIN 单一认证
+
+---
+
+## 一、项目结构
+
+```
+AutoDial-Extension/
+├── manifest.json           ← MV3 清单（host_permissions + content_scripts）
+├── background.js           ← Service Worker：双模路由 + PIN 管理 + 拨号
+├── content-script.js       ← 内容脚本：CRM 浮动按钮 + TreeWalker 号码扫描
+├── popup.html              ← 弹窗界面：云服务器 + PIN 配置
+├── popup.js                ← 弹窗逻辑：/health 测试 + /api/v1/status 查询
+├── wails-adapter.js        ← Wails API 适配（Go PC 端兼容）
+├── icon16/48/128.png       ← 扩展图标
+└── themes/                 ← CSS 主题文件
+```
+
+---
+
+## 二、manifest.json 关键配置
+
+```json
+{
+  "manifest_version": 3,
+  "version": "4.0.0",
+  "name": "AutoDial 一键拨号",
+  "description": "一键拨号 - CRM客户手机号自动拨打（PIN整合版）",
+  "host_permissions": [
+    "http://127.0.0.1:35432/*"
+  ],
+  "permissions": ["activeTab", "storage", "clipboardWrite"],
+  "content_scripts": [{
+    "matches": [
+      "*://*.zhudaicms.com/*",
+      "*://*.rxhcrm.com/*",
+      "*://*.rongxinhui.com/*"
+    ],
+    "js": ["content-script.js"],
+    "css": ["themes/dark-gold.css"],
+    "run_at": "document_idle"
+  }]
+}
+```
+
+**说明**：
+- `host_permissions` 声明 `127.0.0.1:35432` 使扩展可绕过 CORS 访问本地 PC 端
+- 内容脚本仅在三类 CRM 域名下注入，避免影响非目标页面
+
+---
+
+## 三、background.js — Service Worker
+
+### 3.1 双模路由
+
+```
+拨号请求
+  ├── 1. 检测 PC（localhost:35432，2s 超时）
+  │     ├── PC 在线 → HTTP 35432/dial → 完成
+  │     └── PC 不在线 → 步骤 2
+  └── 2. 云中继（配置的云端地址，REST API）
+        └── GET /api/v1/dial?number=xxx + X-AutoDial-PIN Header
+```
+
+**PC 检测缓存**：检测结果缓存，避免每次拨号都打 2s 超时探测。PC 缓存失效时自动重置。
+
+**PC_CONNECTED 反向兜底**：扩展以为 PC 不在线但云中继发现 PC 实际在线 → 返回 `PC_CONNECTED` 错误码 → 扩展刷新缓存切回本地。
+
+### 3.2 PIN 管理
+
+```
+getPin() 优先级：
+  1. 用户在 popup 中手动设置的 PIN（存储于 chrome.storage）
+  2. content-script.js 自动检测的 CRM 坐席手机号（selfPhoneDetected）
+  3. fallback：空字符串
+```
+
+无需登录、无需密码。打开 CRM 页面后 content-script 自动检测坐席号并存入 storage。
+
+### 3.3 拨号函数 dial(number)
+
+```javascript
+async function dial(number) {
+  const pin = await getPin();
+  if (!pin) return { ok: false, error: '未设置PIN' };
+
+  // 1. 优先尝试 PC 直连
+  if (await isPcAlive()) {
+    const resp = await fetch(`http://127.0.0.1:35432/dial?number=${encodeURIComponent(number)}`);
+    return await resp.json();
+  }
+
+  // 2. PC 不在线，走云端 REST API
+  const cloudServer = await getCloudServer();
+  const resp = await fetch(`${cloudServer}/api/v1/dial?number=${encodeURIComponent(number)}`, {
+    headers: { 'X-AutoDial-PIN': pin }
+  });
+  const result = await resp.json();
+
+  // 3. 如果云端返回 PC_CONNECTED，刷新 PC 缓存
+  if (result.code === 'PC_CONNECTED') {
+    await refreshPcCache();
+    return dial(number); // 重试走 PC 直连
+  }
+
+  return result;
+}
+```
+
+### 3.4 挂断函数 hangup()
+
+```javascript
+async function hangup() {
+  // 逻辑同 dial：优先 PC 直连，降级云端
+}
+```
+
+### 3.5 状态查询
+
+- `getInfo()`：查询 PC 状态 + 手机连接状态
+- `isPcAlive()`：2s 超时 `fetch('http://127.0.0.1:35432/')` → 缓存结果
+- `refreshPcCache()`：重置 PC 缓存，重新检测
+
+---
+
+## 四、content-script.js — 内容脚本
+
+### 4.1 核心功能
+
+| 功能 | 说明 |
+|------|------|
+| **号码检测** | TreeWalker 扫描页面文本节点，正则匹配手机号 |
+| **坐席号检测** | 扫描页面中的"坐席""工号""分机"等标签 → `selfPhoneDetected` |
+| **浮动拨号按钮** | 可拖拽的拨号按钮（36-100px 可缩放手柄） |
+| **右键菜单** | 主题切换、拨号、短信、PC 状态、PIN 显示 |
+| **挂断按钮** | 拨号后显示的可拖拽挂断按钮 |
+
+### 4.2 号码匹配正则
+
+```javascript
+// 中国大陆手机号：1[3-9]\d{9}
+// 固话：0\d{2,3}-?\d{7,8}
+// 400/800：400\d{7}|800\d{7}
+const PHONE_REGEX = /1[3-9]\d{9}|0\d{2,3}-?\d{7,8}|400\d{7}|800\d{7}/g;
+```
+
+### 4.3 8 套主题
+
+与 PC 端一致的 8 套主题，通过 CSS 文件提供：
+`dark-gold`, `cyber-frost`, `deep-space`, `cyberpunk`, `minimalist`, `forest-green`, `energetic-orange`, `ocean-blue`
+
+### 4.4 CRM 适配
+
+支持的 CRM 系统域名：
+- `zhudaicms.com` — 筑代 CRM
+- `rxhcrm.com` — 融信汇 CRM
+- `rongxinhui.com` — 融信汇（备用域名）
+
+当检测到 CRM 页面时自动注入浮动按钮，非 CRM 页面不注入。
+
+---
+
+## 五、popup.html / popup.js — 弹窗界面
+
+### 5.1 功能
+
+- **PIN 设置**：显示当前 PIN，支持手动修改（11 位手机号）
+- **云服务器配置**：输入云中继地址（如 `ws://xxx:35430`）
+- **连通性测试**：`GET /health` 测试云中继是否可达
+- **状态查询**：`GET /api/v1/status` 查询 PC/手机在线状态
+- **一键获取**：从 GitHub Gist / Gitee 拉取服务器列表
+
+### 5.2 配置存储
+
+所有配置通过 `chrome.storage.local` 持久化：
+```javascript
+{
+  pin: "13800138000",          // 手动设置的 PIN
+  selfPhone: "13800138000",    // CRM 自动检测的坐席号
+  cloudServer: "ws://xxx:35430",
+  cloudServers: ["ws://xxx:35430", "ws://yyy:35430"]
+}
+```
+
+---
+
+## 六、协议与端口
+
+| 端口 | 协议 | 用途 | Headers |
+|------|------|------|---------|
+| 35432 | HTTP | PC 直连拨号 | 无（localhost 无需认证） |
+| 35430 | HTTP REST | 云中继拨号 | `X-AutoDial-PIN: 13800138000` |
+| 35430 | WebSocket | 云中继实时通信 | 通过 `phone_hello`/`pc_hello` |
+
+---
+
+## 七、错误处理
+
+| 错误码 | 含义 | 用户提示 |
+|--------|------|---------|
+| `INVALID_PIN` | PIN 非 11 位数字 | "请检查配对码格式（11位手机号）" |
+| `PHONE_OFFLINE` | 手机未连接 | "手机未连接，请检查手机端" |
+| `PC_CONNECTED` | PC 在线 | 自动切回 localhost 直连（对用户透明） |
+| `DUPLICATE_DIAL` | 重复拨号 | 静默忽略 |
+| `RATE_LIMITED` | 频率限制 | "请求过于频繁，请稍后重试" |
+| `INVALID_NUMBER` | 号码不合法 | "无效的电话号码" |
+| 网络超时 | PC/云不可达 | 自动降级：PC 不可达 → 走云端 |
+
+---
+
+## 八、构建与安装
+
+### 开发模式
+
+```bash
+# Chrome → chrome://extensions/ → 开启"开发者模式" → "加载已解压的扩展程序"
+# 选择 AutoDial-Extension/ 目录
+```
+
+### 发布
+
+```bash
+# Chrome → chrome://extensions/ → "打包扩展程序"
+# 输出：.crx 文件 + .pem 私钥
+```
+
+---
+
+## 九、注意事项
+
+1. **MV3 Service Worker** 会在闲置 30s 后被浏览器终止，`background.js` 的状态需通过 `chrome.storage` 持久化
+2. **fetch 超时**：本地 `localhost` 端口关闭时 TCP 瞬间拒绝（无延迟），云端超时需要 AbortController（当前本地部署不受影响，部署公网前需处理）
+3. **CORS**：云中继的 REST API 不设 CORS（扩展通过 `host_permissions` 绕过），仅 `/health` 有 CORS
+4. **content-script 注入时机**：`run_at: "document_idle"` 确保 DOM 加载完成后再注入，避免 TreeWalker 扫描不完整

@@ -1,0 +1,1837 @@
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial</title>
+  <style>
+  :root {
+    --gold: #7C6FE0;
+    --gold-light: #9B8FFF;
+    --gold-dark: #5B4BC9;
+    --bg: #F3F0FF;
+    --bg2: #FFFFFF;
+    --bg3: #E8E2FC;
+    --text: #2D2649;
+    --text2: #6B6491;
+    --green: #2ECC71;
+    --red: #E74C3C;
+    --radius-sm: 5px;
+    --radius-md: 10px;
+    --radius-lg: 24px;
+    --shadow: none;
+    --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    --gradient-green: linear-gradient(135deg, #27AE60, #1E8449);
+    --gradient-red: linear-gradient(135deg, #C0392B, #96281B);
+    --glow-text: none;
+    --floatbar-bg: rgba(255, 255, 255, 0.85);
+    --floatbar-border: rgba(201, 168, 76, 0.25);
+    --floatbar-blur: blur(20px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-family);
+    overflow: hidden;
+    user-select: none;
+  }
+  .wrap {
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- 自定义标题栏 ---- */
+  .titlebar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--gold-dark);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    --wails-draggable: drag;
+    height: 36px;
+  }
+  .titlebar .logo {
+    padding-left: 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gold-light);
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 20px; height: 20px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+  .titlebar-btns {
+    display: flex;
+    margin-left: auto;
+    height: 100%;
+    --wails-draggable: no-drag;
+  }
+  .titlebar-btn {
+    width: 46px; height: 36px;
+    background: none; border: none;
+    color: var(--text2);
+    font-size: 10px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s;
+    --wails-draggable: no-drag;
+  }
+  .titlebar-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .titlebar-btn.close:hover { background: #C42B1C; color: white; }
+
+  /* ---- 状态栏 ---- */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--gold-dark);
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .chips {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+    justify-content: center;
+  }
+  .chip {
+    background: var(--bg);
+    border: 1px solid var(--gold-dark);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    text-align: center;
+  }
+  .chip .lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
+  .chip .val { font-size: 13px; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
+  .chip .val.ip { font-size: 12px; letter-spacing: 0.5px; }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+  }
+  .status-dot.on {
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 1.5s infinite;
+  }
+  .restart-icon {
+    margin-left: 8px; padding: 0 4px; font-size: 11px; cursor: pointer;
+    color: var(--text2); opacity: 0.5; transition: all 0.2s;
+    line-height: 1; display: inline; user-select: none;
+  }
+  .restart-icon:hover { opacity: 1; color: var(--gold); }
+  .restart-icon.spinning { animation: spin 0.8s linear infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+  .status-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+  .topmost-switch {
+    display: flex; align-items: center; gap: 4px;
+    cursor: pointer; user-select: none;
+    flex-shrink: 0;
+  }
+  .topmost-switch input { display: none; }
+  .topmost-switch .sw-track {
+    width: 28px; height: 14px;
+    background: var(--bg);
+    border-radius: 7px;
+    position: relative;
+    transition: background 0.2s;
+    border: 1px solid var(--text2);
+  }
+  .topmost-switch .sw-track::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text2);
+    transition: all 0.2s;
+  }
+  .topmost-switch input:checked + .sw-track {
+    background: var(--gold-dark);
+    border-color: var(--gold);
+  }
+  .topmost-switch input:checked + .sw-track::after {
+    left: 16px;
+    background: var(--gold-light);
+  }
+  .topmost-switch .sw-label { font-size: 10px; color: var(--text2); }
+
+  /* ---- 手机选择器 ---- */
+  .phone-selector {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--gold-dark);
+    padding: 6px 14px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .phone-selector.show { display: flex; }
+  .phone-list {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .phone-tag {
+    background: var(--bg);
+    border: 1px solid var(--bg3);
+    border-radius: var(--radius-md);
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .phone-tag:hover { border-color: var(--gold-dark); color: var(--text); background: var(--bg3); }
+  .phone-tag.active {
+    border-color: var(--gold);
+    color: var(--gold-light);
+    background: rgba(201,168,76,0.1);
+    box-shadow: 0 0 6px rgba(201,168,76,0.15);
+  }
+  .phone-tag .phone-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+  .phone-tag .phone-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .phone-tag .phone-note-hint {
+    font-size: 9px;
+    color: var(--text2);
+    margin-left: 2px;
+  }
+  .phone-tag.active .phone-note-hint { color: var(--gold); }
+  .phone-reconnect-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: auto; padding: 2px 8px;
+    background: transparent; border: 1px solid var(--bg3); border-radius: var(--radius-sm);
+    color: var(--text2); font-size: 10px; cursor: pointer;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .phone-reconnect-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.08); }
+  .phone-reconnect-btn.spinning { color: var(--gold); border-color: var(--gold); pointer-events: none; }
+  .phone-rename-input {
+    background: var(--bg);
+    border: 1px solid var(--gold);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--text);
+    outline: none;
+    width: 120px;
+  }
+
+  /* ---- 连接成功横幅 ---- */
+  .banner {
+    display: none;
+    background: rgba(46,204,113,0.12);
+    border-bottom: 1px solid var(--green);
+    padding: 6px 14px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+  .banner.show { display: block; }
+
+  /* ---- 主内容区 ---- */
+  .body {
+    flex: 1;
+    padding: 8px 12px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .body::-webkit-scrollbar { width: 3px; }
+  .body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+
+  /* 号码输入框 */
+  .number-box {
+    background: var(--bg2);
+    border: 2px solid var(--gold-dark);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+  .number-box:focus-within { border-color: var(--gold); }
+  .number-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .number-lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
+  .clip-hint { font-size: 9px; color: var(--gold); }
+  .clip-hint.flash { animation: flash 0.4s ease; }
+  @keyframes flash { 50%{ color: var(--gold-light); } }
+  .number-input {
+    background: none; border: none; outline: none;
+    font-size: 24px; font-weight: 700;
+    color: var(--text); width: 100%;
+    letter-spacing: 3px; caret-color: var(--gold);
+  }
+  .number-input::placeholder { color: var(--text2); font-size: 14px; font-weight: 400; letter-spacing: 1px; }
+  .number-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .btn-sm {
+    background: none;
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-clear { border: 1px solid var(--bg3); color: var(--text2); }
+  .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
+  /* 拨号盘按钮样式（布局定义在下方） */
+  .dial-btn {
+    background: var(--bg2);
+    border: 1px solid var(--bg3);
+    border-radius: var(--radius-md);
+    padding: 7px 0;
+    cursor: pointer;
+    transition: all 0.12s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0px;
+  }
+  .dial-btn:hover { background: var(--bg3); border-color: var(--gold-dark); }
+  .dial-btn:active { transform: scale(0.93); background: rgba(201,168,76,0.1); border-color: var(--gold); }
+  .dial-btn .num { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1; }
+  .dial-btn .sub { font-size: 7px; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; }
+  .dial-btn.del .num { font-size: 16px; color: var(--red); }
+
+  /* 操作按钮 */
+  .action-row { display: flex; gap: 6px; flex-shrink: 0; }
+  .call-btn {
+    flex: 1;
+    padding: 10px;
+    background: var(--gradient-green);
+    border: none; border-radius: var(--radius-md);
+    color: white; font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    letter-spacing: 1px;
+  }
+  .call-btn:hover:not(:disabled) { background: var(--gradient-green); filter: brightness(1.15); box-shadow: 0 6px 18px rgba(39,174,96,0.35); }
+  .call-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
+  .hangup-btn {
+    flex: 1;
+    padding: 10px;
+    background: var(--gradient-red);
+    border: none; border-radius: var(--radius-md);
+    color: white; font-size: 16px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    letter-spacing: 1px;
+  }
+  .hangup-btn:hover:not(:disabled) { background: var(--gradient-red); filter: brightness(1.15); }
+  .hangup-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
+
+  /* 发短信按钮 */
+  .sms-row { flex-shrink: 0; }
+  .sms-btn {
+    width: 100%;
+    padding: 8px;
+    background: none;
+    border: 1px dashed var(--gold-dark);
+    border-radius: var(--radius-md);
+    color: var(--gold);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+  .sms-btn:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); }
+
+  /* 主界面快捷短信模板 */
+  .index-tpl-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+  }
+  .index-tpl-tag {
+    background: var(--bg2);
+    border: 1px solid var(--bg3);
+    border-radius: var(--radius-md);
+    padding: 4px 9px;
+    font-size: 11px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .index-tpl-tag:hover { border-color: var(--gold-dark); color: var(--gold); background: rgba(201,168,76,0.07); }
+  .index-tpl-tag:active { transform: scale(0.94); }
+
+  /* ---- 日志区（折叠） ---- */
+  .log-section { flex-shrink: 0; }
+  .log-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: var(--bg2);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text2);
+    border: 1px solid var(--bg3);
+    transition: border-color 0.2s;
+  }
+  .log-toggle:hover { border-color: var(--gold-dark); }
+  .log-toggle .arrow { transition: transform 0.2s; font-size: 10px; }
+  .log-toggle.open .arrow { transform: rotate(180deg); }
+  .log-body {
+    display: none;
+    max-height: 130px;
+    overflow-y: auto;
+    padding: 6px 8px;
+    gap: 4px;
+    flex-direction: column;
+    background: var(--bg2);
+    border-radius: 0 0 8px 8px;
+    border: 1px solid var(--bg3);
+    border-top: none;
+    margin-top: -1px;
+  }
+  .log-body.open { display: flex; }
+  .log-body::-webkit-scrollbar { width: 3px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .log-entry {
+    display: flex; align-items: baseline; gap: 6px;
+    font-size: 11px; padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    border-left: 2px solid var(--bg3);
+    animation: fadein 0.2s;
+  }
+  @keyframes fadein { from{opacity:0;} to{opacity:1;} }
+  .log-entry.success { border-left-color: var(--green); }
+  .log-entry.error   { border-left-color: var(--red);   }
+  .log-entry.info    { border-left-color: var(--gold);  }
+  .log-entry .lt { color: var(--text2); flex-shrink: 0; font-size: 10px; }
+  .log-entry .lm { color: var(--text); }
+
+  /* ---- 连接状态优化（方案3） ---- */
+  .status-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 14px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--gold-dark);
+    flex-shrink: 0;
+  }
+  .status-display.hidden { display: none; }
+  .status-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 3px solid var(--red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin-bottom: 10px;
+    transition: all 0.3s;
+  }
+  .status-icon.connected {
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
+    animation: pulse 1.5s infinite;
+  }
+  .status-text-large {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .status-subtext {
+    font-size: 11px;
+    color: var(--text2);
+  }
+  
+  /* ---- 拨号盘切换按钮（方案1） ---- */
+  .dialpad-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--gold-dark);
+    border-radius: var(--radius-md);
+    color: var(--gold);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .dialpad-toggle:hover {
+    background: rgba(201, 168, 76, 0.1);
+    border-color: var(--gold);
+  }
+  .dialpad-toggle .arrow {
+    transition: transform 0.2s;
+  }
+  .dialpad-toggle.expanded .arrow {
+    transform: rotate(180deg);
+  }
+  
+  /* ---- 拨号盘（方案1：默认隐藏） ---- */
+  .dialpad {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .dialpad.show {
+    display: grid;
+  }
+  .toast {
+    position: fixed; bottom: 12px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg3); border: 1px solid var(--gold-dark);
+    border-radius: var(--radius-md); padding: 8px 18px;
+    font-size: 12px; color: var(--text);
+    transition: transform 0.25s; z-index: 999; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error   { border-color: var(--red);   color: var(--red);   }
+</style>
+<script src="themes/theme-data.js"></script>
+<script src="js/theme.js"></script>
+</head>
+<body>
+<!-- Wails 适配: 完整设置面板 (对齐原版 settings.html) -->
+<div id="settingsOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;flex-direction:column;">
+  <div style="background:var(--bg2);border-bottom:1px solid var(--gold-dark);display:flex;align-items:center;padding:0 14px;height:36px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:700;color:var(--gold-light);letter-spacing:2px;">&#x2699; 设置</span>
+    <button onclick="closeSettings()" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px;" id="settingsContent">
+    <!-- 窗口行为 -->
+    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">窗口行为</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div><div style="font-size:14px;font-weight:600;">关闭按钮行为</div><div style="font-size:11px;color:var(--text2);">点击标题栏 X 时执行的操作</div></div>
+      <div style="display:flex;gap:5px;" id="setCloseAction">
+        <span class="set-opt active" data-val="minimize" onclick="setSelect('closeAction','minimize')">最小化</span>
+        <span class="set-opt" data-val="exit" onclick="setSelect('closeAction','exit')">退出</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div><div style="font-size:14px;font-weight:600;">托盘图标退出</div><div style="font-size:11px;color:var(--text2);">右键托盘退出时直接退出程序</div></div>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:8px;"><input type="checkbox" id="setTrayExit" checked onchange="settingChanged()" style="width:16px;height:16px;accent-color:var(--gold);"></label>
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <!-- 启动 -->
+    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">启动</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div><div style="font-size:14px;font-weight:600;">开机自启动</div><div style="font-size:11px;color:var(--text2);">Windows 启动时自动运行 AutoDial</div></div>
+      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setAutoStart" onchange="settingChanged()"></label>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div><div style="font-size:14px;font-weight:600;">隐藏界面启动</div><div style="font-size:11px;color:var(--text2);">开机自启动时不显示主窗口，仅托盘运行</div></div>
+      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setSilentStart" onchange="settingChanged()"></label>
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <!-- 云中转 -->
+    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">云中转</div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div><div style="font-size:14px;font-weight:600;">启用云中转</div><div style="font-size:11px;color:var(--text2);">手机不在同一局域网时通过云服务器中转</div></div>
+      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setCloudEnabled" onchange="cloudToggleChanged()"></label>
+    </div>
+
+    <div id="cloudSection" style="padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);opacity:0.5;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:2px;">云服务器管理</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">支持多个云服务器，自动遍历连接，成功即停</div>
+      <div id="cloudSummary" style="font-size:12px;color:var(--gold-light);margin-bottom:4px;">未配置服务器</div>
+      <div id="cloudStatus" style="font-size:11px;color:var(--text2);margin-bottom:8px;"></div>
+      <div id="cloudServerList" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="addCloudServer()" style="flex:1;padding:8px;background:var(--gold-dark);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;">+ 添加服务器</button>
+        <button onclick="testCloudServers()" style="padding:8px 14px;background:var(--bg3);color:var(--text);border:none;border-radius:5px;cursor:pointer;font-size:13px;">测试全部</button>
+        <button onclick="fetchCloudServers()" style="padding:8px 14px;background:var(--gold-dark);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;">获取列表</button>
+      </div>
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <!-- 外观 -->
+    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">外观</div>
+
+    <div style="padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
+      <div style="font-size:14px;font-weight:600;margin-bottom:2px;">主题</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">选择界面风格和配色方案</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;" id="themeGrid"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg3);">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">显示模式</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;" id="modeSelect">
+          <span class="set-opt active" data-val="dark" onclick="selectMode('dark')">🌑 暗夜</span>
+          <span class="set-opt" data-val="dusk" onclick="selectMode('dusk')">🌆 黄昏</span>
+          <span class="set-opt" data-val="dawn" onclick="selectMode('dawn')">🌅 朝阳</span>
+          <span class="set-opt" data-val="twilight" onclick="selectMode('twilight')">🌇 暮光</span>
+          <span class="set-opt" data-val="warm" onclick="selectMode('warm')">🌤 暖光</span>
+          <span class="set-opt" data-val="mist" onclick="selectMode('mist')">🌥 晨雾</span>
+          <span class="set-opt" data-val="light" onclick="selectMode('light')">☀ 亮白</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="saveAllSettings()" style="flex:1;padding:12px;background:var(--gold);color:var(--bg);border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;">💾 保存设置</button>
+      <button onclick="closeSettings()" style="padding:12px 24px;background:var(--bg3);color:var(--text2);border:none;border-radius:8px;cursor:pointer;font-size:15px;">取消</button>
+    </div>
+  </div>
+  <div style="text-align:center;padding:10px;font-size:10px;color:var(--text2);flex-shrink:0;">AutoDial v3.4</div>
+</div>
+
+<style>
+.set-opt { padding:4px 10px; background:var(--bg); border:1px solid var(--bg3); border-radius:5px; font-size:11px; color:var(--text2); cursor:pointer; white-space:nowrap; }
+.set-opt:hover { border-color:var(--gold-dark); color:var(--text); }
+.set-opt.active { background:var(--gold-dark); border-color:var(--gold); color:var(--gold-light); font-weight:600; }
+input[type=checkbox]:checked + .sw-track { background:var(--gold-dark); border-color:var(--gold); }
+input[type=checkbox]:checked + .sw-track i { display:none; }
+.sw-track { transition:background 0.2s,border-color 0.2s; }
+.cloud-server-row { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid var(--bg3); gap:6px; font-size:12px; }
+.cloud-server-row .cs-addr { flex:1; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cloud-server-row .cs-del { cursor:pointer; color:var(--red); font-size:14px; }
+.cloud-server-row .cs-up { cursor:pointer; color:var(--text2); font-size:14px; }
+.cloud-server-row .cs-conn { padding:3px 8px; background:var(--gold-dark); color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:10px; }
+/* SMS Overlay */
+#smsOverlay { position:fixed; inset:0; z-index:9998; background:var(--bg); display:none; flex-direction:column; }
+#smsOverlay.show { display:flex !important; }
+.sms-ov-header { background:var(--bg2); border-bottom:1px solid var(--gold-dark); display:flex; align-items:center; padding:0 14px; height:36px; flex-shrink:0; }
+.sms-ov-header span { font-size:13px; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
+.sms-ov-body { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.sms-ov-label { font-size:11px; color:var(--text2); letter-spacing:1px; }
+.sms-ov-input { width:100%; padding:10px 12px; background:var(--bg2); border:1px solid var(--bg3); border-radius:8px; color:var(--gold); font-size:16px; outline:none; transition:border-color 0.2s; }
+.sms-ov-input:focus { border-color:var(--gold); }
+.sms-ov-textarea { width:100%; height:140px; padding:10px 12px; background:var(--bg2); border:1px solid var(--bg3); border-radius:8px; color:var(--text); font-size:14px; outline:none; resize:none; transition:border-color 0.2s; font-family:var(--font-family); }
+.sms-ov-textarea:focus { border-color:var(--gold); }
+.sms-ov-counter { text-align:right; font-size:11px; color:var(--text2); margin-top:-8px; }
+.sms-ov-counter.warn { color:var(--red); }
+.sms-ov-tpl-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+.sms-ov-tpl-tag { padding:4px 10px; background:var(--bg3); border:1px solid var(--bg3); border-radius:12px; font-size:11px; color:var(--text2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.sms-ov-tpl-tag:hover { border-color:var(--gold-dark); color:var(--gold); }
+.sms-ov-send { width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer; font-size:14px; font-weight:600; letter-spacing:1px; transition:all 0.2s; }
+.sms-ov-send:not(:disabled) { background:linear-gradient(135deg,#C9A84C,#8B6914); color:#fff; }
+.sms-ov-send:not(:disabled):hover { background:linear-gradient(135deg,#F0C040,#C9A84C); }
+.sms-ov-send:disabled { background:var(--bg3); color:var(--text2); cursor:not-allowed; }
+.sms-ov-send.sending { opacity:0.7; }
+.sms-ov-mgr-link { font-size:11px; color:var(--gold); cursor:pointer; text-decoration:underline; }
+/* Template Manager Modal */
+#tplManagerOverlay { position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; }
+#tplManagerOverlay.show { display:flex !important; }
+.tpl-mgr-box { background:var(--bg2); border:1px solid var(--gold-dark); border-radius:12px; padding:20px; width:360px; max-height:480px; display:flex; flex-direction:column; gap:10px; }
+.tpl-mgr-box h3 { color:var(--gold-light); font-size:14px; margin:0; }
+.tpl-mgr-list { flex:1; overflow-y:auto; max-height:280px; }
+.tpl-mgr-item { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg3); font-size:12px; }
+.tpl-mgr-item .tpl-mgr-name { color:var(--gold); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.tpl-mgr-item .tpl-mgr-del { color:var(--red); cursor:pointer; font-size:14px; margin-left:8px; }
+.tpl-mgr-add { display:flex; gap:6px; }
+.tpl-mgr-add input { flex:1; padding:6px 8px; background:var(--bg); border:1px solid var(--bg3); border-radius:5px; color:var(--text); font-size:12px; outline:none; }
+.tpl-mgr-add input:focus { border-color:var(--gold); }
+.tpl-mgr-add button { padding:6px 12px; background:var(--gold-dark); border:none; border-radius:5px; color:#fff; cursor:pointer; font-size:12px; }
+.tpl-mgr-close { align-self:flex-end; padding:6px 14px; background:var(--bg3); border:none; border-radius:5px; color:var(--text2); cursor:pointer; font-size:12px; }
+</style>
+<div class="wrap">
+  <!-- 自定义标题栏 -->
+  <div class="titlebar">
+    <div class="logo"><div class="logo-icon">&#x1F4DE;</div>AutoDial</div>
+    <div class="titlebar-btns">
+      <button class="titlebar-btn" id="btnSettings" title="设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
+      <button class="titlebar-btn" id="btnMinimize" title="最小化"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></button>
+      <button class="titlebar-btn close" id="btnClose" title="关闭"><svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="header">
+    <div class="chips">
+      <div class="chip"><div class="lbl">IP</div><div class="val ip" id="localIP">&#x2026;</div></div>
+      <div class="chip"><div class="lbl">配对码</div><div class="val" id="pinCode">----</div></div>
+    </div>
+    <div class="status-dot" id="statusDot"></div>
+    <div class="status-text" id="statusText">等待连接</div>
+    <span class="restart-icon" id="restartCloudIcon" title="重连云端">☁</span>
+    <span class="restart-icon" id="restartAppIcon" title="重启软件">⟳</span>
+    <label class="topmost-switch" title="窗口置顶">
+      <input type="checkbox" id="topmostToggle">
+      <span class="sw-track"></span>
+      <span class="sw-label">置顶</span>
+    </label>
+  </div>
+
+  <div class="status-display" id="statusDisplay">
+    <div class="status-icon" id="statusIcon">📵</div>
+    <div class="status-text-large" id="statusTextLarge">等待连接</div>
+    <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
+  </div>
+
+  <div class="banner" id="banner">&#x2705; 手机已连接，可以拨号</div>
+
+  <!-- 多手机选择器 -->
+  <div class="phone-selector" id="phoneSelector">
+    <div class="phone-list" id="phoneList"></div>
+  </div>
+
+  <div class="body">
+    <div class="number-box">
+      <div class="number-row">
+        <span class="number-lbl">号码</span>
+        <span class="clip-hint" id="clipHint">&#x1F4CB; 已跟随剪贴板</span>
+      </div>
+      <input type="text" class="number-input" id="numberInput"
+             placeholder="复制号码自动出现&#x2026;" maxlength="20"
+             inputmode="tel" autocomplete="off">
+      <div class="number-actions">
+        <button class="btn-sm btn-clear" id="btnClear">清除</button>
+      </div>
+    </div>
+
+    <div class="dialpad-toggle" id="dialpadToggle">
+      <span>&#x1F4DE; 拨号盘</span>
+      <span class="arrow">&#x25BC;</span>
+    </div>
+
+    <div class="dialpad" id="dialpad">
+      <button class="dial-btn" data-key="1"><span class="num">1</span></button>
+      <button class="dial-btn" data-key="2"><span class="num">2</span><span class="sub">ABC</span></button>
+      <button class="dial-btn" data-key="3"><span class="num">3</span><span class="sub">DEF</span></button>
+      <button class="dial-btn" data-key="4"><span class="num">4</span><span class="sub">GHI</span></button>
+      <button class="dial-btn" data-key="5"><span class="num">5</span><span class="sub">JKL</span></button>
+      <button class="dial-btn" data-key="6"><span class="num">6</span><span class="sub">MNO</span></button>
+      <button class="dial-btn" data-key="7"><span class="num">7</span><span class="sub">PQRS</span></button>
+      <button class="dial-btn" data-key="8"><span class="num">8</span><span class="sub">TUV</span></button>
+      <button class="dial-btn" data-key="9"><span class="num">9</span><span class="sub">WXYZ</span></button>
+      <button class="dial-btn" data-key="*"><span class="num">&#x2731;</span></button>
+      <button class="dial-btn" data-key="0"><span class="num">0</span><span class="sub">+</span></button>
+      <button class="dial-btn del" data-key="del"><span class="num">&#x232B;</span></button>
+    </div>
+
+    <div class="action-row">
+      <button class="call-btn" id="callBtn" disabled>&#x1F4DE; 拨号</button>
+      <button class="hangup-btn" id="hangupBtn" disabled>&#x1F4F5; 挂断</button>
+    </div>
+    <div class="sms-row">
+      <button class="sms-btn" id="smsBtn">&#x1F4AC; 发短信</button>
+      <div class="index-tpl-list" id="indexTplList"></div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-toggle" id="logToggle">
+        <span>&#x1F4DD; 日志</span>
+        <span class="arrow">&#x25BC;</span>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* window.api 通过 preload.js contextBridge 注入，不能再用 const api 声明（会冲突） */
+
+let isConnected = false;
+let lastDialPin = null;   // v6: 上一次拨号的手机 PIN（重连优先级最高）
+let activePin = null;     // v6: 当前活跃手机 PIN
+let lastClipboard = '';
+let clipboardTimer = null;
+let logOpen = false;
+let currentPhones = [];  // 当前手机列表
+let currentActiveId = null;  // 当前活跃手机ID
+
+// ==================== 标题栏按钮 ====================
+document.getElementById('btnSettings').addEventListener('click', () => {
+  openSettings();
+});
+
+// 配对码点击修改 PIN
+document.getElementById('pinCode').addEventListener('click', function() {
+  var newPin = prompt('输入坐席手机号（11位）作为配对码:\n\n当前配对码: ' + (document.getElementById('pinCode').textContent), '');
+  if (newPin && newPin.trim()) {
+    var pin = newPin.trim();
+    if (window.go && window.go.main && window.go.main.App) {
+      window.go.main.App.SetPin(pin).then(function() {
+        document.getElementById('pinCode').textContent = pin;
+        addLog('info', '配对码已设为: ' + pin);
+      }).catch(function(e) {
+        addLog('error', '设置失败: ' + e.message);
+      });
+    }
+  }
+});
+
+// 设置面板开关
+function openSettings() {
+  document.getElementById('settingsOverlay').style.display = 'flex';
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').style.display = 'none';
+}
+document.getElementById('pinCode').style.cursor = 'pointer';
+document.getElementById('pinCode').title = '点击修改配对码';
+document.getElementById('btnMinimize').addEventListener('click', () => {
+  window.api.send('window-control', 'minimize');
+});
+document.getElementById('btnClose').addEventListener('click', () => {
+  window.api.send('window-control', 'close');
+});
+
+// ==================== 置顶开关 ====================
+document.getElementById('topmostToggle').addEventListener('change', function() {
+  window.api.send('set-topmost', this.checked);
+});
+
+// ==================== 拨号盘事件 ====================
+document.querySelectorAll('.dial-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.getAttribute('data-key');
+    if (key === 'del') {
+      deleteLast();
+    } else {
+      pressKey(key);
+    }
+  });
+});
+
+document.getElementById('btnClear').addEventListener('click', clearNumber);
+document.getElementById('callBtn').addEventListener('click', dial);
+document.getElementById('hangupBtn').addEventListener('click', hangup);
+document.getElementById('logToggle').addEventListener('click', toggleLog);
+// ==================== 拨号盘展开/收起 ====================
+document.getElementById('dialpadToggle').addEventListener('click', () => {
+  const toggle = document.getElementById('dialpadToggle');
+  const pad = document.getElementById('dialpad');
+  const isOpen = pad.classList.toggle('show');
+  toggle.classList.toggle('expanded', isOpen);
+});
+
+document.getElementById('smsBtn').addEventListener('click', () => {
+  const number = document.getElementById('numberInput').value.trim().replace(/\s/g, '');
+  openSmsOverlay(number);
+});
+
+// ==================== 按钮状态文字 ====================
+function updateCallBtnText() {
+  const btn = document.getElementById('callBtn');
+  btn.style.pointerEvents = '';  // v6: 始终恢复可点击性
+  if (btn.disabled) {
+    btn.textContent = '\uD83D\uDD0D 请输入号码';
+  } else if (!isConnected) {
+    // v6: 未连接 → 重连按钮
+    btn.textContent = '\uD83D\uDD04 重连手机';
+  } else {
+    btn.innerHTML = '\uD83D\uDCDE \u62E8\u53F7';
+  }
+}
+function updateHangupBtnText() {
+  const btn = document.getElementById('hangupBtn');
+  if (btn.disabled) {
+    btn.textContent = '\uD83D\uDCF1 请连接手机';
+  } else {
+    btn.innerHTML = '\uD83D\uDD0E \u6302\u65AD';
+  }
+}
+const callBtn = document.getElementById('callBtn');
+const hangupBtn = document.getElementById('hangupBtn');
+new MutationObserver(updateCallBtnText).observe(callBtn, { attributes: true, attributeFilter: ['disabled'] });
+new MutationObserver(updateHangupBtnText).observe(hangupBtn, { attributes: true, attributeFilter: ['disabled'] });
+updateCallBtnText();
+updateHangupBtnText();
+
+// 输入框变化时更新拨打按钮 disabled 状态
+document.getElementById('numberInput').addEventListener('input', function() {
+  // v6: 未连接时不禁用，作为重连按钮使用
+  document.getElementById('callBtn').disabled = isConnected && !this.value.trim();
+  updateCallBtnText();
+});
+
+// ==================== 初始化 ====================
+async function init() {
+  // 重试拿初始信息，最多5次
+  let info = null;
+  for (let i = 0; i < 5; i++) {
+    try {
+      info = await window.api.invoke('get-info');
+      break;
+    } catch (e) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+  if (info) {
+    document.getElementById('localIP').textContent = info.ip || '--';
+    document.getElementById('pinCode').textContent = info.pin || '----';
+    if (info.connected) setPhoneConnected(true, null);
+    if (info.firewall === 'warning') addLog('error', '防火墙可能拦截连接，请以管理员运行');
+  } else {
+    document.getElementById('localIP').textContent = '获取失败';
+  }
+
+  pollClipboard();
+
+  // v6修复: 收集所有IPC事件监听器的清理函数，窗口重载时统一清理
+  const _ipcCleanupFns = [];
+
+  // IPC 事件监听
+  _ipcCleanupFns.push(window.api.on('status-update', (data) => setPhoneConnected(data.connected, data.phoneIP)));
+  _ipcCleanupFns.push(window.api.on('phones-update', (data) => {
+    activePin = data.activeId;  // v6: 同步活跃手机 PIN
+    updatePhoneSelector(data.phones, data.activeId);
+    updateCallBtnText();  // v6: 手机列表变化时恢复按钮状态（防止卡"正在唤醒"）
+  }));
+  // v6: 强制重连结果
+  _ipcCleanupFns.push(window.api.on('force-reconnect-result', (data) => {
+    // 恢复 phone-tag 上的小按钮
+    const list = document.getElementById('phoneList');
+    list.querySelectorAll('.phone-reconnect-btn').forEach(btn => {
+      btn.classList.remove('spinning');
+      btn.textContent = '🔄';
+    });
+    // 恢复主拨号按钮
+    const callBtn = document.getElementById('callBtn');
+    callBtn.style.pointerEvents = '';
+    updateCallBtnText();
+    if (!data.success) {
+      showToast(data.error || '唤醒手机失败', 'error');
+    }
+  }));
+  _ipcCleanupFns.push(window.api.on('info-push', (data) => {
+    document.getElementById('localIP').textContent = data.ip || '--';
+    document.getElementById('pinCode').textContent = data.pin || '----';
+  }));
+  _ipcCleanupFns.push(window.api.on('dial-result', (data) => {
+    addLog(data.status === 'ok' ? 'success' : 'error', data.number + ' ' + (data.status === 'ok' ? '&#x2713;' : '&#x2717;'));
+  }));
+  _ipcCleanupFns.push(window.api.on('dial-sent', (data) => {
+    addLog('success', '\uD83D\uDCDE 已发送: ' + data.number);
+    // v6: 记录拨号时的活跃手机 PIN，用于重连优先
+    if (data.phoneId) lastDialPin = data.phoneId;
+  }));
+  // v6: 拨号请求触发自动唤醒时的反馈
+  _ipcCleanupFns.push(window.api.on('dial-waking', (data) => {
+    addLog('info', '\u23F3 正在唤醒手机(PIN=' + data.pin + ')...拨号排队中');
+    if (data.number) showToast('正在唤醒手机，将自动拨号 ' + data.number);
+  }));
+  // v6: 排队拨号超时
+  _ipcCleanupFns.push(window.api.on('dial-timeout', (data) => {
+    addLog('error', '\u274C 拨号超时: ' + data.number + ' (30s未响应)');
+    showToast('拨号超时，正在尝试云端恢复...', 'error');
+    updateCallBtnText();
+    // v6: 拨号超时自动触发云端轻量恢复
+    window.api.send('dial-failed-trigger-recovery');
+  }));
+
+  // v6: 重启图标点击
+  document.getElementById('restartCloudIcon').addEventListener('click', () => {
+    const icon = document.getElementById('restartCloudIcon');
+    icon.classList.add('spinning');
+    window.api.send('restart-cloud');
+    setTimeout(() => icon.classList.remove('spinning'), 3000);
+    addLog('info', '云端重连已触发');
+  });
+  document.getElementById('restartAppIcon').addEventListener('click', () => {
+    window.api.send('restart-app');
+  });
+  _ipcCleanupFns.push(window.api.on('hangup-sent', () => {
+    addLog('info', '已发送挂断');
+  }));
+  _ipcCleanupFns.push(window.api.on('server-log', (data) => {
+    const lvl = data.level === 'error' ? 'error' : data.level === 'warn' ? 'error' : 'info';
+    addLog(lvl, '&#x1F5A5; ' + data.text);
+  }));
+  _ipcCleanupFns.push(window.api.on('error', (data) => {
+    showToast(data.message, 'error');
+    addLog('error', data.message);
+  }));
+
+  // v6修复: 窗口卸载时清理所有IPC监听器，防止内存泄漏
+  window.addEventListener('beforeunload', () => {
+    _ipcCleanupFns.forEach(fn => { try { fn(); } catch(e) {} });
+  });
+}
+
+function setPhoneConnected(connected, phoneIP) {
+  isConnected = connected;
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  const banner = document.getElementById('banner');
+  const callBtn = document.getElementById('callBtn');
+  const hasNumber = document.getElementById('numberInput').value.trim();
+  const statusIcon = document.getElementById('statusIcon');
+  const statusTextLarge = document.getElementById('statusTextLarge');
+  const statusSubtext = document.getElementById('statusSubtext');
+  
+  callBtn.disabled = connected && !hasNumber;  // v6: 未连接时不禁用(重连按钮)
+  document.getElementById('hangupBtn').disabled = !connected;
+  
+  if (connected) {
+    // 方案3：优化连接状态显示
+    statusIcon.textContent = '✅';
+    statusIcon.className = 'status-icon connected';
+    statusTextLarge.textContent = '手机已连接';
+    statusSubtext.textContent = phoneIP ? '手机IP: ' + phoneIP : '可以拨号了';
+    
+    dot.className = 'status-dot on';
+    txt.textContent = phoneIP ? phoneIP : '已连接';
+    banner.className = 'banner show';
+  } else {
+    // 方案3：优化连接状态显示
+    statusIcon.textContent = '📵';
+    statusIcon.className = 'status-icon';
+    statusTextLarge.textContent = '等待连接';
+    statusSubtext.textContent = '请确保手机和电脑在同一局域网';
+    
+    dot.className = 'status-dot';
+    txt.textContent = '等待连接';
+    banner.className = 'banner';
+  }
+}
+
+// ==================== 多手机选择器 ====================
+function updatePhoneSelector(phones, activeId) {
+  currentPhones = phones || [];
+  currentActiveId = activeId;
+  const selector = document.getElementById('phoneSelector');
+  const list = document.getElementById('phoneList');
+  const banner = document.getElementById('banner');
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+
+  if (currentPhones.length === 0) {
+    selector.className = 'phone-selector';
+    isConnected = false;
+    dot.className = 'status-dot';
+    txt.textContent = '等待连接';
+    banner.className = 'banner';
+    // v6: 未连接时不禁用拨号按钮，作为重连按钮
+    document.getElementById('callBtn').disabled = false;
+    document.getElementById('hangupBtn').disabled = true;
+    updateCallBtnText();
+    updateHangupBtnText();
+    return;
+  }
+
+  isConnected = true;
+  dot.className = 'status-dot on';
+  selector.className = 'phone-selector show';
+
+  // 多手机时 banner 显示数量
+  if (currentPhones.length > 1) {
+    banner.className = 'banner show';
+    banner.innerHTML = '&#x2705; ' + currentPhones.length + '部手机已连接';
+  } else {
+    banner.className = 'banner show';
+    banner.innerHTML = '&#x2705; 手机已连接，可以拨号';
+  }
+
+  // 更新状态栏文字
+  const activePhone = currentPhones.find(p => p.id === activeId);
+  if (activePhone) {
+    const display = activePhone.note || activePhone.name;
+    txt.textContent = display;
+  }
+
+  // 渲染手机标签
+  list.innerHTML = '';
+  currentPhones.forEach(phone => {
+    const tag = document.createElement('div');
+    tag.className = 'phone-tag' + (phone.id === activeId ? ' active' : '');
+    tag.__phoneId = phone.id;  // v6修复: 创建时即标记，确保 startRename 首次双击可用
+
+    const dotEl = document.createElement('span');
+    dotEl.className = 'phone-dot';
+    tag.appendChild(dotEl);
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'phone-name';
+    nameEl.textContent = phone.note || phone.name;
+    tag.appendChild(nameEl);
+
+    if (phone.note) {
+      const hint = document.createElement('span');
+      hint.className = 'phone-note-hint';
+      hint.textContent = '(' + phone.name + ')';
+      tag.appendChild(hint);
+    }
+
+    // v6: 重连按钮（每个手机标签右侧）
+    const reconnectBtn = document.createElement('span');
+    reconnectBtn.className = 'phone-reconnect-btn';
+    reconnectBtn.title = '强制重连此手机';
+    reconnectBtn.textContent = '🔄';
+    reconnectBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // 不触发选中切换
+      if (reconnectBtn.classList.contains('spinning')) return;
+      reconnectBtn.classList.add('spinning');
+      reconnectBtn.textContent = '⏳';
+      window.api.send('force-reconnect', phone.id);
+    });
+    tag.appendChild(reconnectBtn);
+
+    // 点击切换活跃手机
+    tag.addEventListener('click', () => {
+      window.api.send('select-phone', phone.id);
+    });
+
+    // 双击编辑备注
+    tag.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startRename(phone.id, phone.note || '');
+    });
+
+    list.appendChild(tag);
+  });
+
+  // 更新按钮状态
+  const hasNumber = document.getElementById('numberInput').value.trim();
+  document.getElementById('callBtn').disabled = isConnected && !hasNumber; // v6: 未连接时不禁用
+  document.getElementById('hangupBtn').disabled = !isConnected;
+  updateCallBtnText();
+  updateHangupBtnText();
+}
+
+function startRename(phoneId, currentNote) {
+  const list = document.getElementById('phoneList');
+  const tags = list.querySelectorAll('.phone-tag');
+  tags.forEach(tag => {
+    if (tag.__phoneId !== phoneId) return;
+    // 替换为输入框
+    tag.innerHTML = '';
+    const input = document.createElement('input');
+    input.className = 'phone-rename-input';
+    input.value = currentNote;
+    input.placeholder = '输入备注名';
+    tag.appendChild(input);
+    input.focus();
+    input.select();
+
+    const finish = () => {
+      window.api.send('rename-phone', { id: phoneId, note: input.value.trim() });
+    };
+    input.addEventListener('blur', finish);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      if (e.key === 'Escape') { input.value = currentNote; input.blur(); }
+    });
+  });
+}
+
+// ==================== 拨号盘 ====================
+function pressKey(key) {
+  const inp = document.getElementById('numberInput');
+  inp.value += key; inp.focus();
+  inp.dispatchEvent(new Event('input'));
+}
+function deleteLast() {
+  const inp = document.getElementById('numberInput');
+  inp.value = inp.value.slice(0, -1);
+  inp.dispatchEvent(new Event('input'));
+}
+function clearNumber() {
+  document.getElementById('numberInput').value = '';
+  document.getElementById('numberInput').dispatchEvent(new Event('input'));
+}
+
+function dial() {
+  const number = document.getElementById('numberInput').value.trim().replace(/\s/g, '');
+  if (!isConnected) {
+    // v6: 手机未连接 → 自动重连上一次拨号的手机（或活跃手机）
+    const targetPin = lastDialPin || activePin;
+    if (!targetPin) { showToast('无可用手机', 'error'); return; }
+    const btn = document.getElementById('callBtn');
+    btn.textContent = '⏳ 正在唤醒手机...';
+    btn.style.pointerEvents = 'none';
+    window.api.send('force-reconnect', targetPin);
+    addLog('info', '唤醒手机 (PIN=' + targetPin + ')...');
+    // 如果有号码，也发送拨号请求（main.js 会自动排队）
+    if (number) window.api.send('dial', number);
+    return;
+  }
+  if (!number) { showToast('请输入号码', 'error'); return; }
+  // v6: 记录本次拨号的手机 PIN
+  lastDialPin = activePin;
+  window.api.send('dial', number);
+  addLog('info', '发送拨号: ' + number);
+}
+function hangup() {
+  if (!isConnected) { showToast('手机未连接', 'error'); return; }
+  window.api.send('hangup');
+  addLog('info', '发送挂断');
+  showToast('已发送挂断指令');
+}
+
+// ==================== 剪贴板 ====================
+function extractPhone(text) {
+  const m = text.match(/1[3-9]\d{9}|0\d{2,3}[-\s]?\d{7,8}/);
+  return m ? m[0].replace(/[-\s]/g, '') : null;
+}
+
+function pollClipboard() {
+  window.api.invoke('read-clipboard').then(d => {
+    if (d.text && d.text !== lastClipboard) {
+      lastClipboard = d.text;
+      const phone = extractPhone(d.text);
+      if (phone) {
+        const inp = document.getElementById('numberInput');
+        inp.value = phone;
+        const hint = document.getElementById('clipHint');
+        hint.classList.add('flash');
+        setTimeout(() => hint.classList.remove('flash'), 400);
+      }
+    }
+  }).catch(() => {}).finally(() => {
+    clipboardTimer = setTimeout(pollClipboard, 1000);
+  });
+}
+
+// ==================== 日志 ====================
+function toggleLog() {
+  logOpen = !logOpen;
+  document.getElementById('logToggle').classList.toggle('open', logOpen);
+  document.getElementById('logBody').classList.toggle('open', logOpen);
+}
+
+function addLog(type, msg) {
+  const body = document.getElementById('logBody');
+  const now = new Date();
+  const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  const el = document.createElement('div');
+  el.className = 'log-entry ' + type;
+  el.innerHTML = '<span class="lt">' + t + '</span><span class="lm">' + msg + '</span>';
+  body.appendChild(el);
+  body.scrollTop = body.scrollHeight;
+  while (body.children.length > 80) body.removeChild(body.firstChild);
+  if (!logOpen) { logOpen = true; document.getElementById('logToggle').classList.add('open'); body.classList.add('open'); }
+}
+
+let toastTimer = null;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + (type || '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2500);
+}
+
+// 键盘快捷键
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') dial();
+  if (e.key === 'Backspace' && document.activeElement.id !== 'numberInput') deleteLast();
+});
+
+// ==================== 主界面快捷短信模板 ====================
+const INDEX_TPL_KEY = 'autodial_sms_templates';
+const INDEX_TPL_DEFAULTS = [
+  { id: 1, title: '回访问候', content: '您好，我是之前联系过您的客服，请问您对我们产品还有什么疑问吗？' },
+  { id: 2, title: '催办提醒', content: '您好，温馨提醒您，您的业务办理进度已更新，请及时查看。' },
+  { id: 3, title: '会议通知', content: '您好，我们将于明天上午10点召开线上会议，届时请准时参加。' },
+  { id: 4, title: '感谢回复', content: '感谢您的咨询与支持，如有其他问题随时联系我们，祝您生活愉快！' },
+  { id: 5, title: '节日祝福', content: '值此佳节来临之际，祝您及家人节日快乐，万事如意！' }
+];
+
+function indexLoadTemplates() {
+  try {
+    const raw = localStorage.getItem(INDEX_TPL_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(INDEX_TPL_DEFAULTS));
+}
+
+function renderIndexTemplates() {
+  const templates = indexLoadTemplates();
+  const container = document.getElementById('indexTplList');
+  container.innerHTML = '';
+  templates.forEach(tpl => {
+    const tag = document.createElement('div');
+    tag.className = 'index-tpl-tag';
+    tag.textContent = tpl.title;
+    tag.title = tpl.content;
+    tag.addEventListener('click', () => {
+      const number = document.getElementById('numberInput').value.trim().replace(/\s/g, '');
+      openSmsOverlay(number || '', tpl.content);
+    });
+    container.appendChild(tag);
+  });
+}
+
+// ==================== 短信编辑弹窗 ====================
+function openSmsOverlay(prefillNumber, prefillContent) {
+  var overlay = document.getElementById('smsOverlay');
+  overlay.classList.add('show');
+  document.getElementById('smsToInput').value = prefillNumber || '';
+  document.getElementById('smsContentInput').value = prefillContent || '';
+  updateSmsCharCount();
+  updateSmsSendBtn();
+  renderSmsOvlTemplates();
+  document.getElementById('smsToInput').focus();
+}
+
+function closeSmsOverlay() {
+  document.getElementById('smsOverlay').classList.remove('show');
+}
+
+function updateSmsCharCount() {
+  var len = document.getElementById('smsContentInput').value.length;
+  var el = document.getElementById('smsCharCount');
+  el.textContent = len + '/500';
+  el.classList.toggle('warn', len > 450);
+  updateSmsSendBtn();
+}
+
+function updateSmsSendBtn() {
+  var number = document.getElementById('smsToInput').value.trim().replace(/\s/g, '');
+  var content = document.getElementById('smsContentInput').value.trim();
+  var btn = document.getElementById('smsSendBtn');
+  btn.disabled = !number || !content || !isConnected;
+}
+
+function sendSmsFromOverlay() {
+  var number = document.getElementById('smsToInput').value.trim().replace(/\s/g, '');
+  var content = document.getElementById('smsContentInput').value.trim();
+  if (!number || !content) return;
+  var btn = document.getElementById('smsSendBtn');
+  btn.textContent = '发送中...';
+  btn.classList.add('sending');
+  btn.disabled = true;
+  window.api.send('open-sms', { number: number, content: content });
+  addLog('info', '\uD83D\uDCE9 已发送: ' + number);
+  // 对齐原版：2s 后清空内容并恢复按钮，窗口不自动关闭
+  setTimeout(function() {
+    document.getElementById('smsContentInput').value = '';
+    document.getElementById('smsCharCount').textContent = '0/500';
+    btn.textContent = '发送 (Ctrl+Enter)';
+    btn.classList.remove('sending');
+    updateSmsSendBtn();
+  }, 2000);
+}
+
+function renderSmsOvlTemplates() {
+  var templates = indexLoadTemplates();
+  var container = document.getElementById('smsOvlTplList');
+  container.innerHTML = '';
+  templates.forEach(function(tpl) {
+    var tag = document.createElement('div');
+    tag.className = 'sms-ov-tpl-tag';
+    tag.textContent = tpl.title;
+    tag.title = tpl.content;
+    tag.addEventListener('click', function() {
+      document.getElementById('smsContentInput').value = tpl.content;
+      updateSmsCharCount();
+    });
+    container.appendChild(tag);
+  });
+}
+
+// Template Manager
+var _tplEditorName = '';
+var _tplEditorContent = '';
+
+function openTplManager() {
+  document.getElementById('tplManagerOverlay').classList.add('show');
+  renderTplManagerList();
+}
+
+function closeTplManager() {
+  document.getElementById('tplManagerOverlay').classList.remove('show');
+}
+
+function renderTplManagerList() {
+  var templates = indexLoadTemplates();
+  var list = document.getElementById('tplMgrList');
+  list.innerHTML = '';
+  templates.forEach(function(tpl) {
+    var item = document.createElement('div');
+    item.className = 'tpl-mgr-item';
+    item.innerHTML =
+      '<span class="tpl-mgr-name" title="' + escapeHtml(tpl.content) + '" onclick="editTemplate(\'' +
+      escapeHtml(String(tpl.id)) + '\')">' + escapeHtml(tpl.title) + '</span>' +
+      '<span class="tpl-mgr-del" onclick="deleteTemplate(\'' + escapeHtml(String(tpl.id)) + '\')">\u2715</span>';
+    list.appendChild(item);
+  });
+}
+
+function addTemplate() {
+  var name = document.getElementById('tplNameInput').value.trim();
+  var content = document.getElementById('tplContentInput').value.trim();
+  if (!name || !content) return;
+  var templates = indexLoadTemplates();
+  var maxId = 0;
+  templates.forEach(function(t) { if (t.id > maxId) maxId = t.id; });
+  templates.push({ id: maxId + 1, title: name, content: content });
+  saveTemplates(templates);
+  document.getElementById('tplNameInput').value = '';
+  document.getElementById('tplContentInput').value = '';
+  renderTplManagerList();
+  renderIndexTemplates();
+  if (document.getElementById('smsOverlay').classList.contains('show')) renderSmsOvlTemplates();
+}
+
+function editTemplate(tplId) {
+  var templates = indexLoadTemplates();
+  var tpl = templates.find(function(t) { return String(t.id) === tplId; });
+  if (!tpl) return;
+  var name = prompt('模板名称:', tpl.title);
+  if (name === null) return;
+  var content = prompt('模板内容:', tpl.content);
+  if (content === null) return;
+  tpl.title = name.trim() || tpl.title;
+  tpl.content = content.trim() || tpl.content;
+  saveTemplates(templates);
+  renderTplManagerList();
+  renderIndexTemplates();
+  if (document.getElementById('smsOverlay').classList.contains('show')) renderSmsOvlTemplates();
+}
+
+function deleteTemplate(tplId) {
+  var templates = indexLoadTemplates();
+  var updated = templates.filter(function(t) { return String(t.id) !== tplId; });
+  saveTemplates(updated);
+  renderTplManagerList();
+  renderIndexTemplates();
+  if (document.getElementById('smsOverlay').classList.contains('show')) renderSmsOvlTemplates();
+}
+
+function saveTemplates(templates) {
+  try { localStorage.setItem(INDEX_TPL_KEY, JSON.stringify(templates)); } catch(e) {}
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+// SMS overlay keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  if (!document.getElementById('smsOverlay').classList.contains('show')) return;
+  if (e.key === 'Escape') { closeSmsOverlay(); return; }
+  if (e.ctrlKey && e.key === 'Enter') {
+    var btn = document.getElementById('smsSendBtn');
+    if (!btn.disabled) sendSmsFromOverlay();
+  }
+});
+
+// SMS Overlay: watch inputs for send button state
+document.getElementById('smsToInput').addEventListener('input', updateSmsSendBtn);
+document.getElementById('smsContentInput').addEventListener('input', updateSmsCharCount);
+
+// 初始化主题
+if (typeof ThemeEngine !== 'undefined') ThemeEngine.initTheme();
+
+// 模板渲染（在init之前，localStorage立即可用）
+renderIndexTemplates();
+
+// Wails 适配: 等 Go 端 + API 适配器都就绪后再调 init()
+(function waitWails() {
+  if (window.go && window.go.main && window.go.main.App && window.api) {
+    init();
+  } else {
+    setTimeout(waitWails, 100);
+  }
+})();
+
+// ==================== 浮动横条 (完全对齐原版) ====================
+let fbIsConnected = false;
+let fbIsMinimized = false;  // 是否处于悬浮条模式
+
+function toggleFloatbar(show) {
+  var fb = document.getElementById('floatbar');
+  if (!fb) return;
+  fb.style.display = show ? 'flex' : 'none';
+}
+
+// 切换到悬浮条模式——通过body class控制全局显示
+function minimizeToFloatbar() {
+  fbIsMinimized = true;
+  document.body.classList.add('floatbar-mode');
+  document.getElementById('floatbar').style.display = 'flex';
+  window.api.send('floatbar-minimize');
+}
+
+// 恢复主界面
+function restoreMain() {
+  fbIsMinimized = false;
+  document.body.classList.remove('floatbar-mode');
+  document.getElementById('floatbar').style.display = 'none';
+  window.api.send('floatbar-restore');
+}
+
+// 退出（直接调Go方法）
+function fbExit() {
+  if (window.go && window.go.main && window.go.main.App) {
+    window.go.main.App.CloseWindow();
+  }
+}
+
+// 拖拽
+(function() {
+  var bar = document.getElementById('floatBar');
+  var dragging = false, offsetX = 0, offsetY = 0;
+  bar.addEventListener('mousedown', function(e) {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.id === 'fbResizeHandle') return;
+    dragging = true;
+    bar.classList.add('dragging');
+    var rect = bar.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    var fb = document.getElementById('floatbar');
+    fb.style.left = (e.clientX - offsetX) + 'px';
+    fb.style.top = (e.clientY - offsetY) + 'px';
+    fb.style.transform = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mouseup', function() {
+    if (!dragging) return;
+    dragging = false;
+    bar.classList.remove('dragging');
+  });
+})();
+
+// 缩放
+(function() {
+  var handle = document.getElementById('fbResizeHandle');
+  var resizing = false, startX = 0;
+  handle.addEventListener('mousedown', function(e) {
+    resizing = true; startX = e.clientX;
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!resizing) return;
+    var inp = document.getElementById('fbInput');
+    var delta = Math.round((e.clientX - startX) / 15);
+    if (delta !== 0) {
+      var w = parseInt(inp.style.width || 130) + delta * 5;
+      inp.style.width = Math.max(60, Math.min(260, w)) + 'px';
+      inp.style.maxWidth = inp.style.width;
+      startX = e.clientX;
+    }
+    e.preventDefault();
+  });
+  document.addEventListener('mouseup', function() { resizing = false; });
+})();
+
+// 按钮文本（对齐原版禁用状态文字）
+function updateFbBtnText() {
+  var d = document.getElementById('fbDialBtn');
+  var h = document.getElementById('fbHangupBtn');
+  if (d) d.innerHTML = d.disabled ? (fbIsConnected ? '🔍 请输入号码' : '📱 请连接手机') : '📞 拨打';
+  if (h) h.innerHTML = h.disabled ? '📱 请连接手机' : '📵 挂断';
+}
+
+// 输入框变化
+document.getElementById('fbInput').addEventListener('input', function() {
+  var d = document.getElementById('fbDialBtn');
+  d.disabled = !(this.value.trim() && fbIsConnected);
+  updateFbBtnText();
+});
+
+// 按钮操作
+function fbDial() {
+  var n = document.getElementById('fbInput').value.trim();
+  if (!n) { fbToast('请先输入号码', 'error'); return; }
+  if (!fbIsConnected) { fbToast('手机未连接', 'error'); return; }
+  window.api.send('dial', n);
+}
+function fbHangup() {
+  if (!fbIsConnected) { fbToast('手机未连接', 'error'); return; }
+  window.api.send('hangup');
+}
+function fbSms() {
+  var n = document.getElementById('fbInput').value.trim();
+  openSmsOverlay(n || '');
+}
+function fbClear() {
+  document.getElementById('fbInput').value = '';
+  document.getElementById('fbDialBtn').disabled = true;
+  updateFbBtnText();
+  fbToast('已清空', 'success');
+}
+
+// 右键菜单
+document.getElementById('floatBar').addEventListener('contextmenu', function(e) {
+  e.preventDefault(); e.stopPropagation();
+  var m = document.getElementById('fbMenu');
+  m.style.left = e.clientX + 'px';
+  m.style.top = e.clientY + 'px';
+  m.style.display = 'block';
+});
+document.addEventListener('click', function() {
+  document.getElementById('fbMenu').style.display = 'none';
+});
+
+// Toast
+let fbToastTimer = null;
+function fbToast(msg, type) {
+  var t = document.getElementById('fbToast');
+  t.textContent = msg;
+  t.className = 'fb-toast show ' + (type || '');
+  clearTimeout(fbToastTimer);
+  fbToastTimer = setTimeout(function() { t.className = 'fb-toast'; }, 2500);
+}
+
+// 剪贴板检测
+let fbLastClip = '';
+(function pollFbClip() {
+  try {
+    if (window.go && window.go.main && window.go.main.App) {
+      window.go.main.App.ReadClipboard().then(function(d) {
+        if (d && d.text && d.text !== fbLastClip) {
+          fbLastClip = d.text;
+          var m = d.text.match(/1[3-9]\d[\s\-]?\d{4}[\s\-]?\d{4}/);
+          if (m) {
+            var phone = m[0].replace(/[\s\-]/g, '');
+            document.getElementById('fbInput').value = phone;
+            document.getElementById('fbDialBtn').disabled = !fbIsConnected;
+            updateFbBtnText();
+            fbToast('检测到: ' + phone, 'success');
+          }
+        }
+      }).catch(function() {});
+    }
+  } catch(e) {}
+  setTimeout(pollFbClip, 500);
+})();
+
+// 更新状态（由主轮询调用）
+function updateFloatbarStatus(connected) {
+  fbIsConnected = connected;
+  var dot = document.getElementById('fbDot');
+  var dialBtn = document.getElementById('fbDialBtn');
+  var hangupBtn = document.getElementById('fbHangupBtn');
+  if (!dot) return;
+  if (connected) {
+    dot.className = 'fb-dot on';
+    dialBtn.disabled = !document.getElementById('fbInput').value;
+    hangupBtn.disabled = false;
+  } else {
+    dot.className = 'fb-dot';
+    dialBtn.disabled = true;
+    hangupBtn.disabled = true;
+  }
+  updateFbBtnText();
+}
+
+// 监听 dial/hangup 事件显示 toast（延迟到 api 就绪后执行）
+(function patchApiOn() {
+  if (!window.api) { setTimeout(patchApiOn, 50); return; }
+  var origOn = window.api.on;
+  window.api.on = function(ch, cb) {
+    if (ch === 'dial-sent') {
+      var orig = cb;
+      cb = function(data) { fbToast('已发送: ' + data.number, 'success'); orig(data); };
+    }
+    if (ch === 'dial-result') {
+      var orig2 = cb;
+      cb = function(data) { fbToast(data.number + ' ' + (data.status === 'ok' ? '成功' : '失败'), data.status === 'ok' ? 'success' : 'error'); orig2(data); };
+    }
+    if (ch === 'hangup-sent') {
+      var orig3 = cb;
+      cb = function() { fbToast('已发送挂断', 'success'); orig3(); };
+    }
+    if (ch === 'error') {
+      var orig4 = cb;
+      cb = function(data) { fbToast(data.message, 'error'); orig4(data); };
+    }
+    return origOn(ch, cb);
+  };
+})();
+
+// 启动时默认显示主界面，不显示悬浮条（只有最小化后才显示悬浮条）
+setTimeout(function() { updateFbBtnText(); }, 2000);
+// ==================== 云服务器管理 (v4) ====================
+let _cloudServers = [];
+let _cloudEnabled = false;
+function cloudToggleChanged(){_cloudEnabled=document.getElementById('setCloudEnabled').checked;document.getElementById('cloudSection').style.opacity=_cloudEnabled?'1':'0.5';updateCloudConfig();}
+async function addCloudServer(){var a=prompt('输入云服务器地址（如 262ao85kz470.vicp.fun:55535）:','');if(!a)return;a=a.trim().replace(/^(https?|wss?):\/\//i,'');if(!a.includes(':'))a+=':35430';_cloudServers.push(a);renderCloudServerList();updateCloudConfig();}
+function removeCloudServer(i){_cloudServers.splice(i,1);renderCloudServerList();updateCloudConfig();}
+async function testCloudServers(){if(!_cloudServers.length)return;var s=document.getElementById('cloudSummary');s.textContent='测试中...';try{var r=await window.go.main.App.TestCloudServers(_cloudServers);if(r&&r.length){var ok=r.filter(function(x){return x.ok}).length;s.textContent=ok+'/'+r.length+' 个可达';s.style.color=ok>0?'var(--green)':'var(--red)';}}catch(e){s.textContent='测试失败';}}
+async function fetchCloudServers(){try{var list=await window.go.main.App.FetchCloudServers();if(list&&list.length){_cloudServers=list.map(function(x){return x.replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();updateCloudConfig();document.getElementById('cloudSummary').textContent='获取到 '+list.length+' 个服务器';document.getElementById('cloudSummary').style.color='var(--green)';}}catch(e){document.getElementById('cloudSummary').textContent='获取失败';}}
+function renderCloudServerList(){var e=document.getElementById('cloudServerList');if(!_cloudServers.length){e.innerHTML='<div style="font-size:12px;color:var(--text2);padding:4px 0;">点击 [+ 添加] 或 [获取列表]</div>';}else{e.innerHTML=_cloudServers.map(function(s,i){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--bg);border-radius:5px;margin-bottom:4px;font-size:13px;"><span>'+s+'</span><button onclick="removeCloudServer('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">\u00d7</button></div>';}).join('');}}
+async function updateCloudConfig(){try{await window.go.main.App.UpdateCloudConfig(_cloudEnabled,_cloudServers);}catch(e){}}
+(function initCC(){if(window.go&&window.go.main&&window.go.main.App){window.go.main.App.GetSettings().then(function(s){if(s&&s.cloudServers&&s.cloudServers.length){_cloudServers=s.cloudServers.map(function(x){return(x||'').replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();}if(s&&s.cloudEnabled){_cloudEnabled=true;document.getElementById('setCloudEnabled').checked=true;document.getElementById('cloudSection').style.opacity='1';}}).catch(function(){});}else{setTimeout(initCC,200);}})();
+</script>
+<script src="/wails/runtime.js"></script>
+<script src="/wails-adapter.js"></script>
+
+<!-- 浮动横条 (floatbar) - 完全对齐原版 -->
+<div id="floatbar" style="display:none;">
+  <div class="float-bar" id="floatBar">
+    <div class="fb-dot" id="fbDot"></div>
+    <div class="fb-sep"></div>
+    <button class="fb-clear-btn" id="fbClearBtn" onclick="fbClear()">清空</button>
+    <input type="text" class="fb-input" id="fbInput" placeholder="输入或复制号码..." inputmode="tel" autocomplete="off">
+    <div class="fb-sep"></div>
+    <button class="fb-dial-btn" id="fbDialBtn" disabled onclick="fbDial()">📞 拨打</button>
+    <button class="fb-hangup-btn" id="fbHangupBtn" disabled onclick="fbHangup()">📵 挂断</button>
+    <button class="fb-sms-btn" id="fbSmsBtn" onclick="fbSms()">💬 短信</button>
+    <div class="fb-sep"></div>
+    <button class="fb-restore-btn" id="fbRestoreBtn" onclick="restoreMain()" title="恢复主界面">⬆</button>
+    <button class="fb-close-btn" id="fbCloseBtn" onclick="fbExit()" title="退出">✕</button>
+    <div class="fb-resize-handle" id="fbResizeHandle"></div>
+  </div>
+  <div class="fb-toast" id="fbToast"></div>
+</div>
+
+<!-- 浮动横条右键菜单 -->
+<div id="fbMenu" style="display:none;position:fixed;min-width:160px;background:rgba(26,29,36,0.9);border:1px solid rgba(201,168,76,0.25);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:9999;">
+  <div class="fb-menu-item" onclick="restoreMain()">🏠 显示主窗口</div>
+  <div class="fb-menu-item" onclick="openSettings()">⚙ 打开设置</div>
+  <div class="fb-menu-sep"></div>
+  <div class="fb-menu-item" onclick="fbDial()">📞 拨打</div>
+  <div class="fb-menu-item" onclick="fbHangup()">📵 挂断</div>
+  <div class="fb-menu-item" onclick="fbSms()">💬 短信</div>
+  <div class="fb-menu-sep"></div>
+  <div class="fb-menu-item fb-menu-danger" onclick="fbClear()">✕ 清空号码</div>
+  <div class="fb-menu-item fb-menu-danger" onclick="fbExit()">⟳ 退出</div>
+</div>
+
+<style>
+#floatbar { position:fixed; inset:0; z-index:8888; display:none; align-items:center; justify-content:center; }
+.float-bar { display:inline-flex; align-items:center; gap:5px; background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:24px; padding:0 8px 0 10px; height:36px; box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); cursor:move; user-select:none; transition:box-shadow 0.2s,border-color 0.2s; position:relative; }
+.float-bar:hover { border-color:var(--gold); box-shadow:0 4px 30px rgba(201,168,76,0.12),inset 0 1px 0 rgba(255,255,255,0.1); }
+.float-bar.dragging { box-shadow:0 8px 32px rgba(0,0,0,0.5); opacity:0.92; }
+.fb-dot { width:8px; height:8px; border-radius:50%; background:var(--red); box-shadow:0 0 6px var(--red); flex-shrink:0; }
+.fb-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 1.5s infinite; }
+.fb-sep { width:1px; height:20px; background:rgba(255,255,255,0.08); flex-shrink:0; margin:0 1px; }
+.fb-clear-btn { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:3px 6px; color:var(--gold-light); font-size:11px; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
+.fb-clear-btn:hover { background:rgba(255,255,255,0.1); border-color:var(--gold); }
+.fb-clear-btn:active { transform:scale(0.95); }
+.fb-input { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:3px 8px; color:var(--text); font-size:12px; font-weight:600; flex:1; min-width:0; max-width:130px; outline:none; letter-spacing:0.5px; transition:border-color 0.15s; }
+.fb-input::placeholder { color:var(--text2); font-size:10px; font-weight:400; }
+.fb-input:focus { border-color:var(--gold); }
+.fb-dial-btn { background:var(--gradient-green); border:none; border-radius:10px; padding:3px 8px; color:white; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; display:flex; align-items:center; gap:2px; }
+.fb-dial-btn:hover:not(:disabled) { filter:brightness(1.15); }
+.fb-dial-btn:disabled { background:var(--bg3); color:var(--red); cursor:default; opacity:0.7; font-size:10px; }
+.fb-hangup-btn { background:var(--gradient-red); border:none; border-radius:10px; padding:3px 8px; color:white; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; display:flex; align-items:center; gap:2px; }
+.fb-hangup-btn:hover:not(:disabled) { filter:brightness(1.15); }
+.fb-hangup-btn:disabled { background:var(--bg3); color:var(--red); cursor:default; opacity:0.7; font-size:10px; }
+.fb-sms-btn { background:none; border:1px solid var(--gold-dark); border-radius:10px; padding:3px 8px; color:var(--gold); font-size:11px; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
+.fb-sms-btn:hover { background:rgba(201,168,76,0.12); border-color:var(--gold); }
+.fb-restore-btn { background:none; border:1px solid var(--text2); border-radius:10px; padding:3px 6px; color:var(--text2); font-size:12px; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+.fb-restore-btn:hover { border-color:var(--gold); color:var(--gold); }
+.fb-close-btn { background:none; border:1px solid transparent; border-radius:10px; padding:3px 6px; color:var(--text2); font-size:13px; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+.fb-close-btn:hover { background:rgba(231,76,60,0.15); color:var(--red); }
+.fb-resize-handle { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:10; opacity:0; pointer-events:none; transition:opacity 0.2s; }
+.fb-resize-handle::before { content:''; position:absolute; width:8px; height:8px; bottom:3px; right:3px; border-right:2px solid var(--gold); border-bottom:2px solid var(--gold); opacity:0.5; }
+.fb-resize-handle::after { content:''; position:absolute; width:5px; height:5px; bottom:3px; right:3px; border-right:2px solid var(--gold); border-bottom:2px solid var(--gold); opacity:0.8; }
+.float-bar:hover .fb-resize-handle { opacity:1; pointer-events:auto; }
+.fb-toast { position:fixed; top:90px; left:50%; transform:translateX(-50%) translateY(-20px); background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:10px; padding:6px 14px; font-size:11px; color:var(--text); transition:transform 0.25s; z-index:999; white-space:nowrap; pointer-events:none; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); opacity:0; }
+.fb-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+.fb-toast.success { border-color:var(--green); color:var(--green); }
+.fb-toast.error { border-color:var(--red); color:var(--red); }
+.fb-menu-item { padding:8px 12px; font-size:12px; color:var(--text); cursor:pointer; transition:background 0.1s; white-space:nowrap; }
+.fb-menu-item:hover { background:var(--bg3); }
+.fb-menu-item:first-child { border-radius:5px 5px 0 0; }
+.fb-menu-item:last-child { border-radius:0 0 5px 5px; }
+.fb-menu-item.fb-menu-danger { color:var(--red); }
+.fb-menu-item.fb-menu-danger:hover { background:rgba(231,76,60,0.1); }
+.fb-menu-sep { height:1px; background:rgba(255,255,255,0.08); margin:2px 8px; }
+
+/* 悬浮条模式：隐藏所有非悬浮条内容 */
+body.floatbar-mode .wrap,
+body.floatbar-mode .titlebar,
+body.floatbar-mode .header,
+body.floatbar-mode .body,
+body.floatbar-mode .banner,
+body.floatbar-mode .phone-selector,
+body.floatbar-mode .status-display,
+body.floatbar-mode #logToggle,
+body.floatbar-mode #logBody,
+body.floatbar-mode #settingsOverlay,
+body.floatbar-mode #fbMenu { display:none !important; }
+body.floatbar-mode { background:transparent !important; overflow:hidden; }
+body.floatbar-mode #floatbar { display:flex !important; }
+</style>
+
+<!-- SMS Overlay Panel -->
+<div id="smsOverlay">
+  <div class="sms-ov-header">
+    <span>&#x1F4AC; 发送短信</span>
+    <button onclick="closeSmsOverlay()" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
+  </div>
+  <div class="sms-ov-body">
+    <div>
+      <div class="sms-ov-label">收件人</div>
+      <input type="text" class="sms-ov-input" id="smsToInput" placeholder="输入手机号码" maxlength="20">
+    </div>
+    <div>
+      <div class="sms-ov-label">短信内容</div>
+      <textarea class="sms-ov-textarea" id="smsContentInput" placeholder="输入短信内容..." maxlength="500" oninput="updateSmsCharCount()"></textarea>
+      <div class="sms-ov-counter" id="smsCharCount">0/500</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="sms-ov-label" style="margin:0;">快捷模板</div>
+      <span class="sms-ov-mgr-link" onclick="openTplManager()">管理模板</span>
+    </div>
+    <div class="sms-ov-tpl-wrap" id="smsOvlTplList"></div>
+    <button class="sms-ov-send" id="smsSendBtn" disabled onclick="sendSmsFromOverlay()">发送 (Ctrl+Enter)</button>
+  </div>
+</div>
+
+<!-- Template Manager Modal -->
+<div id="tplManagerOverlay">
+  <div class="tpl-mgr-box">
+    <h3>&#x1F4CB; 短信模板管理</h3>
+    <div id="tplMgrList" class="tpl-mgr-list"></div>
+    <div class="tpl-mgr-add">
+      <input type="text" id="tplNameInput" placeholder="模板名称" maxlength="10">
+      <input type="text" id="tplContentInput" placeholder="模板内容" maxlength="200">
+      <button onclick="addTemplate()">添加</button>
+    </div>
+    <button class="tpl-mgr-close" onclick="closeTplManager()">关闭</button>
+  </div>
+</div>
+</body>
+</html>
