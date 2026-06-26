@@ -1,6 +1,18 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+// v4: Try Electron built-in module first
+let electronApi;
+try {
+  // Electron should provide 'electron' as a built-in module
+  electronApi = require('electron');
+  if (!electronApi.ipcMain && !electronApi.app) {
+    throw new Error('electron module appears corrupted - keys: ' + Object.keys(electronApi).slice(0,5).join(','));
+  }
+} catch (e) {
+  console.error('Failed to load electron:', e.message);
+  process.exit(1);
+}
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = electronApi;
 const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
@@ -127,9 +139,10 @@ const DEFAULT_SETTINGS = {
   theme: 'dark-gold',        // 主题ID
   mode: 'dark',              // 显示模式 dark/dusk/dawn/twilight/warm/mist/light
   phoneNotes: {},            // 手机备注 { "ip|name": "备注" }
-  cloudServer: '',           // 云中转服务器地址，如 262ao85kz470.vicp.fun:55535
+  pinCode: '',               // v4: 11位手机号配对码
+  cloudServer: '',           // 云中转服务器地址
   cloudEnabled: false,       // 是否启用云中转
-  cloudServers: []           // 多云服务器列表，如 ["262ao85kz470.vicp.fun:55535", "192.168.3.75:35430"]
+  cloudServers: []           // 多云服务器列表
 };
 
 function loadSettings() {
@@ -266,6 +279,10 @@ function getSubnet() {
 }
 
 let PIN_CODE = generatePinCode(); // 4.0: 初始为空，需手动设置11位手机号
+// v4: 从持久化设置恢复PIN
+if (!PIN_CODE && appSettings.pinCode) {
+  PIN_CODE = appSettings.pinCode;
+}
 
 // v4: 地址标准化 — 纯 IP:PORT 自动补协议
 function normalizeCloudUrl(addr) {
@@ -1032,6 +1049,18 @@ ipcMain.on('rename-phone', (event, { id, pin, note }) => {
   savePhoneNote(devicePin, dev.name, note);
   console.log('[备注] PIN=' + devicePin + ' → ' + note);
   _notifyPhonesUpdate();
+});
+
+// v4: 设置配对码（11位手机号）
+ipcMain.on('set-pin', (event, pin) => {
+  if (pin && typeof pin === 'string' && pin.trim()) {
+    PIN_CODE = pin.trim();
+    appSettings.pinCode = PIN_CODE;
+    saveSettings(appSettings);
+    console.log('[配对码] 已更新: ' + PIN_CODE);
+    fileLog('I', 'Settings', '', 'PIN updated to: ' + PIN_CODE);
+    event.sender.send('pin-updated', { pin: PIN_CODE });
+  }
 });
 
 // 云端配置更新

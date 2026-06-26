@@ -296,6 +296,22 @@
   </div>
 
   <div class="content">
+    <!-- 配对码 -->
+    <div class="section-title">配对码</div>
+    <div class="setting-item column">
+      <div class="setting-info" style="width:100%">
+        <div class="setting-label">手机号（11位）</div>
+        <div class="setting-desc">用于手机配对，必须与手机上设置的配对码一致</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input id="pinInput" type="text" maxlength="11" placeholder="输入11位手机号作为配对码" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-sm);color:var(--text);font-size:14px;outline:none;">
+        <button id="btnSavePin" style="padding:10px 20px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;white-space:nowrap;">保存</button>
+      </div>
+      <div id="pinMsg" style="margin-top:6px;font-size:11px;color:var(--text2);"></div>
+    </div>
+
+    <div class="spacer"></div>
+
     <!-- 窗口行为 -->
     <div class="section-title">窗口行为</div>
 
@@ -649,6 +665,28 @@ document.getElementById('btnCloseTest').addEventListener('click', () => {
   document.getElementById('testModal').style.display = 'none';
 });
 
+// ==================== 配对码管理 ====================
+document.getElementById('btnSavePin').addEventListener('click', async () => {
+  const pin = document.getElementById('pinInput').value.trim();
+  if (!pin || pin.length !== 11 || !pin.startsWith('1') || !/^\d+$/.test(pin)) {
+    document.getElementById('pinMsg').textContent = '请输入正确的11位手机号（1开头）';
+    document.getElementById('pinMsg').style.color = 'var(--red)';
+    return;
+  }
+  try {
+    await window.api.send('set-pin', pin);
+    document.getElementById('pinMsg').textContent = '配对码已保存: ' + pin;
+    document.getElementById('pinMsg').style.color = 'var(--green)';
+  } catch(e) {
+    document.getElementById('pinMsg').textContent = '保存失败: ' + e.message;
+    document.getElementById('pinMsg').style.color = 'var(--red)';
+  }
+});
+
+document.getElementById('pinInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnSavePin').click();
+});
+
 // ==================== 加载设置 ====================
 async function loadSettings() {
   try {
@@ -664,6 +702,12 @@ async function loadSettings() {
     document.getElementById('autoStart').checked = s.autoStart || false;
     // 隐藏界面启动
     document.getElementById('silentStart').checked = s.silentStart || false;
+    // 配对码
+    if (s.pinCode) {
+      document.getElementById('pinInput').value = s.pinCode;
+      document.getElementById('pinMsg').textContent = '当前配对码: ' + s.pinCode;
+      document.getElementById('pinMsg').style.color = 'var(--green)';
+    }
     // 云中转
     document.getElementById('cloudEnabled').checked = s.cloudEnabled || false;
     // 加载多云服务器列表

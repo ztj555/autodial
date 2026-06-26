@@ -34,6 +34,8 @@ android/app/src/main/java/com/autodial/app/
 
 ## 二、连接方式（PIN + JWT 双兼容）
 
+> **说明**：Android v4.53 同时支持 PIN 认证（主用，连接云中继 v2:35430）和 JWT 认证（兼容旧版，连接云中继 v3:35440）。推荐使用 PIN 方式，JWT 方式为向后兼容保留。
+
 ### PrefCtrl — JWT 字段
 
 ```kotlin
