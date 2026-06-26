@@ -12,6 +12,8 @@
   let serverLogCallback = null;
   let errorCallback = null;
   let forceReconnectCallback = null;
+  let smsResultCallback = null;
+  let smsSentCallback = null;
 
   window.api = {
     send: async function (channel, ...args) {
@@ -93,6 +95,8 @@
         case 'server-log': serverLogCallback = callback; break;
         case 'error': errorCallback = callback; break;
         case 'force-reconnect-result': forceReconnectCallback = callback; break;
+        case 'sms-result': smsResultCallback = callback; break;
+        case 'sms-sent': smsSentCallback = callback; break;
       }
       return () => {}; // cleanup function
     }
@@ -160,6 +164,17 @@
     });
     window.runtime.EventsOn('server-log', function(data) {
       if (serverLogCallback) serverLogCallback(data);
+    });
+    // 手机端回报的真实拨号结果 — 后端 pushToRenderer("dial-result", ...)
+    window.runtime.EventsOn('dial-result', function(data) {
+      if (dialResultCallback) dialResultCallback(data);
+    });
+    // 短信结果 — 后端 pushToRenderer("sms-result", ...)
+    window.runtime.EventsOn('sms-result', function(data) {
+      if (smsResultCallback) smsResultCallback(data);
+    });
+    window.runtime.EventsOn('sms-sent', function(data) {
+      if (smsSentCallback) smsSentCallback(data);
     });
   }
 })();

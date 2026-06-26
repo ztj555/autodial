@@ -992,6 +992,13 @@ async function init() {
     showToast(data.message, 'error');
     addLog('error', data.message);
   }));
+  _ipcCleanupFns.push(window.api.on('sms-result', (data) => {
+    const status = data.status === 'ok' ? '成功' : '失败';
+    showToast('短信 ' + status + ': ' + data.number, data.status === 'ok' ? 'success' : 'error');
+  }));
+  _ipcCleanupFns.push(window.api.on('sms-sent', (data) => {
+    showToast('短信已发送: ' + data.number, 'success');
+  }));
 
   // v6修复: 窗口卸载时清理所有IPC监听器，防止内存泄漏
   window.addEventListener('beforeunload', () => {

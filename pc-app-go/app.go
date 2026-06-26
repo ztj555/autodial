@@ -367,6 +367,14 @@ func (a *App) UpdateCloudConfig(enabled bool, servers []string) {
 }
 
 func (a *App) SetPin(pin string) {
+	pin = strings.TrimSpace(pin)
+	// 对齐 Electron 版：强校验 11 位手机号格式
+	if !isValidPhonePIN(pin) {
+		pushToRenderer("error", map[string]interface{}{
+			"message": "配对码必须为11位手机号(1开头)",
+		})
+		return
+	}
 	writePin(pin)
 	appSettings.PinCode = pin
 	saveSettings()

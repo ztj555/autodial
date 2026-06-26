@@ -390,18 +390,15 @@ window.api.on('status-update', (data) => {
   }
 });
 
-// 多手机更新
+// 多手机更新 — 后端只发 { phones, activeId }，不含 connected 字段
 window.api.on('phones-update', (data) => {
-  isConnected = data.connected;
-  const dot = document.getElementById('fbDot');
+  const hasPhones = data.phones && data.phones.length > 0;
   const dialBtn = document.getElementById('fbDialBtn');
   const hangupBtn = document.getElementById('fbHangupBtn');
-  if (data.connected) {
-    dot.className = 'fb-dot on';
+  if (hasPhones) {
     dialBtn.disabled = !document.getElementById('fbInput').value;
     hangupBtn.disabled = false;
   } else {
-    dot.className = 'fb-dot';
     dialBtn.disabled = true;
     hangupBtn.disabled = true;
   }
@@ -427,6 +424,10 @@ window.api.on('hangup-sent', () => {
 window.api.on('error', (data) => {
   showToast(data.message, 'error');
 });
+
+// 右键菜单触发 — 由主进程 floatbar-context-menu 发送
+window.api.on('menu-dial', () => { dialFromFloat(); });
+window.api.on('menu-hangup', () => { hangupFromFloat(); });
 
 // ==================== 剪贴板读取 ====================
 let lastClipboard = '';

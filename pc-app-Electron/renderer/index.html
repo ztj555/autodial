@@ -843,6 +843,21 @@ async function init() {
     addLog('error', data.message);
   }));
 
+  // 悬浮条右键菜单 → 主窗口切Tab（后端通过 webContents.send 发送）
+  _ipcCleanupFns.push(window.api.on('open-settings-tab', () => {
+    window.api.send('open-settings');
+  }));
+  _ipcCleanupFns.push(window.api.on('open-sms-tab', () => {
+    window.api.send('open-sms', '');
+  }));
+
+  // 拨号唤醒失败通知
+  _ipcCleanupFns.push(window.api.on('dial-wake-failed', (data) => {
+    const msg = `唤醒失败: ${data.number} (${data.reason || '未知'})`;
+    showToast(msg, 'error');
+    addLog('error', msg);
+  }));
+
   // v6修复: 窗口卸载时清理所有IPC监听器，防止内存泄漏
   window.addEventListener('beforeunload', () => {
     _ipcCleanupFns.forEach(fn => { try { fn(); } catch(e) {} });
