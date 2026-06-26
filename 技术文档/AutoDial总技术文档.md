@@ -10,7 +10,7 @@
 |------|--------|--------|----------|
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | 11 位 PIN |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | 11 位 PIN |
-| **云中继（主）** | **v2** | Python + websockets | PIN（4位起，建议11位） |
+| **云中继（主）** | **v2** | Python + websockets | PIN（4位或11位手机号） |
 | **云中继（v3 JWT）** | **v0.02** | Python + aiosqlite + bcrypt + PyJWT | JWT + PIN 双模 |
 | **Chrome 扩展** | **v4.0.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
 | **Android 端** | **v4.53** | Kotlin + OkHttp | PIN + JWT 双兼容 |
@@ -138,12 +138,12 @@ cloud_relay_v3.py (WS 35440)
 | code | 含义 | 扩展处理 |
 |------|------|---------|
 | `ACCEPTED` | 指令已接受 | — |
-| `INVALID_PIN` | PIN 非 11 位数字 | 提示检查 PIN |
+| `INVALID_PIN` | PIN 格式错误（需4位或11位） | 提示检查 PIN |
 | `PHONE_OFFLINE` | 手机未连接 | 提示手机未连接 |
 | `PC_CONNECTED` | PC 在线，应走本地 | 切回 localhost |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
 | `RATE_LIMITED` | 频率限制 | 1 分钟后重试 |
-| `INVALID_NUMBER` | 号码不合法 | 提示用户 |
+| `INVALID_NUMBER` | 号码不合法（需 3-20 位数字，允许 *#+） | 提示用户 |
 
 ---
 
@@ -155,7 +155,7 @@ cloud_relay_v3.py (WS 35440)
 ```json
 → {"type": "phone_hello", "pin": "13800138000", "deviceName": "Redmi K40"}
 ← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
-← {"type": "auth_fail", "reason": "配对码必须为11位数字"}
+← {"type": "auth_fail", "reason": "配对码无效（需4位或11位手机号）"}
 ```
 
 **PC 端握手**：
@@ -220,7 +220,7 @@ pc-app-Electron/
 
 ### 6.3 连接上限
 
-`MAX_PHONE_CONNECTIONS = 2`（PhoneConnectionManager）
+`MAX_PHONE_CONNECTIONS = 10`（PhoneConnectionManager，Electron 与 Go 版一致）
 
 ---
 
@@ -250,7 +250,7 @@ pc-app-go/
 | 版本 | v3.0.0 | v1.0.0 |
 | 运行时依赖 | Electron (~150MB) | 单文件 exe (~10MB) |
 | 窗口数 | 4 个独立窗口 | 1 个（内嵌设置/短信） |
-| 最大连接数 | 2 台手机 | 10 台手机 |
+| 最大连接数 | 10 台手机 | 10 台手机 |
 | 系统托盘 | Electron Tray API | 原生 Win32 API |
 | 日志压缩 | 无（rename 轮转） | zip 压缩旧日志 |
 | 通信协议 | **完全相同** | **完全相同** |
@@ -334,11 +334,11 @@ enum class ConnectionStrategy {
 
 | 环节 | 校验方式 | 位置 |
 |------|---------|------|
-| 扩展设置 | 11 位手机号正则 | popup.js |
+| 扩展设置 | 11 位手机号正则（popup），云中继兼容 4 位 PIN | popup.js |
 | 扩展请求 | X-AutoDial-PIN Header | background.js |
 | Electron PC | `if (msg.pin !== PIN_CODE)` | main.js |
-| Go PC | `len(pin) != 11` + `isNumeric` | server.go |
-| 云中继 REST | `len(pin) != 11 or not pin.isdigit()` | cloud_relay.py |
+| Go PC | 11 位手机号强校验 | server.go / app.go |
+| 云中继 REST | `is_valid_pin()`: 4 位纯数字 或 11 位手机号 | cloud_relay.py |
 | 云中继 WS | 同上 | cloud_relay.py |
 | Android | 11 位数字强校验 | ConnectionManager.kt |
 
@@ -348,7 +348,7 @@ enum class ConnectionStrategy {
 
 | 机制 | 说明 |
 |------|------|
-| **PIN 强校验** | 全链路 11 位数字校验 |
+| **PIN 强校验** | 全链路校验：PC/Android 端 11 位手机号，云中继兼容 4 位/11 位 |
 | **并发保护** | PC_CONNECTED 去重 + DUPLICATE_DIAL 5s 去重 |
 | **频率限制** | 每 IP 每分钟 5 次握手尝试 |
 | **心跳超时** | WebSocket ping/pong（30s/90s 云端；15s/20s PC端） |

@@ -62,7 +62,7 @@ class PinGroup:
 ← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
 
 验证失败:
-← {"type": "auth_fail", "reason": "配对码必须为11位数字"}
+← {"type": "auth_fail", "reason": "配对码无效（需4位或11位手机号）"}
 ```
 
 #### PC 端握手
@@ -94,11 +94,12 @@ Header: X-AutoDial-PIN: 13800138000
 ```
 
 处理流程：
-1. 从 Header 读取并校验 PIN（11 位数字）
-2. 检查 PinGroup.pcs → PC 在线 → 返回 `PC_CONNECTED`（让扩展走本地）
-3. 检查 PinGroup.phones → 无手机 → 返回 `PHONE_OFFLINE`
-4. 5 秒去重检查 → 同号码 → 返回 `DUPLICATE_DIAL`
-5. `asyncio.ensure_future(forward_to_phones(...))` → 返回 `ACCEPTED`
+1. 从 Header 读取并校验 PIN（4 位纯数字 或 11 位手机号 `1[3-9]xxxxxxxxx`）
+2. 校验号码（3-20 位数字，允许 `+` `*` `#`，兼容 10086/固话/400/*100#）
+3. 检查 PinGroup.pcs → PC 在线 → 返回 `PC_CONNECTED`（让扩展走本地）
+4. 检查 PinGroup.phones → 无手机 → 返回 `PHONE_OFFLINE`
+5. 5 秒去重检查 → 同号码 → 返回 `DUPLICATE_DIAL`
+6. `asyncio.ensure_future(forward_to_phones(...))` → 返回 `ACCEPTED`
 
 #### GET /api/v1/hangup
 ```
@@ -123,7 +124,7 @@ Header: X-AutoDial-PIN: 13800138000
 | code | 含义 |
 |------|------|
 | `ACCEPTED` | 指令已接受 |
-| `INVALID_PIN` | PIN 非 11 位数字 |
+| `INVALID_PIN` | PIN 格式错误（需4位或11位手机号） |
 | `PHONE_OFFLINE` | 手机未连接 |
 | `PC_CONNECTED` | PC 在线，扩展应走本地 |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 |
