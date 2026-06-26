@@ -7,12 +7,12 @@ on:
   push:
     branches: [ master ]
     paths:
-      - 'android/**'
+      - 'android-app/**'
       - '.github/workflows/android-build.yml'
   pull_request:
     branches: [ master ]
     paths:
-      - 'android/**'
+      - 'android-app/**'
       - '.github/workflows/android-build.yml'
 
 jobs:
@@ -38,8 +38,8 @@ jobs:
     
     - name: Decode Keystore from Secret
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/autodial-release.p12
-        ls -la android/app/autodial-release.p12
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android-app/autodial-release.p12
+        ls -la android-app/autodial-release.p12
       shell: bash
     
     - name: Install Gradle and generate wrapper
@@ -50,13 +50,13 @@ jobs:
         export PATH=$PWD/gradle-8.2/bin:$PATH
         gradle --version
         # Generate proper wrapper
-        cd android
+        cd android-app
         gradle wrapper --gradle-version 8.2
         ls -la gradlew
       shell: bash
     
     - name: Build Release APK
-      working-directory: ./android
+      working-directory: ./android-app
       run: ./gradlew assembleRelease --stacktrace
       env:
         KEYSTORE_FILE: autodial-release.p12
@@ -67,9 +67,9 @@ jobs:
     - name: Find APK files
       run: |
         echo "=== All APK files ==="
-        find android -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+        find android-app -name "*.apk" -type f 2>/dev/null || echo "No APK found"
         echo "=== Build outputs ==="
-        ls -laR android/app/build/outputs/apk/ 2>/dev/null || echo "No outputs"
+        ls -laR android-app/app/build/outputs/apk/ 2>/dev/null || echo "No outputs"
       shell: bash
     
     - name: Upload APK Artifact
@@ -77,6 +77,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: android/app/build/outputs/apk/**/*.apk
+        path: android-app/app/build/outputs/apk/**/*.apk
         retention-days: 30
         if-no-files-found: warn
