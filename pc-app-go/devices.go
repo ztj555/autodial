@@ -473,13 +473,16 @@ func isValidPhonePIN(pin string) bool {
 
 // isValidDialNumber validates phone number format for HTTP /dial.
 // Allows Chinese mobile, landline, international (+prefix), and 400/800 numbers.
-// Format: 4-20 digits, optionally with +, spaces, hyphens, parentheses.
+// Format: 3-20 digits, optionally with +, *, #, spaces, hyphens, parentheses.
+// Accepts: 10086, 13800138000, +8613800138000, *100#, 400-800-8800
 func isValidDialNumber(number string) bool {
 	cleaned := strings.ReplaceAll(number, " ", "")
 	cleaned = strings.ReplaceAll(cleaned, "-", "")
 	cleaned = strings.ReplaceAll(cleaned, "(", "")
 	cleaned = strings.ReplaceAll(cleaned, ")", "")
-	if len(cleaned) < 4 || len(cleaned) > 20 {
+	cleaned = strings.ReplaceAll(cleaned, "*", "")
+	cleaned = strings.ReplaceAll(cleaned, "#", "")
+	if len(cleaned) < 3 || len(cleaned) > 20 {
 		return false
 	}
 	for i, c := range cleaned {

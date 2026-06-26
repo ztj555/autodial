@@ -1324,8 +1324,10 @@ const server = http.createServer((req, res) => {
   if (url.pathname.includes('dial') && url.searchParams.has('number')) {
     const number = url.searchParams.get('number');
     
-    // 验证号码格式（允许中国大陆手机号、固话、国际号码、400/800）
-    if (!/^(\+?[\d\s\-\(\)]{4,20})$/.test(number.replace(/\s/g, ''))) {
+    // 验证号码格式（允许手机号、固话、10086、400/800、*100#等运营商码）
+    {
+      const cleaned = number.replace(/[\s\-\(\)\*#]/g, '');
+      if (!/^(\+?\d{3,20})$/.test(cleaned)) {
       res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ success: false, error: '无效的号码格式' }));
       return;

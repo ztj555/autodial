@@ -150,6 +150,28 @@
     }
     // 刷新右键菜单（如果打开的话）
     hideContextMenu();
+    // 刷新手动拨号条主题
+    if (manualDialBar) {
+      manualDialBar.style.background = t.bg2;
+      manualDialBar.style.border = `1px solid ${t.accent}33`;
+      manualDialBar.style.boxShadow = `0 4px 16px ${t.accent}22`;
+      const input = manualDialBar.querySelector('input');
+      if (input) {
+        input.style.background = t.bg3;
+        input.style.color = t.text;
+        input.style.border = `1px solid ${t.accent}33`;
+      }
+      manualDialBar.querySelectorAll('button').forEach(btn => {
+        if (btn.classList.contains('__ad_manual_paste')) {
+          btn.style.color = t.text;
+          btn.style.border = `1px solid ${t.accent}44`;
+          btn.style.background = t.bg3;
+        }
+        if (btn.classList.contains('__ad_manual_dial')) {
+          btn.style.background = t.gradAccent;
+        }
+      });
+    }
     // 广播主题变更给子 iframe，刷新"点击拨打"链接颜色
     if (isTopFrame) {
       try {
@@ -421,6 +443,120 @@
       }, 1800);
     }
 
+    // ═══════════════════════════════════════════════
+    // 手动拨号悬浮条（独立于自动检测按钮，隐藏式）
+    // 输入框 + 粘贴按钮 + 拨号按钮
+    // ═══════════════════════════════════════════════
+    let manualDialBar = null;
+
+    function createManualDial() {
+      if (document.getElementById('__ad_manual')) return;
+      const t = T();
+
+      manualDialBar = document.createElement('div');
+      manualDialBar.id = '__ad_manual';
+      Object.assign(manualDialBar.style, {
+        position: 'fixed',
+        right: '20px',
+        bottom: '80px',
+        zIndex: '2147483645',
+        display: 'none',  // 默认隐藏，右键菜单切换
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 8px',
+        background: t.bg2,
+        borderRadius: '12px',
+        boxShadow: `0 4px 16px ${t.accent}22`,
+        border: `1px solid ${t.accent}33`,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      });
+
+      // ── 输入框 ──
+      const input = document.createElement('input');
+      input.type = 'tel';  // 移动端弹出数字键盘
+      input.placeholder = '输入号码';
+      input.autocomplete = 'off';
+      Object.assign(input.style, {
+        width: '140px',
+        padding: '6px 10px',
+        fontSize: '14px',
+        fontWeight: '500',
+        letterSpacing: '1px',
+        color: t.text,
+        background: t.bg3,
+        border: `1px solid ${t.accent}33`,
+        borderRadius: '8px',
+        outline: 'none',
+        textAlign: 'center',
+      });
+      // 回车直接拨号
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') manualDial();
+      });
+      manualDialBar.appendChild(input);
+
+      // ── 清空按钮 ──
+      const pasteBtn = document.createElement('button');
+      pasteBtn.className = '__ad_manual_paste';
+      pasteBtn.textContent = '清空';
+      Object.assign(pasteBtn.style, {
+        padding: '6px 12px',
+        fontSize: '13px',
+        fontWeight: '600',
+        color: t.text,
+        background: t.bg3,
+        border: `1px solid ${t.accent}44`,
+        borderRadius: '8px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'opacity .15s',
+      });
+      pasteBtn.addEventListener('click', () => {
+        input.value = '';
+        input.focus();
+      });
+      pasteBtn.addEventListener('mouseenter', () => { pasteBtn.style.opacity = '0.8'; });
+      pasteBtn.addEventListener('mouseleave', () => { pasteBtn.style.opacity = '1'; });
+      manualDialBar.appendChild(pasteBtn);
+
+      // ── 拨号按钮 ──
+      const dialBtn = document.createElement('button');
+      dialBtn.className = '__ad_manual_dial';
+      dialBtn.textContent = '拨号';
+      Object.assign(dialBtn.style, {
+        padding: '6px 14px',
+        fontSize: '13px',
+        fontWeight: '700',
+        color: t.bg,
+        background: t.gradAccent,
+        border: 'none',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'opacity .15s',
+      });
+      dialBtn.addEventListener('click', manualDial);
+      dialBtn.addEventListener('mouseenter', () => { dialBtn.style.opacity = '0.85'; });
+      dialBtn.addEventListener('mouseleave', () => { dialBtn.style.opacity = '1'; });
+      manualDialBar.appendChild(dialBtn);
+
+      document.body.appendChild(manualDialBar);
+    }
+
+    function manualDial() {
+      if (!manualDialBar) return;
+      const input = manualDialBar.querySelector('input');
+      const number = (input?.value || '').trim();
+      if (!number) return;
+      chrome.runtime.sendMessage({ type: 'dial', phone: number });
+    }
+
+    function toggleManualDial() {
+      if (!manualDialBar) return;
+      const showing = manualDialBar.style.display !== 'none';
+      manualDialBar.style.display = showing ? 'none' : 'flex';
+    }
+
     // ─── 自定义右键菜单 ──────────────────────────────
     let contextMenu = null;
     let _ctxMousedownHandler = null;
@@ -483,6 +619,7 @@
         }},
         { type: 'separator' },
         { label: '🎨 切换主题', action: showThemeMenu },
+        { label: '📱 手动拨号', action: toggleManualDial },
         { type: 'separator' },
         { type: 'account' },  // 占位，渲染时异步填充当前登录账号
         { label: '✕ 关闭菜单', action: () => {} },
@@ -938,6 +1075,7 @@
     function onDomReady() {
       createFloat();
       createHangupBtn();
+      createManualDial();
       // 每次页面加载时检测一次PC状态（后续拨号直接复用缓存）
       chrome.runtime.sendMessage({ type: 'checkPc' });
 

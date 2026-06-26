@@ -969,8 +969,11 @@ async def health_check_handler(path, request_headers):
         # PIN 格式强校验（11位数字）
         if not pin or len(pin) != 11 or not pin.isdigit():
             return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误'))
-        # 号码校验
-        if not number or not number.isdigit() or len(number) < 7:
+        # 号码校验：允许 3-20 位的数字/*/#/+，兼容 10086/固话/400/*100# 等
+        if not number:
+            return (200, JSON_HDR, _err_json('INVALID_NUMBER', '号码不能为空'))
+        cleaned = number.replace('+', '').replace('*', '').replace('#', '').replace('-', '').replace(' ', '')
+        if len(cleaned) < 3 or len(cleaned) > 20:
             return (200, JSON_HDR, _err_json('INVALID_NUMBER', '号码不合法'))
 
         group = pin_groups.get(pin)
