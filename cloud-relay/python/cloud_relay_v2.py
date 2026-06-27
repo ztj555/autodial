@@ -13,9 +13,10 @@ import signal
 import threading
 import subprocess
 import time
+import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 import websockets
@@ -63,6 +64,45 @@ def setup_logging():
     return logger
 
 log = setup_logging()
+
+# ==================== SQLite 访问登记数据库 ====================
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'visits.db')
+
+def init_db():
+    """初始化 visits 表及索引，失败时降级到内存数据库"""
+    global DB_PATH
+    create_sql = '''CREATE TABLE IF NOT EXISTS visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pin TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mobile TEXT NOT NULL,
+        kefu_tel TEXT NOT NULL,
+        visit_type TEXT DEFAULT '贷款咨询',
+        source TEXT DEFAULT 'plugin',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )'''
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(create_sql)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        conn.commit()
+        conn.close()
+        log.info(f'Visits DB initialized at {DB_PATH}')
+    except Exception as e:
+        log.error(f'Database initialization failed: {e}. Using in-memory fallback.')
+        DB_PATH = ':memory:'
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute(create_sql)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        conn.commit()
+        conn.close()
+
+init_db()
 
 # ==================== 统计数据结构 ====================
 start_time = datetime.now()
@@ -139,6 +179,7 @@ class PinGroup:
         self.pcs = set()      # websocket connections
         self.phones = set()   # websocket connections
         self.last_dial = {}   # {number: timestamp}  REST 端点并发保护
+        self.pending_visits = []  # 手机离线时堆积的 visit_record
 
 # pin -> PinGroup
 pin_groups: dict[str, PinGroup] = defaultdict(PinGroup)
@@ -219,7 +260,9 @@ PHONE_TO_PC_TYPES = {
 PC_TO_PHONE_TYPES = {
     'auth_ok', 'auth_fail', 'dial', 'sms', 'hangup', 'ack',
     # 上传协议（无状态透传）
-    'file_chunk_ack', 'file_upload_error'
+    'file_chunk_ack', 'file_upload_error',
+    # 访问登记推送
+    'visit_record'
 }
 
 async def forward_to_pcs(pin, message, exclude_ws=None):
@@ -376,6 +419,21 @@ async def handle_connection(ws, path=None):
                 await forward_to_pcs(pin, msg, ws)
                 record_message(pin, msg_type, len(raw))
                 log.info(f'PHONE_HELLO pin={pin} device={meta["device_name"]} ip={client_ip} pcs={len(group.pcs)}')
+                # 补推离线堆积的 visit_record（await 确认发送后再清除）
+                if group and group.pending_visits:
+                    pushed = []
+                    failed = []
+                    for visit in group.pending_visits:
+                        try:
+                            await forward_to_phones(pin, {
+                                'type': 'visit_record',
+                                'data': visit
+                            })
+                            pushed.append(visit)
+                        except Exception:
+                            failed.append(visit)
+                    group.pending_visits = failed  # 保留失败的，下次重试
+                    log.info(f'phone_hello pin={pin}: pushed {len(pushed)} pending visits, {len(failed)} failed')
                 continue
 
             # ===== PC 端握手 =====
@@ -516,6 +574,7 @@ def configure_firewall():
     
     rules = [
         (f'AutoDial Cloud Relay (WebSocket {PORT})', PORT),
+        (f'AutoDial Cloud Relay (REST API {REST_PORT})', REST_PORT),
     ]
     
     for rule_name, port in rules:
@@ -551,297 +610,18 @@ def configure_firewall():
     log.info('防火墙配置完成（如果失败，请以管理员身份运行程序）')
 
 # ==================== HTTP 健康检查 + Web 管理界面 ====================
-HTML_CONTENT = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoDial 云中转 - 管理界面</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #333; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }
-        .header h1 { font-size: 24px; margin-bottom: 5px; }
-        .header p { opacity: 0.9; font-size: 14px; }
-        .nav { background: white; padding: 10px; display: flex; gap: 10px; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
-        .nav-btn { padding: 8px 16px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; font-size: 14px; }
-        .nav-btn.active { background: #667eea; color: white; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        .page { display: none; }
-        .page.active { display: block; }
-        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .card h2 { font-size: 18px; margin-bottom: 15px; color: #333; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; }
-        .stat-card h3 { font-size: 14px; opacity: 0.9; margin-bottom: 10px; }
-        .stat-card .value { font-size: 28px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f5f5f5; font-weight: 600; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-        .badge-pc { background: #e3f2fd; color: #1976d2; }
-        .badge-phone { background: #f3e5f5; color: #7b1fa2; }
-        .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
-        .btn-danger { background: #f44336; color: white; }
-        .btn-danger:hover { background: #d32f2f; }
-        .refresh-btn { background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; float: right; }
-        .refresh-btn:hover { background: #45a049; }
-        .log-container { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; font-family: monospace; max-height: 500px; overflow-y: auto; font-size: 13px; }
-        .log-line { margin-bottom: 5px; }
-        .empty-state { text-align: center; padding: 40px; color: #999; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🚀 AutoDial 云中转服务器</h1>
-        <p>版本 4.00 | <span id="port">-</span> | 运行时间: <span id="uptime">-</span></p>
-    </div>
+def load_dashboard_html():
+    """从外部文件读取 dashboard.html（支持热更新，无需重启服务）"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(script_dir, 'dashboard.html')
+    try:
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        log.error(f'Failed to load dashboard.html: {e}')
+        return '<html><body><h1>Dashboard not found</h1></body></html>'
 
-    <div class="nav">
-        <button class="nav-btn active" onclick="showPage('dashboard')">📊 仪表盘</button>
-        <button class="nav-btn" onclick="showPage('clients')">👥 客户端管理</button>
-        <button class="nav-btn" onclick="showPage('stats')">📈 流量统计</button>
-        <button class="nav-btn" onclick="showPage('logs')">📋 日志记录</button>
-        <button class="refresh-btn" onclick="refreshAll()">🔄 刷新数据</button>
-    </div>
-
-    <div class="container">
-        <!-- 仪表盘页面 -->
-        <div id="page-dashboard" class="page active">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>当前连接数</h3>
-                    <div class="value" id="stat-connections">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>PIN 组数</h3>
-                    <div class="value" id="stat-groups">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>总消息数</h3>
-                    <div class="value" id="stat-messages">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>总流量</h3>
-                    <div class="value" id="stat-bytes">0 MB</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>📋 最近连接的客户端</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>设备名称</th>
-                            <th>角色</th>
-                            <th>PIN 码</th>
-                            <th>IP 地址</th>
-                            <th>连接时间</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recent-clients">
-                        <tr><td colspan="5" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 客户端管理页面 -->
-        <div id="page-clients" class="page">
-            <div class="card">
-                <h2>👥 所有客户端 (<span id="client-count">0</span>)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>设备名称</th>
-                            <th>角色</th>
-                            <th>PIN 码</th>
-                            <th>IP 地址</th>
-                            <th>连接时间</th>
-                        </tr>
-                    </thead>
-                    <tbody id="clients-list">
-                        <tr><td colspan="5" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 流量统计页面 -->
-        <div id="page-stats" class="page">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>总消息数</h3>
-                    <div class="value" id="stats-total-messages">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>上传流量</h3>
-                    <div class="value" id="stats-bytes-sent">0 MB</div>
-                </div>
-                <div class="stat-card">
-                    <h3>下载流量</h3>
-                    <div class="value" id="stats-bytes-received">0 MB</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>📈 按天统计（最近7天）</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>日期</th>
-                            <th>消息数</th>
-                            <th>流量</th>
-                        </tr>
-                    </thead>
-                    <tbody id="daily-stats">
-                        <tr><td colspan="3" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 日志记录页面 -->
-        <div id="page-logs" class="page">
-            <div class="card">
-                <h2>📋 系统日志（最近100条）</h2>
-                <button class="refresh-btn" onclick="loadLogs()" style="margin-bottom: 15px;">🔄 刷新日志</button>
-                <div class="log-container" id="log-container">
-                    <div class="empty-state">加载中...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const API_BASE = '';
-
-        function showPage(pageId) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('page-' + pageId).classList.add('active');
-            // 更安全的按钮激活方式
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(pageId)) {
-                    btn.classList.add('active');
-                }
-            });
-            if (pageId === 'dashboard') loadDashboard();
-            if (pageId === 'clients') loadClients();
-            if (pageId === 'stats') loadStats();
-            if (pageId === 'logs') loadLogs();
-        }
-
-        async function apiCall(endpoint) {
-            const res = await fetch(API_BASE + endpoint);
-            return await res.json();
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function formatUptime(seconds) {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            return `${h}小时 ${m}分钟 ${s}秒`;
-        }
-
-        async function loadDashboard() {
-            const data = await apiCall('/api/status');
-            document.getElementById('port').textContent = data.port;
-            document.getElementById('uptime').textContent = formatUptime(data.uptime_seconds);
-            document.getElementById('stat-connections').textContent = data.total_connections;
-            document.getElementById('stat-groups').textContent = data.total_groups;
-            document.getElementById('stat-messages').textContent = data.total_messages;
-            document.getElementById('stat-bytes').textContent = formatBytes(data.total_bytes_sent + data.total_bytes_received);
-            
-            const tbody = document.getElementById('recent-clients');
-            if (data.clients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
-            } else {
-                tbody.innerHTML = data.clients.slice(0, 10).map(c => `
-                    <tr>
-                        <td>${c.device_name}</td>
-                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
-                        <td>${c.pin}</td>
-                        <td>${c.ip}</td>
-                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-
-        async function loadClients() {
-            const data = await apiCall('/api/clients');
-            document.getElementById('client-count').textContent = data.clients.length;
-            const tbody = document.getElementById('clients-list');
-            if (data.clients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
-            } else {
-                tbody.innerHTML = data.clients.map(c => `
-                    <tr>
-                        <td>${c.device_name}</td>
-                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
-                        <td>${c.pin}</td>
-                        <td>${c.ip}</td>
-                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-
-        async function loadStats() {
-            const data = await apiCall('/api/stats');
-            document.getElementById('stats-total-messages').textContent = data.total_messages;
-            document.getElementById('stats-bytes-sent').textContent = formatBytes(data.total_bytes_sent);
-            document.getElementById('stats-bytes-received').textContent = formatBytes(data.total_bytes_received);
-            
-            const tbody1 = document.getElementById('daily-stats');
-            if (data.daily.length === 0) {
-                tbody1.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">暂无数据</td></tr>';
-            } else {
-                tbody1.innerHTML = data.daily.map(d => `
-                    <tr>
-                        <td>${d.date}</td>
-                        <td>${d.messages}</td>
-                        <td>${formatBytes(d.bytes)}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-
-        async function loadLogs() {
-            const data = await apiCall('/api/logs');
-            const container = document.getElementById('log-container');
-            if (data.logs.length === 0) {
-                container.innerHTML = '<div class="empty-state">暂无日志记录</div>';
-            } else {
-                container.innerHTML = data.logs.map(line => `<div class="log-line">${line}</div>`).join('');
-                container.scrollTop = container.scrollHeight;
-            }
-        }
-
-        function refreshAll() {
-            const activePage = document.querySelector('.page.active');
-            if (activePage) {
-                const pageId = activePage.id.replace('page-', '');
-                showPage(pageId);
-            }
-        }
-
-        // 页面加载时自动加载仪表盘
-        loadDashboard();
-        // 每30秒自动刷新当前页面
-        setInterval(refreshAll, 30000);
-    </script>
-</body>
-</html>"""
+HTML_CONTENT = load_dashboard_html()
 
 def get_clients_list():
     """获取所有客户端列表（C1修复: 快照 ws_meta 避免跨线程竞态）"""
@@ -1053,6 +833,272 @@ async def health_check_handler(path, request_headers):
     # 404
     return (404, [('Content-Type', 'text/plain')], b'Not Found')
 
+
+# ==================== 访问登记 REST API 服务器 ====================
+
+REST_PORT = PORT + 1
+_rest_server = None
+
+class VisitAPIHandler(BaseHTTPRequestHandler):
+    """处理 /api/v1/visit 的 CRUD 请求（独立 HTTP 服务器）"""
+
+    def _send_json(self, status_code, data):
+        """发送 JSON 响应，含 CORS 头"""
+        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-AutoDial-PIN')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_body(self):
+        """读取请求 body 并解析 JSON"""
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length == 0:
+            return None
+        raw = self.rfile.read(content_length)
+        try:
+            return json.loads(raw.decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None
+
+    def _get_query_param(self, key, default=''):
+        """从 URL query string 获取参数"""
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        vals = params.get(key, [default])
+        return vals[0] if vals else default
+
+    def do_OPTIONS(self):
+        """CORS 预检"""
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-AutoDial-PIN')
+        self.send_header('Access-Control-Max-Age', '86400')
+        self.end_headers()
+
+    def do_GET(self):
+        """GET /api/v1/visit?pin=xxx — 查询登记列表"""
+        parsed = urlparse(self.path)
+        if parsed.path != '/api/v1/visit':
+            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
+            return
+
+        pin = self._get_query_param('pin', '')
+        if not pin:
+            self._send_json(200, {'ok': False, 'code': 'MISSING_PIN', 'message': '缺少 PIN 参数'})
+            return
+
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('SELECT * FROM visits WHERE pin=? ORDER BY created_at DESC', (pin,))
+            rows = [dict(r) for r in c.fetchall()]
+            conn.close()
+            self._send_json(200, rows)
+        except Exception as e:
+            log.error(f'GET visits error: {e}')
+            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+
+    def do_POST(self):
+        """POST /api/v1/visit — 创建登记"""
+        parsed = urlparse(self.path)
+        if parsed.path != '/api/v1/visit':
+            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
+            return
+
+        pin = self.headers.get('X-AutoDial-PIN', '')
+        if not validate_pin(pin):
+            self._send_json(200, {'ok': False, 'code': 'INVALID_PIN', 'message': 'PIN 格式错误，须为4位或11位数字'})
+            return
+
+        body = self._read_body()
+        if not body:
+            self._send_json(200, {'ok': False, 'code': 'INVALID_JSON', 'message': '请求 body 格式错误'})
+            return
+
+        name = str(body.get('name', '')).strip()
+        mobile = str(body.get('mobile', '')).strip()
+        kefu_tel = str(body.get('kefu_tel', '')).strip()
+        visit_type = str(body.get('visit_type', '贷款咨询')).strip()
+        source = str(body.get('source', 'plugin')).strip()
+
+        if not name or not mobile or not kefu_tel:
+            self._send_json(200, {'ok': False, 'code': 'MISSING_FIELDS', 'message': '缺少必填字段: name, mobile, kefu_tel'})
+            return
+
+        now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute(
+                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, created_at, updated_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (pin, name, mobile, kefu_tel, visit_type, source, now, now)
+            )
+            conn.commit()
+            row_id = c.lastrowid
+            conn.close()
+        except Exception as e:
+            log.error(f'INSERT visit error: {e}')
+            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+            return
+
+        visit_record = {
+            'id': row_id,
+            'pin': pin,
+            'name': name,
+            'mobile': mobile,
+            'kefu_tel': kefu_tel,
+            'visit_type': visit_type,
+            'source': source,
+            'created_at': now,
+            'updated_at': now
+        }
+
+        # 尝试 WS 推送给对应 pin 的手机
+        global loop
+        if loop and loop.is_running():
+            group = pin_groups.get(pin)
+            if group and group.phones:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}),
+                        loop
+                    )
+                    log.info(f'VISIT pushed to phone pin={pin} id={row_id}')
+                except Exception as e:
+                    log.warning(f'VISIT push failed pin={pin}: {e}')
+                    group.pending_visits.append(visit_record)
+            elif group:
+                group.pending_visits.append(visit_record)
+                log.info(f'VISIT queued (phone offline) pin={pin} id={row_id} pending={len(group.pending_visits)}')
+            else:
+                # pin 组不存在，创建并缓存
+                grp = get_group(pin)
+                grp.pending_visits.append(visit_record)
+                log.info(f'VISIT queued (no group) pin={pin} id={row_id}')
+
+        self._send_json(200, {'ok': True, 'code': 'ACCEPTED', 'id': row_id})
+
+    def do_PUT(self):
+        """PUT /api/v1/visit — 修改记录"""
+        parsed = urlparse(self.path)
+        if parsed.path != '/api/v1/visit':
+            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
+            return
+
+        body = self._read_body()
+        if not body:
+            self._send_json(200, {'ok': False, 'code': 'INVALID_JSON', 'message': '请求 body 格式错误'})
+            return
+
+        record_id = body.get('id')
+        if not record_id:
+            self._send_json(200, {'ok': False, 'code': 'MISSING_ID', 'message': '缺少记录 id'})
+            return
+
+        name = str(body.get('name', '')).strip()
+        mobile = str(body.get('mobile', '')).strip()
+        kefu_tel = str(body.get('kefu_tel', '')).strip()
+        visit_type = str(body.get('visit_type', '')).strip()
+
+        if not name and not mobile and not kefu_tel and not visit_type:
+            self._send_json(200, {'ok': False, 'code': 'NO_FIELDS', 'message': '没有要更新的字段'})
+            return
+
+        now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        fields = []
+        values = []
+        if name:
+            fields.append('name=?')
+            values.append(name)
+        if mobile:
+            fields.append('mobile=?')
+            values.append(mobile)
+        if kefu_tel:
+            fields.append('kefu_tel=?')
+            values.append(kefu_tel)
+        if visit_type:
+            fields.append('visit_type=?')
+            values.append(visit_type)
+        fields.append('updated_at=?')
+        values.append(now)
+        values.append(record_id)
+
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute(f'UPDATE visits SET {", ".join(fields)} WHERE id=?', values)
+            conn.commit()
+            affected = c.rowcount
+            conn.close()
+            if affected == 0:
+                self._send_json(200, {'ok': False, 'code': 'NOT_FOUND', 'message': '记录不存在'})
+            else:
+                self._send_json(200, {'ok': True, 'code': 'UPDATED', 'id': record_id})
+        except Exception as e:
+            log.error(f'UPDATE visit error: {e}')
+            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+
+    def do_DELETE(self):
+        """DELETE /api/v1/visit?id=N — 删除记录"""
+        parsed = urlparse(self.path)
+        if parsed.path != '/api/v1/visit':
+            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
+            return
+
+        record_id = self._get_query_param('id', '')
+        if not record_id:
+            self._send_json(200, {'ok': False, 'code': 'MISSING_ID', 'message': '缺少记录 id'})
+            return
+
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('DELETE FROM visits WHERE id=?', (int(record_id),))
+            conn.commit()
+            affected = c.rowcount
+            conn.close()
+            if affected == 0:
+                self._send_json(200, {'ok': False, 'code': 'NOT_FOUND', 'message': '记录不存在'})
+            else:
+                self._send_json(200, {'ok': True, 'code': 'DELETED', 'id': int(record_id)})
+        except Exception as e:
+            log.error(f'DELETE visit error: {e}')
+            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+
+    def log_message(self, format, *args):
+        """重定向 HTTP 日志到 relay logger"""
+        log.info(f'REST {self.client_address[0]} {format % args}')
+
+
+def start_rest_server():
+    """在后台线程启动 REST API 服务器"""
+    global _rest_server
+    try:
+        _rest_server = ThreadingHTTPServer(('0.0.0.0', REST_PORT), VisitAPIHandler)
+        log.info(f'Visit REST API server started on port {REST_PORT}')
+        _rest_server.serve_forever()
+    except OSError as e:
+        log.error(f'Failed to start REST API server on port {REST_PORT}: {e}')
+    except Exception as e:
+        log.error(f'REST API server error: {e}')
+
+
+def stop_rest_server():
+    """停止 REST API 服务器"""
+    global _rest_server
+    if _rest_server:
+        _rest_server.shutdown()
+        _rest_server = None
+        log.info('Visit REST API server stopped')
+
 # ==================== 服务器启停 ====================
 _heartbeat_task = None  # C4修复: 保存心跳任务引用，防止重启时累积多个
 
@@ -1082,6 +1128,11 @@ async def run_server():
         log.info(f'Server started on port {PORT}, PID={os.getpid()}')
         log.info(f'Web 管理界面: http://0.0.0.0:{PORT} (与 WebSocket 同端口)')
 
+        # 启动 REST API 服务器（独立线程）
+        rest_thread = threading.Thread(target=start_rest_server, daemon=True, name='rest-api')
+        rest_thread.start()
+        log.info(f'Visit REST API: http://0.0.0.0:{REST_PORT}/api/v1/visit')
+
         # 通知托盘状态更新
         update_tray_status(True)
 
@@ -1097,6 +1148,7 @@ async def run_server():
 
 async def stop_server():
     global server_instance
+    stop_rest_server()
     if server_instance:
         log.info('Stopping server...')
         # 关闭所有连接

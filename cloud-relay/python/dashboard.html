@@ -41,6 +41,26 @@
         .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
         .save-btn:hover { background: #45a049; }
         .empty-state { text-align: center; padding: 40px; color: #999; }
+        /* 上门记录样式 */
+        .visit-filters { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
+        .visit-filters .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .visit-filters .filter-group label { font-size: 13px; font-weight: 600; color: #555; }
+        .visit-filters .filter-group input, .visit-filters .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .visit-filters .filter-group input[type="date"] { min-width: 150px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 8px; padding: 30px; min-width: 450px; max-width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+        .modal h3 { margin-bottom: 20px; font-size: 18px; }
+        .modal .form-group { margin-bottom: 15px; }
+        .modal .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; color: #555; }
+        .modal .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .modal .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-cancel { background: #e0e0e0; color: #333; }
+        .btn-cancel:hover { background: #ccc; }
+        .badge-plugin { background: #e8f5e9; color: #2e7d32; }
+        .badge-phone { background: #fff3e0; color: #e65100; }
     </style>
 </head>
 <body>
@@ -55,6 +75,7 @@
         <button class="nav-btn" onclick="showPage('stats')">📈 流量统计</button>
         <button class="nav-btn" onclick="showPage('logs')">📋 日志记录</button>
         <button class="nav-btn" onclick="showPage('settings')">⚙️ 设置</button>
+        <button class="nav-btn" onclick="showPage('visits')">🏠 上门记录</button>
         <button class="refresh-btn" onclick="refreshAll()">🔄 刷新数据</button>
     </div>
 
@@ -201,10 +222,87 @@
                 <div id="settings-msg" style="margin-top: 10px;"></div>
             </div>
         </div>
+
+        <!-- 上门记录页面 -->
+        <div id="page-visits" class="page">
+            <div class="card">
+                <h2>🏠 上门记录管理</h2>
+                <div class="visit-filters">
+                    <div class="filter-group">
+                        <label>PIN 筛选</label>
+                        <input type="text" id="visit-filter-pin" placeholder="输入 PIN 码" style="max-width: 150px;" oninput="loadVisits()">
+                    </div>
+                    <div class="filter-group">
+                        <label>开始日期</label>
+                        <input type="date" id="visit-filter-date-from" onchange="loadVisits()">
+                    </div>
+                    <div class="filter-group">
+                        <label>结束日期</label>
+                        <input type="date" id="visit-filter-date-to" onchange="loadVisits()">
+                    </div>
+                    <div class="filter-group">
+                        <label>来源筛选</label>
+                        <select id="visit-filter-source" onchange="loadVisits()">
+                            <option value="">全部</option>
+                            <option value="plugin">插件</option>
+                            <option value="phone">手机</option>
+                        </select>
+                    </div>
+                    <button class="refresh-btn" onclick="loadVisits()" style="margin-top: auto;">🔄 刷新</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>客户姓名</th>
+                            <th>客户手机号</th>
+                            <th>顾问手机号</th>
+                            <th>事由</th>
+                            <th>来源</th>
+                            <th>登记时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="visits-list">
+                        <tr><td colspan="8" style="text-align: center; color: #999;">请先输入 PIN 码查询</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div class="modal-overlay" id="visit-edit-modal">
+        <div class="modal">
+            <h3>✏️ 编辑上门记录</h3>
+            <input type="hidden" id="visit-edit-id">
+            <div class="form-group">
+                <label>客户姓名</label>
+                <input type="text" id="visit-edit-name" placeholder="客户姓名">
+            </div>
+            <div class="form-group">
+                <label>客户手机号</label>
+                <input type="text" id="visit-edit-mobile" placeholder="客户手机号">
+            </div>
+            <div class="form-group">
+                <label>顾问手机号</label>
+                <input type="text" id="visit-edit-kefu_tel" placeholder="顾问手机号">
+            </div>
+            <div class="form-group">
+                <label>事由</label>
+                <input type="text" id="visit-edit-type" placeholder="事由（如：贷款咨询）">
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveVisitEdit()">💾 保存</button>
+            </div>
+        </div>
+    </div>
     </div>
 
     <script>
         const API_BASE = '';
+        const VISIT_API_BASE = 'http://' + window.location.hostname + ':' + (parseInt(window.location.port) + 1);
 
         function showPage(pageId) {
             // 隐藏所有页面
@@ -218,6 +316,7 @@
             if (pageId === 'clients') loadClients();
             if (pageId === 'stats') loadStats();
             if (pageId === 'logs') loadLogs();
+            if (pageId === 'visits') loadVisits();
         }
 
         async function apiCall(endpoint) {
@@ -355,6 +454,141 @@
         loadDashboard();
         // 每30秒自动刷新当前页面
         setInterval(refreshAll, 30000);
+
+        // ========== 上门记录管理 ==========
+
+        async function loadVisits() {
+            const pin = document.getElementById('visit-filter-pin').value.trim();
+            const tbody = document.getElementById('visits-list');
+            if (!pin) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999;">请先输入 PIN 码查询</td></tr>';
+                return;
+            }
+
+            try {
+                const url = VISIT_API_BASE + '/api/v1/visit?pin=' + encodeURIComponent(pin);
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!Array.isArray(data)) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999;">查询失败</td></tr>';
+                    return;
+                }
+
+                // 应用日期和来源筛选
+                const dateFrom = document.getElementById('visit-filter-date-from').value;
+                const dateTo = document.getElementById('visit-filter-date-to').value;
+                const sourceFilter = document.getElementById('visit-filter-source').value;
+
+                let filtered = data;
+                if (dateFrom) {
+                    filtered = filtered.filter(r => r.created_at >= dateFrom);
+                }
+                if (dateTo) {
+                    filtered = filtered.filter(r => r.created_at <= dateTo + 'T23:59:59');
+                }
+                if (sourceFilter) {
+                    filtered = filtered.filter(r => r.source === sourceFilter);
+                }
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999;">暂无记录</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = filtered.map(r => `
+                    <tr>
+                        <td>${r.id}</td>
+                        <td>${escHtml(r.name)}</td>
+                        <td>${escHtml(r.mobile)}</td>
+                        <td>${escHtml(r.kefu_tel)}</td>
+                        <td>${escHtml(r.visit_type)}</td>
+                        <td><span class="badge badge-${r.source === 'phone' ? 'phone' : 'plugin'}">${r.source === 'phone' ? '手机' : '插件'}</span></td>
+                        <td>${r.created_at ? new Date(r.created_at).toLocaleString('zh-CN') : '-'}</td>
+                        <td>
+                            <button class="btn btn-primary" style="margin-right: 4px;" onclick="openEditModal(${r.id}, '${escAttr(r.name)}', '${escAttr(r.mobile)}', '${escAttr(r.kefu_tel)}', '${escAttr(r.visit_type)}')">编辑</button>
+                            <button class="btn btn-danger" onclick="deleteVisit(${r.id})">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('loadVisits error:', e);
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #f44336;">API 请求失败，请确认 REST 服务已启动（端口 ' + (parseInt(window.location.port) + 1) + '）</td></tr>';
+            }
+        }
+
+        function escHtml(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escAttr(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function openEditModal(id, name, mobile, kefu_tel, visit_type) {
+            document.getElementById('visit-edit-id').value = id;
+            document.getElementById('visit-edit-name').value = name;
+            document.getElementById('visit-edit-mobile').value = mobile;
+            document.getElementById('visit-edit-kefu_tel').value = kefu_tel;
+            document.getElementById('visit-edit-type').value = visit_type;
+            document.getElementById('visit-edit-modal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('visit-edit-modal').classList.remove('active');
+        }
+
+        async function saveVisitEdit() {
+            const id = parseInt(document.getElementById('visit-edit-id').value);
+            const name = document.getElementById('visit-edit-name').value.trim();
+            const mobile = document.getElementById('visit-edit-mobile').value.trim();
+            const kefu_tel = document.getElementById('visit-edit-kefu_tel').value.trim();
+            const visit_type = document.getElementById('visit-edit-type').value.trim();
+
+            if (!name && !mobile && !kefu_tel && !visit_type) {
+                alert('请至少填写一个字段');
+                return;
+            }
+
+            try {
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, name: name, mobile: mobile, kefu_tel: kefu_tel, visit_type: visit_type })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    closeEditModal();
+                    loadVisits();
+                } else {
+                    alert('更新失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                console.error('saveVisitEdit error:', e);
+                alert('请求失败，请检查网络');
+            }
+        }
+
+        async function deleteVisit(id) {
+            if (!confirm('确定要删除这条上门记录吗？此操作不可撤销。')) return;
+
+            try {
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit?id=' + encodeURIComponent(id), {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    loadVisits();
+                } else {
+                    alert('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                console.error('deleteVisit error:', e);
+                alert('请求失败，请检查网络');
+            }
+        }
     </script>
 </body>
 </html>

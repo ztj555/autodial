@@ -53,6 +53,9 @@ class StatsFragment : Fragment() {
         }
     }
 
+    // 上门登记广播接收器
+    private var visitReceiver: BroadcastReceiver? = null
+
     private val refreshHandler = Handler(Looper.getMainLooper())
     private val refreshRunnable = Runnable { refreshIfNeeded() }
 
@@ -103,6 +106,19 @@ class StatsFragment : Fragment() {
             )
         } catch (_: Exception) {}
 
+        // 注册上门登记广播
+        try {
+            visitReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    refreshIfNeeded()
+                }
+            }
+            ContextCompat.registerReceiver(requireActivity(), visitReceiver!!,
+                IntentFilter("com.autodial.VISIT_RECORDED"),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (_: Exception) {}
+
         refreshIfNeeded()
 
         // 应用主题
@@ -128,6 +144,7 @@ class StatsFragment : Fragment() {
         refreshHandler.removeCallbacks(refreshRunnable)
         try { requireActivity().unregisterReceiver(newDialReceiver) } catch (_: Exception) {}
         try { requireActivity().unregisterReceiver(callEndedReceiver) } catch (_: Exception) {}
+        try { visitReceiver?.let { requireActivity().unregisterReceiver(it) } } catch (_: Exception) {}
     }
 
     fun refreshIfNeeded() {

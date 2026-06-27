@@ -1,14 +1,20 @@
 package com.autodial.app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import okhttp3.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -808,6 +814,12 @@ class ConnectionManager(private val context: Context) {
                                 } else onReconnectRequest()
                             }
                         }
+                        "visit_record" -> {
+                            val data = msg.optJSONObject("data")
+                            if (data != null) {
+                                handler.post { handleVisitRecord(data) }
+                            }
+                        }
                         else -> handler.post { notifyMessage(msg) }
                     }
                 } catch (e: Exception) { v6LogE(TAG, pin, "LAN 消息解析失败: ${e.message}") }
@@ -944,6 +956,12 @@ class ConnectionManager(private val context: Context) {
                             "reconnect_request" -> {
                                 v6LogI(TAG, pin, "收到 PC 端云端唤醒指令 (via Cloud)")
                                 onReconnectRequest()
+                            }
+                            "visit_record" -> {
+                                val data = msg.optJSONObject("data")
+                                if (data != null) {
+                                    handler.post { handleVisitRecord(data) }
+                                }
                             }
                             "ack" -> {
                                 // v4.57: PC 回了 ACK → 探活成功，PC 真正在线
@@ -1217,5 +1235,70 @@ class ConnectionManager(private val context: Context) {
         pcProbeRunnable?.let { handler.removeCallbacks(it) }
         pcProbeRunnable = null
         pcProbeMessageId = null
+    }
+
+    // ==================== visit_record 处理 ====================
+
+    /**
+     * 处理云中继推送的 visit_record 消息：存储时间戳、发送通知、广播刷新统计页。
+     */
+    private fun handleVisitRecord(data: JSONObject) {
+        val name = data.optString("name", "")
+        val mobile = data.optString("mobile", "")
+
+        // 1. 存储时间戳到 SharedPreferences（保留最近66天）
+        val existing = prefs.getString("registration_timestamps", "") ?: ""
+        val now = System.currentTimeMillis()
+        val cutoff = now - 66L * 24 * 3600_000L
+
+        val recent = if (existing.isEmpty()) {
+            listOf(now.toString())
+        } else {
+            existing.split(",")
+                .mapNotNull { it.toLongOrNull() }
+                .filter { it >= cutoff }
+                .map { it.toString() }
+                .plus(now.toString())
+        }
+        prefs.edit().putString("registration_timestamps", recent.joinToString(",")).apply()
+
+        // 2. 发送 Android 系统通知
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    "autodial_visit",
+                    "来访登记",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
+            val notification = NotificationCompat.Builder(context, "autodial_visit")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("已登记 $name")
+                .setContentText("手机号: $mobile")
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
+            notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        } catch (e: Exception) {
+            android.util.Log.e("ConnectionManager", "通知发送失败: ${e.message}")
+        }
+
+        // 3. 广播刷新统计页（与 StatsFragment 中的 ContextCompat.registerReceiver 配对）
+        try {
+            val refreshIntent = Intent("com.autodial.VISIT_RECORDED").apply {
+                putExtra("name", name)
+                putExtra("mobile", mobile)
+            }
+            context.sendBroadcast(refreshIntent)
+        } catch (_: Exception) {}
     }
 }

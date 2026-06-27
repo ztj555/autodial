@@ -17,6 +17,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.Executors
+import org.json.JSONObject
 
 class RegisterFragment : Fragment() {
 
@@ -253,6 +254,11 @@ class RegisterFragment : Fragment() {
             }
             prefs.edit().putString("registration_timestamps", recent.joinToString(",")).apply()
 
+            // 同步到云中继（在清空输入前读取）
+            val visitorName = etCustomerName.text.toString().trim()
+            val visitorMobile = etCustomerMobile.text.toString().trim()
+            syncToCloudRelay(visitorName, visitorMobile)
+
             // 清空输入
             etCustomerName.text?.clear()
             etCustomerMobile.text?.clear()
@@ -290,6 +296,53 @@ class RegisterFragment : Fragment() {
             btnSubmit.alpha = 1.0f
             btnSubmit.setTextColor(Color.parseColor(colors.bg))
             btnSubmit.setBackgroundColor(Color.parseColor(colors.gold))
+        }
+    }
+
+    /**
+     * 将本地登记同步到云中继的 /api/v1/visit 接口，确保云端也存一份。
+     */
+    private fun syncToCloudRelay(name: String, mobile: String) {
+        executor.execute {
+            try {
+                val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                val serverUrl = prefs.getString("cloud_server", "") ?: ""
+                if (serverUrl.isEmpty()) return@execute
+
+                // visit API 在 cloud server 端口 +1
+                val visitUrl = serverUrl.replace(Regex(":(\\d+)(/.*)?$")) { match ->
+                    ":" + (match.groupValues[1].toInt() + 1).toString() + (match.groupValues[2] ?: "")
+                }
+                val fullUrl = if (visitUrl.startsWith("http")) "$visitUrl/api/v1/visit"
+                              else "http://$visitUrl/api/v1/visit"
+
+                val url = URL(fullUrl)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("X-AutoDial-PIN", pin)
+
+                val body = JSONObject().apply {
+                    put("name", name)
+                    put("mobile", mobile)
+                    put("kefu_tel", pin)
+                    put("visit_type", "贷款咨询")
+                    put("source", "phone")
+                }
+
+                val writer = OutputStreamWriter(conn.outputStream, "UTF-8")
+                writer.write(body.toString())
+                writer.flush()
+                writer.close()
+
+                val responseCode = conn.responseCode
+                conn.disconnect()
+            } catch (_: Exception) {
+                // 静默失败，本地已存储
+            }
         }
     }
 

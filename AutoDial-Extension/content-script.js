@@ -617,6 +617,16 @@
           if (!currentPhone) { flashFloat('未检测到号码', false); return; }
           sendSms(currentPhone);
         }},
+        { label: (function() {
+          var custName = window.__adCustomerName || '';
+          var custPhone = window.__adPhone || '';
+          return custPhone && custName ? '📝 一键登记 ' + custName + ' ' + custPhone : '📝 一键登记（未检测客户）';
+        })(), action: () => {
+          var custName = window.__adCustomerName || '';
+          var custPhone = window.__adPhone || currentPhone || '';
+          if (!custPhone || !custName) { flashFloat('未检测到客户信息', false); return; }
+          showRegisterConfirm(custName, custPhone);
+        }},
         { type: 'separator' },
         { label: '🎨 切换主题', action: showThemeMenu },
         { label: '📱 手动拨号', action: toggleManualDial },
@@ -1197,6 +1207,7 @@
 
     function updatePhone(phone) {
       currentPhone = phone;
+      window.__adPhone = phone;
       if (!floatEl) return;
       const t = T();
       const label = document.getElementById('__ad_dial_label');
@@ -1225,6 +1236,99 @@
       }, ok ? 2500 : 1000);
     }
 
+    // ─── Toast 提示 ──────────────────────────────────
+    function showToast(text) {
+      var old = document.getElementById('__ad_toast');
+      if (old) old.remove();
+      var t = T();
+      var toast = document.createElement('div');
+      toast.id = '__ad_toast';
+      toast.textContent = text;
+      Object.assign(toast.style, {
+        position: 'fixed',
+        bottom: '40px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '2147483647',
+        background: t.bg2,
+        color: t.text,
+        padding: '10px 24px',
+        borderRadius: '8px',
+        fontSize: '14px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        border: '1px solid ' + t.accent + '33',
+        backdropFilter: 'blur(12px)',
+        transition: 'opacity .3s',
+      });
+      document.body.appendChild(toast);
+      setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
+      }, 2500);
+    }
+
+    // ─── HTML 转义 ──────────────────────────────────
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ─── 一键登记确认弹窗 ────────────────────────────
+    function showRegisterConfirm(name, phone) {
+      // 移除已有弹窗
+      var old = document.getElementById('autodial-register-overlay');
+      if (old) old.remove();
+
+      var pin = window.__adMyPhone || '';
+      var t = T();
+      var overlay = document.createElement('div');
+      overlay.id = 'autodial-register-overlay';
+      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(0,0,0,0.6);z-index:2147483647;display:flex;' +
+        'align-items:center;justify-content:center;font-family:sans-serif;';
+
+      overlay.innerHTML = '<div style="background:' + t.bg2 + ';border-radius:12px;padding:24px;' +
+        'min-width:300px;max-width:360px;color:' + t.text + ';text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.5);">' +
+        '<div style="font-size:16px;font-weight:bold;color:' + t.accentLight + ';margin-bottom:16px;">确认登记客户信息</div>' +
+        '<div style="text-align:left;margin-bottom:16px;">' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户姓名：</span>' + escHtml(name) + '</div>' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户手机号：</span>' + escHtml(phone) + '</div>' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">顾问手机号：</span>' + escHtml(pin || '未设置') + '</div>' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">事由：</span>贷款咨询</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;">' +
+        '<button id="autodial-register-cancel" style="flex:1;padding:10px;border:1px solid #444;' +
+        'border-radius:8px;background:transparent;color:' + t.text2 + ';cursor:pointer;font-size:14px;">取消</button>' +
+        '<button id="autodial-register-confirm" style="flex:1;padding:10px;border:none;' +
+        'border-radius:8px;background:' + t.accentLight + ';color:' + t.bg + ';cursor:pointer;font-size:14px;font-weight:bold;">确认登记</button>' +
+        '</div></div>';
+
+      document.body.appendChild(overlay);
+
+      document.getElementById('autodial-register-cancel').onclick = function() {
+        overlay.remove();
+      };
+      document.getElementById('autodial-register-confirm').onclick = function() {
+        overlay.remove();
+        chrome.runtime.sendMessage({
+          type: 'registerVisit',
+          name: name,
+          phone: phone
+        }, function(resp) {
+          if (resp && resp.success) {
+            showToast('✅ 已登记 ' + name);
+          } else {
+            showToast('✗ 登记失败: ' + (resp ? resp.error : '网络错误'));
+          }
+        });
+      };
+
+      // 点击遮罩关闭
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+      });
+    }
+
     // ========== v4: 检测坐席手机号 → 存为 PIN ==========
     let _lastPhone = null;
     let _debounceTimer = null;
@@ -1234,6 +1338,7 @@
         const myPhone = getMyPhoneFromCRM();
         if (myPhone && myPhone !== _lastPhone) {
           _lastPhone = myPhone;
+          window.__adMyPhone = myPhone;
           chrome.storage.local.set({ self_phone: myPhone });
           console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', myPhone);
           chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
@@ -1277,10 +1382,18 @@
         const phone = getMyPhoneFromCRM();
         if (phone) {
           _lastPhone = phone;
+          window.__adMyPhone = phone;
           chrome.storage.local.set({ self_phone: phone });
         }
         sendResponse({ phone: phone || null });
         return true;
+      }
+    });
+
+    // 监听子iframe发来的客户姓名
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'nameDetected') {
+        window.__adCustomerName = e.data.name;
       }
     });
 
@@ -1334,10 +1447,47 @@
         console.log('[AutoDial v4] ✓ 已拦截"点击拨打"链接');
       }
 
+      // 同时检测客户姓名
+      var customerName = getNameFromDetailPage();
+      if (customerName) {
+        window.parent.postMessage({ type: 'nameDetected', name: customerName }, '*');
+      }
+
       return phone;
     }
 
     return null;
+  }
+
+  // 从CRM详情页提取客户姓名（找"姓名："标签）
+  function getNameFromDetailPage() {
+    var labels = ['姓名：', '姓名:', '客户姓名：', '客户姓名:', '客户名称：', '客户名称:'];
+    var allElements = document.querySelectorAll('*');
+    for (var i = 0; i < allElements.length; i++) {
+      var el = allElements[i];
+      // 跳过不可见元素、大的容器元素
+      if (el.offsetParent === null && el.tagName !== 'BODY' && el.tagName !== 'HTML') continue;
+      if (el.children.length > 10) continue;
+      var text = (el.textContent || '').trim();
+      for (var j = 0; j < labels.length; j++) {
+        if (text.indexOf(labels[j]) === 0 || text === labels[j].replace(/[：:]/g, '')) {
+          // 取标签后面兄弟节点的文本
+          var next = el.nextElementSibling;
+          if (next) {
+            var name = (next.textContent || next.value || '').trim();
+            if (name && name.length >= 1 && name.length <= 30 && !/\d{11}/.test(name)) {
+              return name;
+            }
+          }
+          // 如果标签在同一个节点内，取标签后的文字
+          var after = text.substring(labels[j].length).trim();
+          if (after && after.length >= 1 && after.length <= 30 && !/\d{11}/.test(after)) {
+            return after;
+          }
+        }
+      }
+    }
+    return '';
   }
 
   function scan() {

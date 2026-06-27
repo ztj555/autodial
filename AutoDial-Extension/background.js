@@ -153,6 +153,50 @@ async function dial(phone, tabId) {
   }
 }
 
+// ==================== 一键登记（PIN 版） ====================
+
+async function registerVisit(name, phone, tabId) {
+  const pin = await getPin();
+  if (!pin) {
+    notifyTab(tabId, { type: 'dialResult', ok: false, err: 'PIN未设置，请先打开CRM页面检测坐席手机号' });
+    return { success: false, error: 'PIN未设置，请先打开CRM页面检测坐席手机号' };
+  }
+
+  try {
+    const apiUrl = await getCloudApi();
+    // visit API 在 PORT+1 上
+    const visitUrl = apiUrl.replace(/:(\d+)(\/.*)?$/, function(m, port, path) {
+      return ':' + (parseInt(port) + 1) + (path || '');
+    });
+
+    const res = await fetch(visitUrl + '/api/v1/visit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-AutoDial-PIN': pin
+      },
+      body: JSON.stringify({
+        name: name,
+        mobile: phone,
+        kefu_tel: pin,
+        visit_type: '贷款咨询',
+        source: 'plugin'
+      })
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      console.log('[AutoDial BG] 登记成功:', name, phone);
+      return { success: true };
+    } else {
+      return { success: false, error: data.message || '登记失败' };
+    }
+  } catch (e) {
+    console.error('[AutoDial BG] 登记失败:', e);
+    return { success: false, error: '网络错误：' + e.message };
+  }
+}
+
 // ==================== 挂断 + 短信（PIN 版） ====================
 
 async function hangup(tabId) {
@@ -217,6 +261,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'dial') { dial(msg.phone, tabId); return true; }
   if (msg.type === 'hangup') { hangup(tabId); return true; }
   if (msg.type === 'sendSms') { sendSms(msg.phone, tabId); return true; }
+
+  // 一键登记
+  if (msg.type === 'registerVisit') {
+    registerVisit(msg.name, msg.phone, tabId).then(r => sendResponse(r));
+    return true;
+  }
 
   // 坐席手机号检测 -> 存为 PIN + 刷新服务器列表
   if (msg.type === 'selfPhoneDetected') {
