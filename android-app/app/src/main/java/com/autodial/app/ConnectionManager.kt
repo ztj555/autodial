@@ -964,6 +964,11 @@ class ConnectionManager(private val context: Context) {
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                     v6LogW(TAG, pin, "Cloud closed code=$code reason=$reason")
                     handleCloudDisconnect()
+                    // 4001 = 被同 PIN 的新设备挤掉，不自动重连
+                    if (code == 4001) {
+                        v6LogI(TAG, pin, "被同 PIN 的新设备挤下线，停止重连")
+                        return
+                    }
                     // 非手动断开时，根据策略决定是否重连
                     if (!manualDisconnecting && autoReconnect && currentStrategy != ConnectionStrategy.LAN_ONLY) {
                         scheduleCloudReconnect()
