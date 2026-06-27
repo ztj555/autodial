@@ -28,14 +28,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabConnect: LinearLayout
     private lateinit var tabCallLog: LinearLayout
     private lateinit var tabStats: LinearLayout
+    private lateinit var tabRegister: LinearLayout
     private lateinit var tabConnectLabel: TextView
     private lateinit var tabCallLogLabel: TextView
     private lateinit var tabStatsLabel: TextView
+    private lateinit var tabRegisterLabel: TextView
 
     private val fragments = listOf<Fragment>(
         ConnectFragment(),
         CallLogFragment(),
-        StatsFragment()
+        StatsFragment(),
+        RegisterFragment()
     )
 
     private val connectionReceiver = object : BroadcastReceiver() {
@@ -80,9 +83,11 @@ class MainActivity : AppCompatActivity() {
         tabConnect = findViewById(R.id.tabConnect)
         tabCallLog = findViewById(R.id.tabCallLog)
         tabStats = findViewById(R.id.tabStats)
+        tabRegister = findViewById(R.id.tabRegister)
         tabConnectLabel = findViewById(R.id.tabConnectLabel)
         tabCallLogLabel = findViewById(R.id.tabCallLogLabel)
         tabStatsLabel = findViewById(R.id.tabStatsLabel)
+        tabRegisterLabel = findViewById(R.id.tabRegisterLabel)
 
         ThemeManager.addOnThemeChangedListener(themeListener)
 
@@ -92,6 +97,7 @@ class MainActivity : AppCompatActivity() {
         tabConnect.setOnClickListener { switchTab(0) }
         tabCallLog.setOnClickListener { switchTab(1) }
         tabStats.setOnClickListener { switchTab(2) }
+        tabRegister.setOnClickListener { switchTab(3) }
 
         ContextCompat.registerReceiver(this, connectionReceiver,
             IntentFilter("com.autodial.CONNECTION_CHANGE"),
@@ -196,6 +202,7 @@ class MainActivity : AppCompatActivity() {
         tabConnectLabel.setTextColor(inactiveColor)
         tabCallLogLabel.setTextColor(inactiveColor)
         tabStatsLabel.setTextColor(inactiveColor)
+        tabRegisterLabel.setTextColor(inactiveColor)
 
         when (index) {
             0 -> tabConnectLabel.setTextColor(activeColor)
@@ -208,6 +215,7 @@ class MainActivity : AppCompatActivity() {
                 tabStatsLabel.setTextColor(activeColor)
                 (fragments.getOrNull(2) as? StatsFragment)?.refreshIfNeeded()
             }
+            3 -> tabRegisterLabel.setTextColor(activeColor)
         }
     }
 

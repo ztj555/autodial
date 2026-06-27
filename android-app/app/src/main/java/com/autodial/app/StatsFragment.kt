@@ -58,6 +58,14 @@ class StatsFragment : Fragment() {
 
     private val dayOfWeekFormat = SimpleDateFormat("E", Locale.getDefault())
 
+    // 上门统计 TextView
+    private lateinit var visitToday: TextView
+    private lateinit var visitWeek: TextView
+    private lateinit var visit7Days: TextView
+    private lateinit var visitMonth: TextView
+    private lateinit var visitLastMonth: TextView
+    private lateinit var visit30Days: TextView
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_stats, container, false)
     }
@@ -72,12 +80,18 @@ class StatsFragment : Fragment() {
         totalLuck = view.findViewById(R.id.statsTotalLuck)
         chartContainer = view.findViewById(R.id.statsChartContainer)
         dateLabels = view.findViewById(R.id.statsDateLabels)
+        visitToday = view.findViewById(R.id.statsVisitToday)
+        visitWeek = view.findViewById(R.id.statsVisitWeek)
+        visit7Days = view.findViewById(R.id.statsVisit7Days)
+        visitMonth = view.findViewById(R.id.statsVisitMonth)
+        visitLastMonth = view.findViewById(R.id.statsVisitLastMonth)
+        visit30Days = view.findViewById(R.id.statsVisit30Days)
 
         // 注册新拨号广播
         try {
             ContextCompat.registerReceiver(requireActivity(), newDialReceiver,
                 IntentFilter("com.autodial.NEW_DIAL"),
-                ContextCompat.RECEIVER_EXPORTED
+                ContextCompat.RECEIVER_NOT_EXPORTED
             )
         } catch (_: Exception) {}
 
@@ -85,7 +99,7 @@ class StatsFragment : Fragment() {
         try {
             ContextCompat.registerReceiver(requireActivity(), callEndedReceiver,
                 IntentFilter("com.autodial.CALL_ENDED"),
-                ContextCompat.RECEIVER_EXPORTED
+                ContextCompat.RECEIVER_NOT_EXPORTED
             )
         } catch (_: Exception) {}
 
@@ -160,6 +174,7 @@ class StatsFragment : Fragment() {
             loadMonthlyStats(db)
 
             buildChart(stats)
+            loadVisitStats()
         } catch (e: Exception) {
             android.util.Log.e("StatsFragment", "加载统计失败: ${e.message}")
         }
@@ -178,6 +193,56 @@ class StatsFragment : Fragment() {
         val monthCount = db.getDialCountSince(requireContext(), monthStart)
         todayLuck.text = monthCount.toString()
         totalLuck.text = formatMinutes(monthSec)
+    }
+
+    private fun loadVisitStats() {
+        if (!isAdded) return
+        val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+        val timestampsStr = prefs.getString("registration_timestamps", "") ?: ""
+        if (timestampsStr.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance()
+
+        // 解析所有时间戳
+        val timestamps = timestampsStr.split(",").mapNotNull { it.toLongOrNull() }
+
+        // 今日 00:00
+        cal.timeInMillis = now
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        val todayStart = cal.timeInMillis
+
+        // 本周一 00:00
+        cal.timeInMillis = now
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        val weekStart = cal.timeInMillis
+
+        // 近7天
+        val sevenDaysAgo = now - 7 * 24 * 3600_000L
+
+        // 当月1号 00:00
+        cal.timeInMillis = now
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        val monthStart = cal.timeInMillis
+
+        // 上月1号
+        cal.add(Calendar.MONTH, -1)
+        val lastMonthStart = cal.timeInMillis
+
+        // 近30天
+        val thirtyDaysAgo = now - 30 * 24 * 3600_000L
+
+        visitToday.text = timestamps.count { it >= todayStart }.toString()
+        visitWeek.text = timestamps.count { it >= weekStart }.toString()
+        visit7Days.text = timestamps.count { it >= sevenDaysAgo }.toString()
+        visitMonth.text = timestamps.count { it >= monthStart }.toString()
+        visitLastMonth.text = timestamps.count { it in lastMonthStart until monthStart }.toString()
+        visit30Days.text = timestamps.count { it >= thirtyDaysAgo }.toString()
     }
 
     private fun buildChart(stats: List<CallLogDb.DayStats>) {

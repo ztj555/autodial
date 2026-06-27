@@ -106,6 +106,34 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
+        <!-- 来访登记 -->
+        <LinearLayout
+            android:id="@+id/tabRegister"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📝"
+                android:textSize="20sp" />
+
+            <TextView
+                android:id="@+id/tabRegisterLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="登记"
+                android:tag="text2"
+                android:textColor="#A09070"
+                android:textSize="11sp" />
+        </LinearLayout>
+
     </LinearLayout>
 
     <!-- 底部安全区域 -->

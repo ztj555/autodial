@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="bg"
+    android:background="#111318"
+    android:orientation="vertical">
+
+    <!-- 顶部标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:tag="bg2"
+        android:background="#1A1D24"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📝 来访登记"
+            android:tag="goldLight"
+            android:textColor="#F0C040"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 可滚动内容区 -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- 表单卡片 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:tag="bg2"
+                android:background="#1A1D24"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <!-- 客户称呼 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="客户称呼"
+                    android:tag="text"
+                    android:textColor="#E8DCC8"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etCustomerName"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:tag="bg3"
+                    android:background="#22262F"
+                    android:hint="请填写客户称呼"
+                    android:inputType="textPersonName"
+                    android:maxLines="1"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true"
+                    android:textColor="#E8DCC8"
+                    android:textColorHint="#605040"
+                    android:textSize="15sp" />
+
+                <!-- 客户手机号 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="客户手机号"
+                    android:tag="text"
+                    android:textColor="#E8DCC8"
+                    android:textSize="14sp"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="8dp" />
+
+                <EditText
+                    android:id="@+id/etCustomerMobile"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:tag="bg3"
+                    android:background="#22262F"
+                    android:hint="请填写客户手机号"
+                    android:inputType="number"
+                    android:maxLength="11"
+                    android:maxLines="1"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true"
+                    android:textColor="#E8DCC8"
+                    android:textColorHint="#605040"
+                    android:textSize="15sp" />
+
+                <!-- 分割线 -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#22262F"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- 顾问手机号（只读） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="顾问手机号"
+                        android:tag="text"
+                        android:textColor="#E8DCC8"
+                        android:textSize="14sp" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tvAdvisorMobile"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tag="bg3"
+                        android:background="#22262F"
+                        android:gravity="end"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:text="--"
+                        android:textColor="#908070"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <!-- 来访事由（固定） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="来访事由"
+                        android:tag="text"
+                        android:textColor="#E8DCC8"
+                        android:textSize="14sp" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tvVisitType"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:tag="bg3"
+                        android:background="#22262F"
+                        android:gravity="end"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:text="贷款咨询"
+                        android:textColor="#908070"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- 提交按钮 -->
+            <TextView
+                android:id="@+id/btnSubmit"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="24dp"
+                android:tag="goldBtn"
+                android:background="#F0C040"
+                android:gravity="center"
+                android:text="完成登记"
+                android:textColor="#1A1D24"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <!-- 底部留白 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:minHeight="40dp" />
+
+            <!-- 底部品牌占位 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="AutoDial · 来访登记"
+                android:textColor="#3A3540"
+                android:textSize="11sp"
+                android:layout_marginBottom="8dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

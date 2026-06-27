@@ -131,6 +131,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
                     currentThemeId = theme.id
                     ThemeManager.saveTheme(activity, currentThemeId, currentMode)
                     rebuildGridColors()
+                    onConfirm?.invoke()
                 }
 
                 rowLayout.addView(card)
@@ -163,6 +164,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
                 ThemeManager.saveTheme(activity, currentThemeId, currentMode)
                 rebuildModeButtons()
                 rebuildGridColors()
+                onConfirm?.invoke()
             }
 
             modeRow.addView(btn)
