@@ -151,6 +151,10 @@ def get_group(pin):
         pin_groups[pin] = PinGroup()
     return pin_groups[pin]
 
+def validate_pin(pin):
+    """PIN 校验：仅接受 4 位或 11 位纯数字（兼容老版 4 位 PC 端 + 新版 11 位手机号）"""
+    return pin and pin.isdigit() and (len(pin) == 4 or len(pin) == 11)
+
 def remove_from_group(ws):
     meta = ws_meta.get(ws)
     if not meta or not meta.get('pin'):
@@ -309,8 +313,8 @@ async def handle_connection(ws, path=None):
                     log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
                     continue
                 pin = msg.get('pin', '')
-                if not pin or len(pin) != 11 or not pin.isdigit():
-                    await ws.send(json.dumps({'type': 'auth_fail', 'reason': '配对码必须为11位数字'}))
+                if not validate_pin(pin):
+                    await ws.send(json.dumps({'type': 'auth_fail', 'reason': '配对码须为4位或11位数字'}))
                     continue
                 remove_from_group(ws)
                 meta['pin'] = pin
@@ -377,8 +381,8 @@ async def handle_connection(ws, path=None):
                     log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
                     continue
                 pin = msg.get('pin', '')
-                if not pin or len(pin) != 11 or not pin.isdigit():
-                    await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '配对码必须为11位数字'}))
+                if not validate_pin(pin):
+                    await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '配对码须为4位或11位数字'}))
                     continue
                 remove_from_group(ws)
                 meta['pin'] = pin
@@ -966,9 +970,9 @@ async def health_check_handler(path, request_headers):
         pin = hdrs.get('x-autodial-pin', '')
         number = parse_qs(parsed.query).get('number', [''])[0]
 
-        # PIN 格式强校验（11位数字）
-        if not pin or len(pin) != 11 or not pin.isdigit():
-            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误'))
+        # PIN 格式校验（4位或11位纯数字）
+        if not validate_pin(pin):
+            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
         # 号码校验：允许 3-20 位的数字/*/#/+，兼容 10086/固话/400/*100# 等
         if not number:
             return (200, JSON_HDR, _err_json('INVALID_NUMBER', '号码不能为空'))
@@ -1003,8 +1007,8 @@ async def health_check_handler(path, request_headers):
 
     if path == '/api/v1/hangup':
         pin = hdrs.get('x-autodial-pin', '')
-        if not pin or len(pin) != 11 or not pin.isdigit():
-            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误'))
+        if not validate_pin(pin):
+            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
 
         group = pin_groups.get(pin)
         if group and group.pcs:
@@ -1022,8 +1026,8 @@ async def health_check_handler(path, request_headers):
 
     if path == '/api/v1/status':
         pin = hdrs.get('x-autodial-pin', '')
-        if not pin or len(pin) != 11 or not pin.isdigit():
-            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误'))
+        if not validate_pin(pin):
+            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
 
         group = pin_groups.get(pin)
         body = json.dumps({

@@ -74,8 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 保存 PIN
   document.getElementById('savePinBtn').addEventListener('click', () => {
     const pin = pinInput.value.trim();
-    if (!pin || !/^1[3-9]\d{9}$/.test(pin)) {
-      pinStatus.textContent = '请输入有效的11位手机号';
+    if (!pin || !/^\d{4}$|^\d{11}$/.test(pin)) {
+      pinStatus.textContent = '请输入4位或11位数字配对码';
       pinStatus.className = 'server-status err';
       return;
     }

@@ -32,6 +32,7 @@
       "main.js",
       "phone-connection-manager.js",
       "preload.js",
+      "modules/**/*",
       "renderer/**/*",
       "node_modules/**/*"
     ],

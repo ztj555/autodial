@@ -1,14 +1,14 @@
 # AutoDial 一键拨号系统 v4.0.0
 
-> 整合版：11pin 云端 + 11phone 扩展，全链路 11 位 PIN 强校验
+> 整合版：4/11 位 PIN 兼容，零 JWT 依赖
 
 ## 项目概述
 
 AutoDial 是一套跨屏一键拨号系统。用户在 CRM 网页中点击手机号，自动触发手机完成拨号。
 
-**v4.0.0 整合版**：将 11pin（PIN 配对）和 11phone（JWT 双模）两套体系合并为**单一 PIN 体系**：
+**v4.0.0 整合版**：统一为**单一 PIN 体系**：
 - 去掉了复杂的 JWT/密码/SQLite 认证栈
-- 统一为 11 位 PIN（坐席手机号）全链路强校验
+- 兼容 4 位配对码（老版 PC 端）和 11 位手机号（新版）
 - 单文件云中继部署，零数据库依赖
 - 扩展自动检测坐席手机号，无需手动登录
 
@@ -54,7 +54,7 @@ AutoDial 是一套跨屏一键拨号系统。用户在 CRM 网页中点击手机
 │   ├── popup.js / popup.html        # PIN 设置 + 服务器配置
 │   └── manifest.json                # MV3 清单
 ├── pc-app-go/                       # Go PC 端（局域网直连）
-│   └── server.go                    # HTTP API + WebSocket + 11 位 PIN 强校验
+│   └── server.go                    # HTTP API + WebSocket + 4/11 位 PIN 校验
 ├── android/                         # Android 手机端
 └── docs/                            # 补充文档
 ```
@@ -116,7 +116,7 @@ PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query。
 | code | 含义 |
 |------|------|
 | `ACCEPTED` | 指令已接受 |
-| `INVALID_PIN` | PIN 非 11 位数字 |
+| `INVALID_PIN` | PIN 非 4 位或 11 位数字 |
 | `PHONE_OFFLINE` | 手机未连接云中继 |
 | `PC_CONNECTED` | PC 在线，应走本地直连 |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 |
@@ -137,11 +137,11 @@ PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query。
 
 | 环节 | 校验 | 位置 |
 |------|------|------|
-| 扩展设置 PIN | 11 位手机号正则 | popup.js |
+| 扩展设置 PIN | `/^\d{4}$\|^\d{11}$/` 正则 | popup.js |
 | 扩展请求云端 | X-AutoDial-PIN Header | background.js |
-| 云中继 REST | `len(pin) != 11 or not pin.isdigit()` | cloud_relay_v2.py |
+| 云中继 REST | `validate_pin()` → 4位或11位纯数字 | cloud_relay_v2.py |
 | 云中继 WS | 同上 | cloud_relay_v2.py |
-| Go PC 端 | `len(pin) != 11` + `isNumeric` | server.go |
+| Go PC 端 | `isValidPhonePIN()` → 4位或11位纯数字 | devices.go |
 
 ## 部署依赖
 

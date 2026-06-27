@@ -977,7 +977,7 @@
       dialog.appendChild(title);
 
       // ═══════════════════ PIN 区 ═══════════════════
-      const pinSection = mkSection('📞 配对码 (PIN)', '11位手机号，用于配对和标识');
+      const pinSection = mkSection('📞 配对码 (PIN)', '4位或11位数字，用于配对和标识');
       dialog.appendChild(pinSection);
 
       const pinRow = document.createElement('div');
@@ -985,7 +985,7 @@
       const pinInput = document.createElement('input');
       pinInput.type = 'tel';
       pinInput.maxLength = 11;
-      pinInput.placeholder = '请输入11位手机号';
+      pinInput.placeholder = '4位或11位数字配对码';
       Object.assign(pinInput.style, {
         flex: '1', padding: '10px 12px', fontSize: '15px', fontWeight: '500', letterSpacing: '1px',
         background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',
@@ -998,8 +998,8 @@
       const pinSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
       pinSaveBtn.addEventListener('click', () => {
         const v = pinInput.value.trim();
-        if (!/^1[3-9]\d{9}$/.test(v)) {
-          pinStatus.textContent = '请输入正确的11位手机号'; pinStatus.style.color = t.red;
+        if (!/^\d{4}$|^\d{11}$/.test(v)) {
+          pinStatus.textContent = '请输入4位或11位数字配对码'; pinStatus.style.color = t.red;
           return;
         }
         chrome.runtime.sendMessage({ type: 'setPin', pin: v }, (resp) => {

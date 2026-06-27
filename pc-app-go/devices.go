@@ -456,19 +456,13 @@ func isNumeric(s string) bool {
 	return true
 }
 
-// isValidPhonePIN checks if the PIN matches the 11-digit Chinese mobile format (^1[3-9]\d{9}$).
-// B11修复: 与 Chrome 扩展的 PIN 校验保持一致。
+// isValidPhonePIN checks if the PIN is 4-digit or 11-digit numeric.
+// Compatible: old PC clients use 4-digit PINs; new clients use 11-digit phone numbers.
 func isValidPhonePIN(pin string) bool {
-	if len(pin) != 11 {
+	if !isNumeric(pin) {
 		return false
 	}
-	if pin[0] != '1' {
-		return false
-	}
-	if pin[1] < '3' || pin[1] > '9' {
-		return false
-	}
-	return isNumeric(pin)
+	return len(pin) == 4 || len(pin) == 11
 }
 
 // isValidDialNumber validates phone number format for HTTP /dial.

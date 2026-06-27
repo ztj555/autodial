@@ -185,23 +185,28 @@ cloud_relay_v3.py (WS 35440)
 
 ### 6.1 架构特点
 
-单文件架构，`main.js` 约 2238 行，集成了全部功能：
+模块化架构，`main.js` 约 919 行作为编排文件，10 个功能模块按职责拆分：
 
 ```
 pc-app-Electron/
-├── main.js (2238行)            ← 主进程入口：日志/设置/HTTP/WS/UDP/云中转/托盘/窗口/防火墙全部内聚
+├── main.js (919行)             ← IPC 处理器 + 生命周期 + 跨模块胶水
 ├── phone-connection-manager.js ← 设备连接管理（独立模块，双通道 LAN+Cloud）
 ├── preload.js                  ← contextBridge IPC 桥接
-├── renderer/
-│   ├── index.html              ← 主界面（内联 CSS+JS，8 套主题）
-│   ├── floatbar.html           ← 悬浮条窗口
-│   ├── settings.html           ← 设置窗口
-│   └── sms.html                ← 短信窗口
-└── themes/
-    └── theme-data.js           ← 8 套主题定义
+├── modules/
+│   ├── logger.js               ← 文件日志（10MB 轮转、环形缓冲降级）
+│   ├── settings.js             ← JSON 设置持久化
+│   ├── network.js              ← 网络工具 + PIN_CODE 可变状态
+│   ├── phone-notes.js          ← 手机备注
+│   ├── tray.js                 ← 系统托盘（16×16 PNG 手写编码）
+│   ├── windows.js              ← 窗口工厂（纯创建）
+│   ├── firewall.js             ← netsh 防火墙规则
+│   ├── discovery.js            ← UDP 广播发现（10s 保活）
+│   ├── cloud.js                ← 云中转状态机
+│   └── server.js               ← HTTP + WebSocket 服务器
+└── renderer/                   ← 前端界面（index.html, floatbar.html, settings.html, sms.html）
 ```
 
-> **说明**：`main.js` 目前为单文件巨石架构。`phone-connection-manager.js` 已独立为模块。日后可考虑进一步拆分（日志/设置/网络/托盘/窗口/云中转/HTTP服务等），已有 Go 版 Wails 重写作为参考。
+> **设计模式**：采用依赖注入，所有模块通过工厂函数接收外部依赖，零循环引用。
 
 ### 6.2 核心特性
 

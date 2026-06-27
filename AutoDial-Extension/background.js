@@ -229,8 +229,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 手动设置 PIN
   if (msg.type === 'setPin') {
     const p = (msg.pin || '').trim();
-    if (!p || !/^1[3-9]\d{9}$/.test(p)) {
-      sendResponse({ success: false, error: 'PIN 格式错误' });
+    if (!p || !/^\d{4}$|^\d{11}$/.test(p)) {
+      sendResponse({ success: false, error: 'PIN 格式错误，须为4位或11位数字' });
       return true;
     }
     chrome.storage.local.set({ pin: p, self_phone: p }, () => {

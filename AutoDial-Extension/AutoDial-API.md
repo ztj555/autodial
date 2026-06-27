@@ -1,6 +1,6 @@
 # AutoDial v4 API 文档
 
-> 整合版 | 云中继端口 35430 | 全链路 11 位 PIN
+> 整合版 | 云中继端口 35430 | 4/11 位 PIN 兼容
 
 ## REST API（云中继 35430）
 
@@ -79,7 +79,7 @@ Header: X-AutoDial-PIN: 13800138000
 | code | 含义 | 扩展处理 |
 |------|------|---------|
 | `ACCEPTED` | 指令已接受 | 正常 |
-| `INVALID_PIN` | PIN 非 11 位数字 | 提示检查 PIN 设置 |
+| `INVALID_PIN` | PIN 非 4 位或 11 位数字 | 提示检查 PIN 设置 |
 | `PHONE_OFFLINE` | PIN 组存在但手机不在线 | 提示手机未连接云中继 |
 | `PC_CONNECTED` | PC 在线，应走本地 | 刷新缓存，切回 localhost |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
@@ -99,7 +99,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `GET /sms?number=xxx` | 发短信（仅 PC 直连支持） |
 | `GET /open` | 打开 PC 端主窗口 |
 | `GET /` | 获取 PC 端状态 |
-| `POST /api/set-pin` | 设置 11 位 PIN（body: `{"pin":"13800138000"}`） |
+| `POST /api/set-pin` | 设置 PIN（body: `{"pin":"13800138000"}`，4位或11位） |
 
 ---
 
