@@ -94,15 +94,19 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
 
     /** 记录一次拨号 */
     fun insertDial(number: String, status: String = "ok", simSlot: Int = 0) {
-        val cv = ContentValues().apply {
-            put(COL_NUMBER, number)
-            put(COL_TIME, System.currentTimeMillis())
-            put(COL_SIM_SLOT, simSlot)
-            put(COL_STATUS, status)
+        try {
+            val cv = ContentValues().apply {
+                put(COL_NUMBER, number)
+                put(COL_TIME, System.currentTimeMillis())
+                put(COL_SIM_SLOT, simSlot)
+                put(COL_STATUS, status)
+            }
+            writableDatabase.insert(TABLE_DIAL, null, cv)
+            // 同步更新 SIM 缓存
+            updateSimCache(number, simSlot, System.currentTimeMillis())
+        } catch (e: Exception) {
+            Log.e(TAG, "记录拨号失败 (磁盘满/DB损坏): ${e.message}")
         }
-        writableDatabase.insert(TABLE_DIAL, null, cv)
-        // 同步更新 SIM 缓存
-        updateSimCache(number, simSlot, System.currentTimeMillis())
     }
 
     /** 根据号码更新 SIM 卡槽信息（旧方法，保留兼容） */

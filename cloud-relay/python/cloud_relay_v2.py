@@ -321,7 +321,14 @@ async def handle_connection(ws, path=None):
                 meta['role'] = 'phone'
                 meta['device_name'] = msg.get('deviceName', f'Phone-{client_ip[-3:]}')
                 group = get_group(pin)
-                # Fix: check is_first_device BEFORE adding to group.phones
+                # Fix B4: 同 PIN 只允许一台手机在线，踢掉旧连接
+                for old_phone in list(group.phones):
+                    if old_phone != ws:
+                        try:
+                            await old_phone.close(4001, 'duplicate_reconnect')
+                        except Exception:
+                            pass
+                        group.phones.discard(old_phone)
                 is_first_device = len(group.pcs) == 0 and len(group.phones) == 0
                 group.phones.add(ws)
                 pc_online = len(group.pcs) > 0
