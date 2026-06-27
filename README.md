@@ -1,43 +1,48 @@
-# AutoDial 一键拨号系统 v4.0.0
+# AutoDial 一键拨号系统 v4.1.0
 
-> 整合版：4/11 位 PIN 兼容，零 JWT 依赖
+> 新增来访登记 + 一键登记 + 上门统计 + 云端同步
 
 ## 项目概述
 
-AutoDial 是一套跨屏一键拨号系统。用户在 CRM 网页中点击手机号，自动触发手机完成拨号。
+AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页中点击手机号自动拨号；右键悬浮按钮即可完成客户登记，数据实时同步云端和手机端。
 
-**v4.0.0 整合版**：统一为**单一 PIN 体系**：
-- 去掉了复杂的 JWT/密码/SQLite 认证栈
-- 兼容 4 位配对码（老版 PC 端）和 11 位手机号（新版）
-- 单文件云中继部署，零数据库依赖
-- 扩展自动检测坐席手机号，无需手动登录
+**v4.1.0** 新增：
+- Chrome 扩展「一键登记」：CRM 详情页右键即登记，自动识别客户姓名/手机号
+- Android 端「来访登记」模块（第 4 个 Tab），顾问手机号自动填入
+- 云中继 SQLite 存储 + Web 管理面板「上门记录」Tab
+- 全链路同步：插件/手机端登记 → 云中继 → WS 推手机 → 统计实时更新
+- 上门统计卡片：今日/本周/近7天/当月/上月/近30天
 
 ## 系统架构
 
 ```
-                       ┌──────────────────────────┐
-                       │   云中继 (端口 35430)       │
-                       │   cloud_relay_v2.py       │
-                       │                          │
-     GET + Header PIN  │   WebSocket 中继           │
-   ┌───────────────────│   REST API (dial/hangup)  │──────────────────┐
-   │                   │   Web 管理面板             │                  │
-   │                   └──────────────────────────┘                  │
-   ▼                                                                 ▼
-┌──────────────────┐                                        ┌──────────────────┐
-│ Chrome 扩展 v4    │         HTTP 35432                    │ Android 手机端     │
-│                  │◄──────────────────────────────────────│                  │
-│ PIN 自动检测      │          Go PC 端（零改动）             │ WS 连接云中继     │
-│ 双模路由         │                                        │ 接收 dial/hangup  │
-│ 主题/浮动按钮     │                                        │ 发送 dial_result  │
-└──────────────────┘                                        └──────────────────┘
+                       ┌──────────────────────────────────┐
+                       │   云中继 (端口 35430)               │
+                       │   cloud_relay_v2.py               │
+                       │                                  │
+     GET + Header PIN  │   WebSocket 中继                   │
+   ┌───────────────────│   REST API (dial/hangup/visit)    │──────────────────┐
+   │                   │   SQLite visits 表                │                  │
+   │   📝 一键登记     │   Web 管理面板（含上门记录）         │                  │
+   │                   └────────────┬─────────────────────┘                  │
+   ▼                                │  WS visit_record                      ▼
+┌──────────────────┐                │                       ┌──────────────────┐
+│ Chrome 扩展 v4.1  │  HTTP 35432   │                       │ Android 手机端     │
+│                  │◄──────────────┼───────────────────────│                  │
+│ PIN 自动检测      │   Go PC 端     │                       │ WS 连接云中继     │
+│ 双模路由         │               │                       │ 接收 dial/hangup  │
+│ 一键登记+确认弹窗 │               │                       │ 📝 来访登记模块   │
+│ 主题/浮动按钮     │               │                       │ 📊 上门统计卡片   │
+└──────────────────┘               │                       └──────────────────┘
+                                    │
+                           手机离线 → pending_visits → 重连补推
 ```
 
 ## 端口配置
 
 | 端口 | 协议 | 用途 |
 |------|------|------|
-| **35430** | WebSocket + HTTP | 云中继（WS 中继 + REST API + Web 管理面板） |
+| **35430** | WebSocket + HTTP | 云中继（WS 中继 + REST API + Web 管理面板 + 访问登记 API） |
 | 35432 | HTTP + WebSocket | PC 端主服务（局域网直连） |
 
 > 旧版 v3 JWT 端口 35440/35441 已废弃，统一到 35430。
@@ -46,17 +51,23 @@ AutoDial 是一套跨屏一键拨号系统。用户在 CRM 网页中点击手机
 
 ```
 ├── cloud-relay/python/
-│   ├── cloud_relay_v2.py            # ★ 云中继（WS 中继 + REST 端点 + Web 面板）
-│   └── dashboard.html               # Web 管理界面
-├── AutoDial-Extension/              # ★ Chrome 扩展 v4
-│   ├── background.js                # PIN 管理 + 双模路由
-│   ├── content-script.js            # 8 套主题 + 浮动按钮 + CRM 检测
+│   ├── cloud_relay_v2.py            # ★ 云中继（WS + REST + 访问登记 + Web面板）
+│   ├── dashboard.html               # Web 管理界面（含上门记录管理Tab）
+│   └── visits.db                    # SQLite 访问登记数据库（自动创建）
+├── AutoDial-Extension/              # ★ Chrome 扩展 v4.1
+│   ├── background.js                # PIN 管理 + 双模路由 + 一键登记
+│   ├── content-script.js            # 8 套主题 + 浮动按钮 + CRM 检测 + 姓名识别
 │   ├── popup.js / popup.html        # PIN 设置 + 服务器配置
 │   └── manifest.json                # MV3 清单
 ├── pc-app-go/                       # Go PC 端（局域网直连）
 │   └── server.go                    # HTTP API + WebSocket + 4/11 位 PIN 校验
-├── android/                         # Android 手机端
-└── docs/                            # 补充文档
+├── android-app/                     # Android 手机端
+│   └── app/src/main/java/com/autodial/app/
+│       ├── MainActivity.kt          # 4 Tab（设置/记录/统计/登记）
+│       ├── RegisterFragment.kt      # 来访登记（顾问手机自动填）
+│       ├── StatsFragment.kt         # 统计页（含上门统计卡片）
+│       └── ConnectionManager.kt     # WS 连接管理（含 visit_record 处理）
+└── 技术文档/                         # 详细技术文档
 ```
 
 ## 快速启动
@@ -105,6 +116,10 @@ PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query。
 | GET | `/api/v1/dial?number=13900139000` | 拨号 → `ACCEPTED` |
 | GET | `/api/v1/hangup` | 挂断 → `ACCEPTED` |
 | GET | `/api/v1/status` | 查询 PC/手机在线状态 |
+| GET | `/api/v1/visit?name=...&mobile=...` | **新增** 一键登记 |
+| GET | `/api/v1/visits?pin=...` | **新增** 查询登记列表 |
+| GET | `/api/v1/visit/update?id=N&...` | **新增** 更新登记记录 |
+| GET | `/api/v1/visit/delete?id=N` | **新增** 删除登记记录 |
 | GET | `/health` | 健康检查（含 CORS，供 popup 测试连接） |
 | GET | `/api/status` | 仪表盘状态（内部管理用） |
 | GET | `/api/clients` | 客户端列表 |
@@ -120,7 +135,9 @@ PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query。
 | `PHONE_OFFLINE` | 手机未连接云中继 |
 | `PC_CONNECTED` | PC 在线，应走本地直连 |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 |
-| `INVALID_NUMBER` | 号码不合法 |
+| `MISSING_FIELDS` | 缺少必填字段（name/mobile/kefu_tel） |
+| `MISSING_PIN` | 缺少 PIN 参数 |
+| `DB_ERROR` | 数据库操作失败 |
 
 ## 双模路由
 
@@ -145,11 +162,36 @@ PIN 通过 `X-AutoDial-PIN` Header 传递，号码通过 URL query。
 
 ## 部署依赖
 
-| 组件 | 依赖 | 文件数 |
-|------|------|:---:|
-| 云中继 | `websockets pystray Pillow` | 1 |
-| Go PC 端 | Go 1.21+ | 1 |
-| Chrome 扩展 | 无 | 6 |
+| 组件 | 依赖 | 说明 |
+|------|------|------|
+| 云中继 | `websockets pystray Pillow` | Python 标准库 sqlite3（内置） |
+| Go PC 端 | Go 1.21+ | 单文件 |
+| Chrome 扩展 | 无 | 6 文件 |
+
+## 新功能：一键登记
+
+顾问在 CRM 客户详情页右键悬浮按钮 → 「📝 一键登记」→ 确认弹窗 → 云端存储+CRM同步+手机通知。
+
+```
+流程：CRM详情页 → 自动识别姓名+手机号 → 右键确认 → 云中继存储+CRM同步 → WS推手机 → 统计+1
+```
+
+## 新功能：来访登记（Android）
+
+App 新增第 4 个 Tab「📝 登记」，顾问手机号自动填入，事由固定「贷款咨询」，
+成功提交后自动同步云端+CRM。
+
+## 新功能：上门统计
+
+统计页新增「📊 上门统计」卡片，展示 6 个维度：今日/本周/近7天/当月/上月/近30天。
+插件登记和手机端登记数据实时互通。
+
+## 数据同步机制
+
+- 插件/手机端登记 → 云中继 SQLite 存储 → WS `visit_record` 推手机
+- 手机在线 → 实时收到 + 系统通知 + 统计刷新
+- 手机离线 → pending_visits 堆积 → phone_hello 重连时补推（失败保留队列，下次重试）
+- 云中继重启 → pending_visits 丢失（内存队列，可接受）
 
 ## 注意事项
 

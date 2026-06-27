@@ -305,40 +305,26 @@ class RegisterFragment : Fragment() {
     private fun syncToCloudRelay(name: String, mobile: String) {
         executor.execute {
             try {
-                val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                val ctx = requireContext().applicationContext
+                val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
                 val serverUrl = prefs.getString("cloud_server", "") ?: ""
                 if (serverUrl.isEmpty()) return@execute
 
-                // visit API 在 cloud server 端口 +1
-                val visitUrl = serverUrl.replace(Regex(":(\\d+)(/.*)?$")) { match ->
-                    ":" + (match.groupValues[1].toInt() + 1).toString() + (match.groupValues[2] ?: "")
-                }
-                val fullUrl = if (visitUrl.startsWith("http")) "$visitUrl/api/v1/visit"
-                              else "http://$visitUrl/api/v1/visit"
+                val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+                val params = "name=${URLEncoder.encode(name, "UTF-8")}" +
+                        "&mobile=${URLEncoder.encode(mobile, "UTF-8")}" +
+                        "&kefu_tel=${URLEncoder.encode(pin, "UTF-8")}" +
+                        "&visit_type=${URLEncoder.encode("贷款咨询", "UTF-8")}" +
+                        "&source=phone"
+                val fullUrl = "$baseUrl/api/v1/visit?$params"
 
                 val url = URL(fullUrl)
                 val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.doOutput = true
+                conn.requestMethod = "GET"
                 conn.connectTimeout = 10000
                 conn.readTimeout = 10000
-                conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("X-AutoDial-PIN", pin)
-
-                val body = JSONObject().apply {
-                    put("name", name)
-                    put("mobile", mobile)
-                    put("kefu_tel", pin)
-                    put("visit_type", "贷款咨询")
-                    put("source", "phone")
-                }
-
-                val writer = OutputStreamWriter(conn.outputStream, "UTF-8")
-                writer.write(body.toString())
-                writer.flush()
-                writer.close()
-
-                val responseCode = conn.responseCode
+                conn.responseCode  // 触发请求
                 conn.disconnect()
             } catch (_: Exception) {
                 // 静默失败，本地已存储

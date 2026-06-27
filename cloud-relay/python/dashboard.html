@@ -302,7 +302,7 @@
 
     <script>
         const API_BASE = '';
-        const VISIT_API_BASE = 'http://' + window.location.hostname + ':' + (parseInt(window.location.port) + 1);
+        const VISIT_API_BASE = window.location.origin;
 
         function showPage(pageId) {
             // 隐藏所有页面
@@ -466,7 +466,7 @@
             }
 
             try {
-                const url = VISIT_API_BASE + '/api/v1/visit?pin=' + encodeURIComponent(pin);
+                const url = VISIT_API_BASE + '/api/v1/visits?pin=' + encodeURIComponent(pin);
                 const res = await fetch(url);
                 const data = await res.json();
 
@@ -553,11 +553,8 @@
             }
 
             try {
-                const res = await fetch(VISIT_API_BASE + '/api/v1/visit', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: id, name: name, mobile: mobile, kefu_tel: kefu_tel, visit_type: visit_type })
-                });
+                const params = new URLSearchParams({ id: id, name, mobile, kefu_tel, visit_type });
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit/update?' + params.toString());
                 const data = await res.json();
                 if (data.ok) {
                     closeEditModal();
@@ -575,9 +572,7 @@
             if (!confirm('确定要删除这条上门记录吗？此操作不可撤销。')) return;
 
             try {
-                const res = await fetch(VISIT_API_BASE + '/api/v1/visit?id=' + encodeURIComponent(id), {
-                    method: 'DELETE'
-                });
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit/delete?id=' + encodeURIComponent(id));
                 const data = await res.json();
                 if (data.ok) {
                     loadVisits();

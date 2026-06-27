@@ -415,3 +415,35 @@ getLastDialInfo(number, context)
 - 触发：push 到 main/master 分支
 - 输出：Debug APK + Release APK
 - Secrets 需求：KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+
+---
+
+## v4.1.0 更新（2026-06-28）
+
+### 新增组件
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| RegisterFragment | `RegisterFragment.kt` | 来访登记表单（第4个Tab「📝 登记」） |
+| 上门统计 | `StatsFragment.kt` | 6维度统计卡片（今日/本周/近7天/当月/上月/近30天） |
+| visit_record 处理 | `ConnectionManager.kt` | WS 消息 → 存时间戳 + 通知 + 统计刷新 |
+
+### MainActivity 改动
+- `activity_main.xml`：底部导航新增第4个Tab「📝 登记」
+- `fragments` 列表新增 `RegisterFragment()`
+- `switchTab()` 新增 index=3 分支
+
+### 登记流程
+1. 顾问手机号自动从 `SharedPreferences("autodial").getString("pin")` 填入（只读）
+2. 来访事由固定「贷款咨询」
+3. 提交 → POST CRM API → 本地存时间戳 → GET 云中继 `/api/v1/visit` 同步
+4. 成功后按钮「✅ 登记成功」+ 2秒恢复
+
+### 上门统计
+- 登记时间戳存储：`SharedPreferences("autodial")."registration_timestamps"`（逗号分隔 epoch millis，保留66天）
+- visit_record WS 推送到达时自动存入 + 系统通知
+- 监听 `com.autodial.VISIT_RECORDED` 广播自动刷新
+
+### 性能优化
+- `DialEngine.kt`：`simHandleCache` 缓存 PhoneAccountHandle（每次省50-100ms）
+- 动画提前到 `placeCall()` 之前播放（用户即时感知）

@@ -45,6 +45,32 @@ Header: X-AutoDial-PIN: 13800138000
 
 错误码同 dial：`INVALID_PIN` / `PC_CONNECTED` / `PHONE_OFFLINE`。
 
+#### GET /api/v1/visit — 一键登记（v4.1 新增）
+
+```
+Header: X-AutoDial-PIN: 13800138000
+Query: ?name=张三&mobile=13900139000&kefu_tel=13800138000&visit_type=贷款咨询&source=plugin
+```
+
+```json
+// 成功
+{"ok": true, "code": "ACCEPTED", "id": 1}
+// 缺少字段
+{"ok": false, "code": "MISSING_FIELDS", "message": "缺少必填字段: name, mobile, kefu_tel"}
+// PIN 格式错误
+{"ok": false, "code": "INVALID_PIN", "message": "PIN 格式错误，须为4位或11位数字"}
+```
+
+处理流程：PIN 校验 → SQLite 存储 → 后台同步 CRM → WS 推送 `visit_record` 给手机（离线则堆积到 pending_visits）。
+
+#### GET /api/v1/visits?pin=xxx — 查询登记列表（v4.1 新增）
+
+返回该 PIN 的所有登记记录 JSON 数组，按 `created_at` 降序。
+
+#### GET /api/v1/visit/update?id=N&name=...&... — 更新记录（v4.1 新增）
+
+#### GET /api/v1/visit/delete?id=N — 删除记录（v4.1 新增）
+
 #### GET /api/v1/status — 设备状态
 
 ```
@@ -85,6 +111,9 @@ Header: X-AutoDial-PIN: 13800138000
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
 | `RATE_LIMITED` | 频率限制 | 1 分钟后重试 |
 | `INVALID_NUMBER` | 号码不合法 | 提示用户 |
+| `MISSING_FIELDS` | 缺少必填字段 | 补全后再试 |
+| `MISSING_PIN` | 缺少 PIN 参数 | 补 PIN 后再试 |
+| `DB_ERROR` | 数据库操作失败 | 联系管理员 |
 
 ---
 
@@ -120,6 +149,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `ping` / `pong` | 双向 | 心跳（30s 间隔） |
 | `ack` | 手机→PC | 确认 |
 | `pc_online` / `pc_offline` | 云→手机 | PC 上线/离线通知 |
+| `visit_record` | 云→手机 | **v4.1新增** 访问登记记录推送 |
 
 ### 握手示例
 

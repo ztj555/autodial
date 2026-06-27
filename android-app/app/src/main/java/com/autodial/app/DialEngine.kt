@@ -31,6 +31,17 @@ class DialEngine(
     }
 
     fun getPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
+        // 缓存：同 simSlot 的 handle 几乎不变，避免每次拨号查 SubscriptionManager
+        val cached = simHandleCache[simSlot]
+        if (cached != null) return cached
+        val result = queryPhoneAccountHandle(simSlot)
+        if (result != null) simHandleCache[simSlot] = result
+        return result
+    }
+
+    private val simHandleCache = mutableMapOf<Int, PhoneAccountHandle?>()
+
+    private fun queryPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
         return try {
             val telecomManager = service.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
             val simList = getSimInfoList()
@@ -127,7 +138,7 @@ class DialEngine(
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 service.startActivity(intent)
-                onDialSuccess(number, -1)
+                onDialSuccessAfterPlaceCall(number, -1)
                 return
             }
             if (simSlot >= 0) {
@@ -168,11 +179,13 @@ class DialEngine(
 
             // Always try placeCall first - works from foreground service in background
             try {
+                // 动画提前到 placeCall 之前，给用户即时反馈
+                showDialAnimation()
                 val extras = Bundle()
                 if (handle != null) extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
                 telecomManager.placeCall(uri, extras)
                 Log.d(TAG, "dialed(placeCall, SIM${simSlot + 1}): $number")
-                onDialSuccess(number, simSlot)
+                onDialSuccessAfterPlaceCall(number, simSlot)
                 return
             } catch (e: SecurityException) { Log.e(TAG, "placeCall denied: ${e.message}") }
             catch (e: Exception) { Log.e(TAG, "placeCall failed: ${e.message}") }
@@ -185,7 +198,7 @@ class DialEngine(
                 }
                 service.startActivity(intent)
                 Log.d(TAG, "dialed(ACTION_CALL fallback): $number")
-                onDialSuccess(number, simSlot)
+                onDialSuccessAfterPlaceCall(number, simSlot)
             } catch (e: Exception) {
                 Log.e(TAG, "ACTION_CALL failed: ${e.message}")
                 service.onDialResult(number, "error")
@@ -196,12 +209,12 @@ class DialEngine(
         }
     }
 
-    fun onDialSuccess(number: String, simSlot: Int) {
+    fun onDialSuccessAfterPlaceCall(number: String, simSlot: Int) {
         service.onDialResult(number, "ok")
         callLogDb.insertDial(number, "ok", simSlot)
         notifyNewDial(number)
         copyNumberToClipboard(number)
-        showDialAnimation()
+        // 动画已在 performDial 开头触发，此处不再重复
     }
 
     fun endCall() {

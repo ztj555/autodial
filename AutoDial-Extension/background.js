@@ -7,7 +7,27 @@ console.log('[AutoDial BG] v4.0 已加载 (PIN 模式)');
 
 // ==================== 配置 ====================
 const PC_BASE = 'http://127.0.0.1:35432';
-const PC_PING_TIMEOUT = 2000;
+const PC_PING_TIMEOUT = 500;  // 本地 ping 500ms 足够，超时走云端
+
+// 后台定时探测 PC 状态（每 15 秒），保证拨号时缓存始终有效，不卡顿
+async function refreshPcStatus() {
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
+    await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
+    pcAvailable = true;
+    pcLastCheck = Date.now();
+  } catch {
+    pcAvailable = false;
+    pcLastCheck = Date.now();
+  }
+}
+
+chrome.alarms.create('pcCheck', { periodInMinutes: 0.25 }); // 15 秒
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'pcCheck') refreshPcStatus();
+});
+refreshPcStatus(); // 启动时立刻探测一次
 
 // 地址标准化：纯 IP:PORT -> http://IP:PORT，已有协议不动
 function fixUrl(addr) {
@@ -76,7 +96,6 @@ fetchCloudList().catch(() => {});
 // ==================== 状态 ====================
 let pcAvailable = null;
 let pcLastCheck = 0;
-const PC_CACHE_TTL = 30000; // 30秒缓存过期，避免 PC 离线后永久走直连超时
 const tabPhones = {};
 
 // ==================== PIN 管理（替代原 JWT） ====================
@@ -89,21 +108,10 @@ async function getPin() {
 // ==================== PC 检测（与 v3.1 一致） ====================
 
 async function isPcAlive() {
-  const now = Date.now();
-  // 缓存有效期内直接返回，避免每次拨号都 ping
-  if (pcAvailable !== null && (now - pcLastCheck) < PC_CACHE_TTL) return pcAvailable;
-  try {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), PC_PING_TIMEOUT);
-    await fetch(`${PC_BASE}/`, { signal: ctrl.signal });
-    pcAvailable = true;
-    pcLastCheck = now;
-    console.log('[AutoDial BG] PC 在线，使用本地模式');
-  } catch {
-    pcAvailable = false;
-    pcLastCheck = now;
-    console.log('[AutoDial BG] PC 离线，使用云端模式');
-  }
+  // 缓存 35 秒（比后台刷新间隔 15 秒长，保证永远命中缓存）
+  if (pcAvailable !== null && (Date.now() - pcLastCheck) < 35000) return pcAvailable;
+  // 缓存过期（极少触发）→ 同步探测（500ms 超时）
+  await refreshPcStatus();
   return pcAvailable;
 }
 
@@ -164,24 +172,15 @@ async function registerVisit(name, phone, tabId) {
 
   try {
     const apiUrl = await getCloudApi();
-    // visit API 在 PORT+1 上
-    const visitUrl = apiUrl.replace(/:(\d+)(\/.*)?$/, function(m, port, path) {
-      return ':' + (parseInt(port) + 1) + (path || '');
+    const params = new URLSearchParams({
+      name: name,
+      mobile: phone,
+      kefu_tel: pin,
+      visit_type: '贷款咨询',
+      source: 'plugin'
     });
-
-    const res = await fetch(visitUrl + '/api/v1/visit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-AutoDial-PIN': pin
-      },
-      body: JSON.stringify({
-        name: name,
-        mobile: phone,
-        kefu_tel: pin,
-        visit_type: '贷款咨询',
-        source: 'plugin'
-      })
+    const res = await fetch(apiUrl + '/api/v1/visit?' + params.toString(), {
+      headers: { 'X-AutoDial-PIN': pin }
     });
 
     const data = await res.json();
@@ -193,6 +192,9 @@ async function registerVisit(name, phone, tabId) {
     }
   } catch (e) {
     console.error('[AutoDial BG] 登记失败:', e);
+    if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
+      return { success: false, error: '无法连接云端，请先启动云中继服务' };
+    }
     return { success: false, error: '网络错误：' + e.message };
   }
 }

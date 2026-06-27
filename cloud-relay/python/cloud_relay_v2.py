@@ -17,7 +17,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 
 import websockets
 from websockets.legacy.server import serve
@@ -574,7 +574,6 @@ def configure_firewall():
     
     rules = [
         (f'AutoDial Cloud Relay (WebSocket {PORT})', PORT),
-        (f'AutoDial Cloud Relay (REST API {REST_PORT})', REST_PORT),
     ]
     
     for rule_name, port in rules:
@@ -675,6 +674,49 @@ HEALTH_CORS = [('Access-Control-Allow-Origin', '*')]
 def _err_json(code, message):
     """构造错误 JSON 响应体"""
     return json.dumps({'ok': False, 'code': code, 'message': message}, ensure_ascii=False).encode('utf-8')
+
+# ==================== 访问登记辅助函数 ====================
+
+def _sync_to_crm(name, mobile, kefu_tel, visit_type):
+    """后台同步到 CRM 系统（在 executor 线程中运行）"""
+    try:
+        import urllib.request
+        crm_data = urlencode({
+            'brand': '1833', 'name': name, 'mobile': mobile,
+            'kefu_tel': kefu_tel, 'visit_type': visit_type
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            'https://guwen.zhudaicms.com/bserve/saoma_indb.html',
+            data=crm_data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+        urllib.request.urlopen(req, timeout=10)
+        log.info(f'CRM sync OK name={name}')
+    except Exception as e:
+        log.warning(f'CRM sync failed: {e}')
+
+def _push_visit_to_phone(pin, visit_record):
+    """推送 visit_record 给对应 pin 的手机，离线则堆积"""
+    group = pin_groups.get(pin)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if group and group.phones:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}), loop
+            )
+        except Exception as e:
+            log.warning(f'VISIT push failed pin={pin}: {e}')
+            if group:
+                group.pending_visits.append(visit_record)
+    elif group:
+        group.pending_visits.append(visit_record)
+        log.info(f'VISIT queued (offline) pin={pin} pending={len(group.pending_visits)}')
+    else:
+        grp = get_group(pin)
+        grp.pending_visits.append(visit_record)
 
 async def health_check_handler(path, request_headers):
     """处理 HTTP 请求（健康检查 + API + Web 界面）"""
@@ -826,73 +868,56 @@ async def health_check_handler(path, request_headers):
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
     
-    # Web 管理界面
-    if path == '/' or path == '/index.html':
-        return (200, [('Content-Type', 'text/html; charset=utf-8')], HTML_CONTENT.encode('utf-8'))
-    
-    # 404
-    return (404, [('Content-Type', 'text/plain')], b'Not Found')
+    # ===== 一键登记 API（GET + query params，与 dial 风格一致） =====
 
+    # 创建登记: GET /api/v1/visit?name=...&mobile=...&...
+    if path == '/api/v1/visit':
+        pin = hdrs.get('x-autodial-pin', '')
+        if not validate_pin(pin):
+            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
 
-# ==================== 访问登记 REST API 服务器 ====================
+        qs = parse_qs(parsed.query)
+        name = qs.get('name', [''])[0].strip()
+        mobile = qs.get('mobile', [''])[0].strip()
+        kefu_tel = qs.get('kefu_tel', [''])[0].strip()
+        visit_type = qs.get('visit_type', ['贷款咨询'])[0].strip()
+        source = qs.get('source', ['plugin'])[0].strip()
 
-REST_PORT = PORT + 1
-_rest_server = None
+        if not name or not mobile or not kefu_tel:
+            return (200, JSON_HDR, _err_json('MISSING_FIELDS', '缺少必填字段: name, mobile, kefu_tel'))
 
-class VisitAPIHandler(BaseHTTPRequestHandler):
-    """处理 /api/v1/visit 的 CRUD 请求（独立 HTTP 服务器）"""
-
-    def _send_json(self, status_code, data):
-        """发送 JSON 响应，含 CORS 头"""
-        body = json.dumps(data, ensure_ascii=False).encode('utf-8')
-        self.send_response(status_code)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-AutoDial-PIN')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _read_body(self):
-        """读取请求 body 并解析 JSON"""
-        content_length = int(self.headers.get('Content-Length', 0))
-        if content_length == 0:
-            return None
-        raw = self.rfile.read(content_length)
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         try:
-            return json.loads(raw.decode('utf-8'))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return None
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute(
+                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, created_at, updated_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (pin, name, mobile, kefu_tel, visit_type, source, now_str, now_str)
+            )
+            conn.commit()
+            row_id = c.lastrowid
+            conn.close()
+        except Exception as e:
+            log.error(f'INSERT visit error: {e}')
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
-    def _get_query_param(self, key, default=''):
-        """从 URL query string 获取参数"""
-        parsed = urlparse(self.path)
-        params = parse_qs(parsed.query)
-        vals = params.get(key, [default])
-        return vals[0] if vals else default
+        # 后台同步 CRM + WS 推送
+        visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
+                        'kefu_tel': kefu_tel, 'visit_type': visit_type, 'source': source,
+                        'created_at': now_str, 'updated_at': now_str}
+        asyncio.get_running_loop().run_in_executor(None, _sync_to_crm, name, mobile, kefu_tel, visit_type)
+        _push_visit_to_phone(pin, visit_record)
 
-    def do_OPTIONS(self):
-        """CORS 预检"""
-        self.send_response(204)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-AutoDial-PIN')
-        self.send_header('Access-Control-Max-Age', '86400')
-        self.end_headers()
+        log.info(f'VISIT_CREATE pin={pin} name={name} id={row_id}')
+        return (200, JSON_HDR, json.dumps({'ok': True, 'code': 'ACCEPTED', 'id': row_id}).encode('utf-8'))
 
-    def do_GET(self):
-        """GET /api/v1/visit?pin=xxx — 查询登记列表"""
-        parsed = urlparse(self.path)
-        if parsed.path != '/api/v1/visit':
-            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
-            return
-
-        pin = self._get_query_param('pin', '')
+    # 查询列表: GET /api/v1/visits?pin=xxx
+    if path == '/api/v1/visits':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0]
         if not pin:
-            self._send_json(200, {'ok': False, 'code': 'MISSING_PIN', 'message': '缺少 PIN 参数'})
-            return
-
+            return (200, JSON_HDR, _err_json('MISSING_PIN', '缺少 PIN 参数'))
         try:
             conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
@@ -900,137 +925,48 @@ class VisitAPIHandler(BaseHTTPRequestHandler):
             c.execute('SELECT * FROM visits WHERE pin=? ORDER BY created_at DESC', (pin,))
             rows = [dict(r) for r in c.fetchall()]
             conn.close()
-            self._send_json(200, rows)
+            return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
-            log.error(f'GET visits error: {e}')
-            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
-    def do_POST(self):
-        """POST /api/v1/visit — 创建登记"""
-        parsed = urlparse(self.path)
-        if parsed.path != '/api/v1/visit':
-            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
-            return
-
-        pin = self.headers.get('X-AutoDial-PIN', '')
-        if not validate_pin(pin):
-            self._send_json(200, {'ok': False, 'code': 'INVALID_PIN', 'message': 'PIN 格式错误，须为4位或11位数字'})
-            return
-
-        body = self._read_body()
-        if not body:
-            self._send_json(200, {'ok': False, 'code': 'INVALID_JSON', 'message': '请求 body 格式错误'})
-            return
-
-        name = str(body.get('name', '')).strip()
-        mobile = str(body.get('mobile', '')).strip()
-        kefu_tel = str(body.get('kefu_tel', '')).strip()
-        visit_type = str(body.get('visit_type', '贷款咨询')).strip()
-        source = str(body.get('source', 'plugin')).strip()
-
-        if not name or not mobile or not kefu_tel:
-            self._send_json(200, {'ok': False, 'code': 'MISSING_FIELDS', 'message': '缺少必填字段: name, mobile, kefu_tel'})
-            return
-
-        now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    # 删除: GET /api/v1/visit/delete?id=N
+    if path == '/api/v1/visit/delete':
+        qs = parse_qs(parsed.query)
+        rid = qs.get('id', [''])[0]
+        if not rid:
+            return (200, JSON_HDR, _err_json('MISSING_ID', '缺少记录 id'))
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
-            c.execute(
-                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, created_at, updated_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                (pin, name, mobile, kefu_tel, visit_type, source, now, now)
-            )
+            c.execute('DELETE FROM visits WHERE id=?', (int(rid),))
             conn.commit()
-            row_id = c.lastrowid
+            affected = c.rowcount
             conn.close()
+            return (200, JSON_HDR, json.dumps(
+                {'ok': affected > 0, 'code': 'DELETED' if affected > 0 else 'NOT_FOUND',
+                 'id': int(rid)}).encode('utf-8'))
         except Exception as e:
-            log.error(f'INSERT visit error: {e}')
-            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
-            return
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
-        visit_record = {
-            'id': row_id,
-            'pin': pin,
-            'name': name,
-            'mobile': mobile,
-            'kefu_tel': kefu_tel,
-            'visit_type': visit_type,
-            'source': source,
-            'created_at': now,
-            'updated_at': now
-        }
-
-        # 尝试 WS 推送给对应 pin 的手机
-        global loop
-        if loop and loop.is_running():
-            group = pin_groups.get(pin)
-            if group and group.phones:
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}),
-                        loop
-                    )
-                    log.info(f'VISIT pushed to phone pin={pin} id={row_id}')
-                except Exception as e:
-                    log.warning(f'VISIT push failed pin={pin}: {e}')
-                    group.pending_visits.append(visit_record)
-            elif group:
-                group.pending_visits.append(visit_record)
-                log.info(f'VISIT queued (phone offline) pin={pin} id={row_id} pending={len(group.pending_visits)}')
-            else:
-                # pin 组不存在，创建并缓存
-                grp = get_group(pin)
-                grp.pending_visits.append(visit_record)
-                log.info(f'VISIT queued (no group) pin={pin} id={row_id}')
-
-        self._send_json(200, {'ok': True, 'code': 'ACCEPTED', 'id': row_id})
-
-    def do_PUT(self):
-        """PUT /api/v1/visit — 修改记录"""
-        parsed = urlparse(self.path)
-        if parsed.path != '/api/v1/visit':
-            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
-            return
-
-        body = self._read_body()
-        if not body:
-            self._send_json(200, {'ok': False, 'code': 'INVALID_JSON', 'message': '请求 body 格式错误'})
-            return
-
-        record_id = body.get('id')
-        if not record_id:
-            self._send_json(200, {'ok': False, 'code': 'MISSING_ID', 'message': '缺少记录 id'})
-            return
-
-        name = str(body.get('name', '')).strip()
-        mobile = str(body.get('mobile', '')).strip()
-        kefu_tel = str(body.get('kefu_tel', '')).strip()
-        visit_type = str(body.get('visit_type', '')).strip()
-
-        if not name and not mobile and not kefu_tel and not visit_type:
-            self._send_json(200, {'ok': False, 'code': 'NO_FIELDS', 'message': '没有要更新的字段'})
-            return
-
-        now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+    # 更新: GET /api/v1/visit/update?id=N&name=...&mobile=...&visit_type=...
+    if path == '/api/v1/visit/update':
+        qs = parse_qs(parsed.query)
+        rid = qs.get('id', [''])[0]
+        if not rid:
+            return (200, JSON_HDR, _err_json('MISSING_ID', '缺少记录 id'))
         fields = []
         values = []
-        if name:
-            fields.append('name=?')
-            values.append(name)
-        if mobile:
-            fields.append('mobile=?')
-            values.append(mobile)
-        if kefu_tel:
-            fields.append('kefu_tel=?')
-            values.append(kefu_tel)
-        if visit_type:
-            fields.append('visit_type=?')
-            values.append(visit_type)
+        for key in ('name', 'mobile', 'kefu_tel', 'visit_type'):
+            val = qs.get(key, [''])[0].strip()
+            if val:
+                fields.append(f'{key}=?')
+                values.append(val)
+        if not fields:
+            return (200, JSON_HDR, _err_json('NO_FIELDS', '没有要更新的字段'))
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         fields.append('updated_at=?')
-        values.append(now)
-        values.append(record_id)
-
+        values.append(now_str)
+        values.append(int(rid))
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -1038,66 +974,18 @@ class VisitAPIHandler(BaseHTTPRequestHandler):
             conn.commit()
             affected = c.rowcount
             conn.close()
-            if affected == 0:
-                self._send_json(200, {'ok': False, 'code': 'NOT_FOUND', 'message': '记录不存在'})
-            else:
-                self._send_json(200, {'ok': True, 'code': 'UPDATED', 'id': record_id})
+            return (200, JSON_HDR, json.dumps(
+                {'ok': affected > 0, 'code': 'UPDATED' if affected > 0 else 'NOT_FOUND',
+                 'id': int(rid)}).encode('utf-8'))
         except Exception as e:
-            log.error(f'UPDATE visit error: {e}')
-            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
-    def do_DELETE(self):
-        """DELETE /api/v1/visit?id=N — 删除记录"""
-        parsed = urlparse(self.path)
-        if parsed.path != '/api/v1/visit':
-            self._send_json(404, {'ok': False, 'code': 'NOT_FOUND', 'message': 'Not Found'})
-            return
-
-        record_id = self._get_query_param('id', '')
-        if not record_id:
-            self._send_json(200, {'ok': False, 'code': 'MISSING_ID', 'message': '缺少记录 id'})
-            return
-
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            c.execute('DELETE FROM visits WHERE id=?', (int(record_id),))
-            conn.commit()
-            affected = c.rowcount
-            conn.close()
-            if affected == 0:
-                self._send_json(200, {'ok': False, 'code': 'NOT_FOUND', 'message': '记录不存在'})
-            else:
-                self._send_json(200, {'ok': True, 'code': 'DELETED', 'id': int(record_id)})
-        except Exception as e:
-            log.error(f'DELETE visit error: {e}')
-            self._send_json(500, {'ok': False, 'code': 'DB_ERROR', 'message': str(e)})
-
-    def log_message(self, format, *args):
-        """重定向 HTTP 日志到 relay logger"""
-        log.info(f'REST {self.client_address[0]} {format % args}')
-
-
-def start_rest_server():
-    """在后台线程启动 REST API 服务器"""
-    global _rest_server
-    try:
-        _rest_server = ThreadingHTTPServer(('0.0.0.0', REST_PORT), VisitAPIHandler)
-        log.info(f'Visit REST API server started on port {REST_PORT}')
-        _rest_server.serve_forever()
-    except OSError as e:
-        log.error(f'Failed to start REST API server on port {REST_PORT}: {e}')
-    except Exception as e:
-        log.error(f'REST API server error: {e}')
-
-
-def stop_rest_server():
-    """停止 REST API 服务器"""
-    global _rest_server
-    if _rest_server:
-        _rest_server.shutdown()
-        _rest_server = None
-        log.info('Visit REST API server stopped')
+    # Web 管理界面
+    if path == '/' or path == '/index.html':
+        return (200, [('Content-Type', 'text/html; charset=utf-8')], HTML_CONTENT.encode('utf-8'))
+    
+    # 404
+    return (404, [('Content-Type', 'text/plain')], b'Not Found')
 
 # ==================== 服务器启停 ====================
 _heartbeat_task = None  # C4修复: 保存心跳任务引用，防止重启时累积多个
@@ -1128,11 +1016,6 @@ async def run_server():
         log.info(f'Server started on port {PORT}, PID={os.getpid()}')
         log.info(f'Web 管理界面: http://0.0.0.0:{PORT} (与 WebSocket 同端口)')
 
-        # 启动 REST API 服务器（独立线程）
-        rest_thread = threading.Thread(target=start_rest_server, daemon=True, name='rest-api')
-        rest_thread.start()
-        log.info(f'Visit REST API: http://0.0.0.0:{REST_PORT}/api/v1/visit')
-
         # 通知托盘状态更新
         update_tray_status(True)
 
@@ -1148,7 +1031,6 @@ async def run_server():
 
 async def stop_server():
     global server_instance
-    stop_rest_server()
     if server_instance:
         log.info('Stopping server...')
         # 关闭所有连接

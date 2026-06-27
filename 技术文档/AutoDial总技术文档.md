@@ -1,6 +1,6 @@
 # AutoDial 技术文档（当前版本）
 
-> 基于实际代码 | PIN 单一认证体系 | 2026-06-26 更新
+> 基于实际代码 | v4.1.0 更新 | 2026-06-28 更新
 
 ---
 
@@ -10,12 +10,11 @@
 |------|--------|--------|----------|
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | 11 位 PIN |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | 11 位 PIN |
-| **云中继（主）** | **v2** | Python + websockets | PIN（4位或11位手机号） |
-| **云中继（v3 JWT）** | **v0.02** | Python + aiosqlite + bcrypt + PyJWT | JWT + PIN 双模 |
-| **Chrome 扩展** | **v4.0.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
-| **Android 端** | **v4.53** | Kotlin + OkHttp | PIN + JWT 双兼容 |
+| **云中继（主）** | **v2** | Python + websockets + SQLite | PIN（4位或11位手机号） |
+| **Chrome 扩展** | **v4.1.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
+| **Android 端** | **v4.53** | Kotlin + HttpURLConnection | PIN + WS 双通道 |
 
-> **说明**：Electron PC 端和 Go PC 端是两个功能等价的并行实现，可互换使用。云中继主版本为 v2 PIN 中继（`cloud_relay.py`），v3 JWT 版本（`cloud_relay_v3.py` + `auth.py` + `db.py`）作为并存模块保留在代码库中，运行在独立端口 35440/35441，供有 JWT 需求的场景选用。
+> **v4.1.0 新增**：来访登记（Android 第4个Tab）、一键登记（Chrome 扩展右键）、云中继 SQLite 访问记录存储、上门统计。详见 CHANGELOG.md。
 
 ---
 
@@ -26,25 +25,33 @@
 │  CRM网页      │────→│ Chrome扩展    │────→│  PC端         │
 │ (zhudai/     │     │ background.js│     │ Electron v3   │
 │  rxhcrm等)   │     │ content.js   │     │ 或 Go v1      │
+│              │     │              │     │              │
+│ 一键登记 →   │     │ 📝 右键登记   │     │              │
 └──────────────┘     └──────┬───────┘     └──────┬───────┘
                             │                    │
                     优先: HTTP 35432       LAN: WS 35432
                     降级: REST 35430     Cloud: WS 35430
+                    登记: GET /api/v1/visit
                             │                    │
                             └────────┬───────────┘
                                      │
                             ┌────────▼──────────┐
                             │   云中继 (35430)   │
-                            │   cloud_relay.py   │
+                            │   cloud_relay_v2.py│
                             │   PinGroup 分组     │
+                            │   SQLite visits 表  │
+                            │   CRM 后台同步      │
                             └────────┬──────────┘
                                      │
                             ┌────────▼──────────┐
                             │   Android 手机端    │
                             │   DialService      │
-                            │   ConnectionMgr    │
+                            │   📝 登记 第4 Tab  │
+                            │   📊 上门统计       │
                             └───────────────────┘
 ```
+
+**v4.1.0 新增**：Chrome 扩展一键登记（CRM 详情页右键）、Android 来访登记模块、云中继 SQLite 存储+CRM同步、全链路上门统计。
 
 **双通道设计**：PC 端和手机端均支持 LAN 直连（WebSocket 35432）和 Cloud 中继（WebSocket 35430）双通道，由 PhoneConnectionManager（Electron）/ ConnectionManager（Android）自动管理优先级和降级切换。
 
@@ -54,26 +61,27 @@
 
 ### 3.1 架构
 
-主中继为 `cloud_relay.py`（v2），零数据库依赖，仅需 `websockets pystray Pillow` 包。
+主中继为 `cloud_relay_v2.py`（v2），Python 标准库 sqlite3 内置存储，仅需 `websockets pystray Pillow` 包。
 
 ```
-cloud_relay.py
+cloud_relay_v2.py
 ├── WebSocket 中继（PIN 认证）
-│   ├── phone_hello → PinGroup 管理
-│   ├── pc_hello → PinGroup 管理
+│   ├── phone_hello / pc_hello → PinGroup 管理
 │   ├── dial/hangup/sms → 转发到手机
-│   ├── dial_result/sms_result → 转发到 PC
-│   ├── pc_online/pc_offline → 通知手机
+│   ├── visit_record → 推送登记记录（v4.1 新增）
+│   ├── phone_hello 补推 pending_visits（v4.1 新增）
 │   └── ack → 双向转发
 ├── REST API（GET + X-AutoDial-PIN Header）
 │   ├── /api/v1/dial?number=xxx
 │   ├── /api/v1/hangup
-│   └── /api/v1/status
-├── 管理 API
-│   ├── /health（含 CORS）
-│   ├── /api/status /api/clients /api/stats /api/logs
-│   └── / （Web 管理面板 HTML，端口 35431）
-└── 系统托盘（pystray，启停/日志）
+│   ├── /api/v1/status
+│   ├── /api/v1/visit?name=...&mobile=...（v4.1 新增）
+│   └── /api/v1/visits 查询/更新/删除（v4.1 新增）
+├── SQLite 数据库（v4.1 新增）
+│   └── visits.db：visits 表 + pin/created_at 索引
+├── CRM 后台同步（v4.1 新增）
+│   └── POST https://guwen.zhudaicms.com/bserve/saoma_indb.html
+└── 系统托盘（pystray，启停/日志/Web面板）
 ```
 
 ### 3.2 PinGroup 分组管理
@@ -178,6 +186,7 @@ cloud_relay_v3.py (WS 35440)
 | `ping` / `pong` | 双向 | 心跳 |
 | `ack` | 手机→PC | ACK 确认 |
 | `pc_online` / `pc_offline` | 云→手机 | PC 上下线通知 |
+| `visit_record` | 云→手机 | **v4.1新增** 访问登记记录推送 |
 
 ---
 
@@ -264,7 +273,7 @@ pc-app-go/
 
 ---
 
-## 八、Chrome 扩展（v4.0.0）
+## 八、Chrome 扩展（v4.1.0）
 
 ### 8.1 架构
 
@@ -272,27 +281,24 @@ MV3 Service Worker 架构：
 
 ```
 AutoDial-Extension/
-├── manifest.json           ← host_permissions, content_scripts
-├── background.js           ← Service Worker：双模路由 + PIN 管理
-├── content-script.js       ← 内容脚本：CRM 浮动按钮 + 号码检测
+├── manifest.json           ← host_permissions, content_scripts, "alarms"权限
+├── background.js           ← Service Worker：双模路由 + PIN 管理 + 一键登记 + 后台PC探测
+├── content-script.js       ← 内容脚本：CRM 浮动按钮 + 号码检测 + 姓名识别 + 确认弹窗
 ├── popup.html / popup.js   ← 弹窗：云服务器 + PIN 配置
-└── themes/                 ← 8 套主题 CSS
+└── icons/                  ← 扩展图标
 ```
 
 ### 8.2 双模路由
 
-- PC 直连优先（2s 超时），不可达时自动切云端
+- PC 直连优先（后台 15s 定时探测，拨号直接读缓存，零等待）
 - 云端通过 `X-AutoDial-PIN` Header 认证
-- PC 缓存失效时自动重置检测
+- `PC_PING_TIMEOUT = 500ms`（本地 ping 足够）
 
-### 8.3 CRM 支持
+### 8.3 一键登记（v4.1 新增）
 
-匹配域名：`zhudaicms.com`、`rxhcrm.com`、`rongxinhui.com`
-
-内容脚本功能：
-- TreeWalker 扫描页面电话号码 → 自动检测坐席手机号
-- 浮动拨号按钮（可拖动，可缩放 36-100px）
-- 右键菜单：主题切换、拨号、短信、PC 状态、PIN 显示
+- CRM 详情页自动识别客户姓名（「姓名：」标签）+ 手机号
+- 右键菜单「📝 一键登记」→ 确认弹窗 → GET /api/v1/visit 提交
+- 云中继存储 + CRM 同步 + WS 推手机
 
 ---
 
@@ -303,12 +309,21 @@ AutoDial-Extension/
 | 组件 | 职责 |
 |------|------|
 | `DialService.kt` | 前台服务（主入口），生命周期管理 |
-| `ConnectionManager.kt` | 连接状态机 + LAN/Cloud 双通道管理 |
+| `ConnectionManager.kt` | 连接状态机 + LAN/Cloud 双通道 + visit_record 处理 |
 | `DialEngine.kt` | 拨号执行引擎 + SIM 选择（7 种模式） |
 | `CallLogDb.kt` | SQLite 通话记录数据库 |
 | `CloudCtrl.kt` | 云服务器 CRUD + Gist 同步 + 连通测试 |
 | `DialAccessibilityService.kt` | Xiaomi/HyperOS SIM 自动点击 |
 | `FileLogger.kt` | 文件日志（10MB 轮转 + 环形缓冲降级） |
+| `RegisterFragment.kt` | **v4.1新增** 来访登记表单（第4个Tab） |
+| `StatsFragment.kt` | 统计页（含 **v4.1新增** 上门统计卡片） |
+
+### 9.2 新功能（v4.1）
+
+- **来访登记**：第 4 个 Tab「📝 登记」，顾问手机号自动填入，提交后同步 CRM + 云中继
+- **上门统计**：「📊 上门统计」卡片，6 维度（今日/本周/近7天/当月/上月/近30天）
+- **visit_record 接收**：WS 回调 `handleVisitRecord()`，存时间戳 + 系统通知 + 统计刷新
+- **SIM handle 缓存**：`simHandleCache` 避免每次拨号查 SubscriptionManager
 
 ### 9.2 连接策略
 
@@ -380,8 +395,7 @@ enum class ConnectionStrategy {
 
 | 端口 | 协议 | 用途 | 组件 |
 |------|------|------|------|
-| **35430** | WS + HTTP | 云中继主端口（PinGroup 中继 + REST API） | cloud_relay.py |
-| 35431 | HTTP | Web 管理面板 | web_server.py |
+| **35430** | WS + HTTP | 云中继主端口（中继 + REST API + Web 面板 + 访问登记 API） | cloud_relay_v2.py |
 | **35432** | HTTP + WS | PC 端主服务（LAN 直连 + 扩展连接） | Electron/Go PC |
 | **35433** | UDP | LAN 设备发现（广播 announce + 响应 discover） | 全部组件 |
 | 35440 | WS | v3 JWT 云中继（并存，非主用） | cloud_relay_v3.py |
