@@ -1,6 +1,8 @@
 package com.autodial.app
 
+import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
@@ -293,21 +295,35 @@ object ThemeManager {
         val blendedBg2 = blendColors(colors.bg2, colors.bg, opacity)
         val blendedBg3 = blendColors(colors.bg3, colors.bg, opacity)
         val tag = view.tag?.toString() ?: ""
+        val density = view.resources.displayMetrics.density
+
+        fun roundedFill(color: String, radiusDp: Float, strokeColor: String? = null, strokeDp: Float = 0f): GradientDrawable {
+            return GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(parseColor(color))
+                cornerRadius = radiusDp * density
+                if (strokeColor != null && strokeDp > 0f) {
+                    setStroke((strokeDp * density).toInt().coerceAtLeast(1), parseColor(strokeColor))
+                }
+            }
+        }
+
+        fun verticalGradient(topColor: String, bottomColor: String, radiusDp: Float): GradientDrawable {
+            return GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(parseColor(topColor), parseColor(bottomColor))
+            ).apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = radiusDp * density
+            }
+        }
         when (tag) {
             "bg" -> view.setBackgroundColor(parseColor(colors.bg))
             "bg2" -> {
-                val d = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(parseColor(blendedBg2))
-                    cornerRadius = 12f * view.resources.displayMetrics.density
-                }
-                view.background = d
+                view.background = roundedFill(blendedBg2, 22f, blendColors(colors.text2, colors.bg2, 76), 1f)
             }
             "bg3" -> {
-                val d = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(parseColor(blendedBg3))
-                    cornerRadius = 12f * view.resources.displayMetrics.density
-                }
-                view.background = d
+                view.background = roundedFill(blendedBg3, 16f, blendColors(colors.text2, colors.bg3, 72), 1f)
             }
             "text" -> if (view is TextView) view.setTextColor(parseColor(colors.text))
             "text2" -> if (view is TextView) view.setTextColor(parseColor(colors.text2))
@@ -318,18 +334,98 @@ object ThemeManager {
             "green" -> if (view is TextView) view.setTextColor(parseColor(colors.green))
             "red" -> if (view is TextView) view.setTextColor(parseColor(colors.red))
             "goldBtn" -> {
-                view.setBackgroundColor(parseColor(colors.gold))
+                view.background = verticalGradient(colors.goldLight, colors.goldDark, 18f)
                 if (view is ViewGroup) {
                     for (i in 0 until view.childCount) {
                         val child = view.getChildAt(i)
                         if (child is TextView) child.setTextColor(parseColor(colors.bg))
                     }
                 }
+                if (view is TextView) view.setTextColor(parseColor(colors.bg))
             }
             "goldBtnText" -> if (view is TextView) {
                 view.setTextColor(parseColor(colors.gold))
+                view.background = roundedFill(
+                    blendColors(colors.bg3, colors.bg2, 30),
+                    14f,
+                    blendColors(colors.gold, colors.bg2, 48),
+                    1f
+                )
             }
-            "switchOn" -> view.setBackgroundColor(parseColor(colors.gold))
+            "switchOn" -> {
+                val targetColor = parseColor(colors.gold)
+                val fromColor = (view.background as? ColorDrawable)?.color ?: targetColor
+                if (fromColor == targetColor) {
+                    view.background = roundedFill(colors.gold, 999f)
+                } else {
+                    ValueAnimator.ofArgb(fromColor, targetColor).apply {
+                        duration = 200
+                        addUpdateListener { view.background = roundedFill(String.format("#%06X", 0xFFFFFF and (it.animatedValue as Int)), 999f) }
+                        start()
+                    }
+                }
+                if (view is TextView) view.setTextColor(parseColor(colors.bg))
+            }
+            "switchOff" -> {
+                val targetColor = parseColor(blendedBg3)
+                val fromColor = (view.background as? ColorDrawable)?.color ?: targetColor
+                if (fromColor == targetColor) {
+                    view.background = roundedFill(blendedBg3, 999f, blendColors(colors.text2, colors.bg3, 64), 1f)
+                } else {
+                    ValueAnimator.ofArgb(fromColor, targetColor).apply {
+                        duration = 200
+                        addUpdateListener { view.background = roundedFill(String.format("#%06X", 0xFFFFFF and (it.animatedValue as Int)), 999f) }
+                        start()
+                    }
+                }
+                if (view is TextView) view.setTextColor(parseColor(colors.text2))
+            }
+            "topBar" -> {
+                view.background = roundedFill(blendedBg2, 24f, blendColors(colors.text2, colors.bg2, 76), 1f)
+            }
+            "navBar" -> {
+                view.background = roundedFill(blendedBg2, 24f, blendColors(colors.text2, colors.bg2, 80), 1f)
+            }
+            "heroCard" -> {
+                view.background = verticalGradient(
+                    blendColors(colors.bg2, colors.goldDark, 8),
+                    blendedBg2,
+                    26f
+                ).apply {
+                    setStroke((1f * density).toInt().coerceAtLeast(1), parseColor(blendColors(colors.gold, colors.bg2, 56)))
+                }
+            }
+            "sectionHeader" -> {
+                view.background = roundedFill(blendedBg2, 20f, blendColors(colors.text2, colors.bg2, 78), 1f)
+            }
+            "inputField" -> {
+                view.background = roundedFill(blendedBg3, 18f, blendColors(colors.text2, colors.bg3, 58), 1f)
+                if (view is TextView) view.setTextColor(parseColor(colors.text))
+            }
+            "outlineBtn" -> {
+                view.background = roundedFill(blendedBg3, 14f, blendColors(colors.gold, colors.bg3, 56), 1f)
+                if (view is TextView) view.setTextColor(parseColor(colors.goldLight))
+            }
+            "successBanner" -> {
+                view.background = roundedFill(
+                    blendColors(colors.green, colors.bg2, 82),
+                    18f,
+                    blendColors(colors.green, colors.bg2, 58),
+                    1f
+                )
+            }
+            "infoBanner" -> {
+                view.background = roundedFill(
+                    blendColors(colors.goldDark, colors.bg2, 82),
+                    18f,
+                    blendColors(colors.gold, colors.bg2, 62),
+                    1f
+                )
+            }
+            "chip" -> {
+                view.background = roundedFill(blendedBg3, 999f, blendColors(colors.text2, colors.bg3, 64), 1f)
+                if (view is TextView) view.setTextColor(parseColor(colors.text2))
+            }
             "divider" -> view.setBackgroundColor(parseColor(colors.bg3))
             "statusBarBg" -> view.setBackgroundColor(parseColor(colors.bg))
         }

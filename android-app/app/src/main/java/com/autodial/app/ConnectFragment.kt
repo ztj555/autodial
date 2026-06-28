@@ -1,5 +1,6 @@
 package com.autodial.app
 
+import android.animation.ValueAnimator
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,6 +14,7 @@ import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -33,6 +35,7 @@ import okhttp3.MediaType.Companion.toMediaType
 class ConnectFragment : Fragment() {
 
     private lateinit var statusDot: ImageView
+    private lateinit var pulseRing: ImageView
     private lateinit var statusText: TextView
     private lateinit var connectionMode: TextView
     private lateinit var connectionBanner: LinearLayout
@@ -119,6 +122,9 @@ class ConnectFragment : Fragment() {
     private var waitingForPcRefreshRunnable: Runnable? = null
     private val WAITING_FOR_PC_REFRESH_MS = 3000L
 
+    // 脉冲动画
+    private var pulseAnimator: ValueAnimator? = null
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
@@ -173,6 +179,7 @@ class ConnectFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         try {
             statusDot = view.findViewById(R.id.statusDot)
+            pulseRing = view.findViewById(R.id.pulseRing)
             statusText = view.findViewById(R.id.statusText)
             connectionBanner = view.findViewById(R.id.connectionBanner)
             bannerText = view.findViewById(R.id.bannerText)
@@ -488,6 +495,7 @@ class ConnectFragment : Fragment() {
         try { requireActivity().unregisterReceiver(receiver) } catch (_: Exception) {}
         try { requireActivity().unregisterReceiver(cloudStatusReceiver) } catch (_: Exception) {}
         cancelWaitingForPcRefresh()
+        stopPulseAnimation()
         stopDiscovery()
     }
 
@@ -884,14 +892,17 @@ class ConnectFragment : Fragment() {
                 // 状态指示：LAN 优先，Cloud 区分 PC 在线/离线
                 if (lanOk || pcOk) {
                     statusDot.setImageResource(R.drawable.dot_green)
+                    startPulseAnimation()
                     statusText.text = "已连接"
                     statusText.setTextColor(Color.parseColor(colors.green))
                 } else if (cloudOk && !pcOk) {
                     statusDot.setImageResource(R.drawable.dot_orange)
+                    stopPulseAnimation()
                     statusText.text = "等待PC上线"
                     statusText.setTextColor(Color.parseColor("#FF9800"))
                 } else {
                     statusDot.setImageResource(R.drawable.dot_green)
+                    startPulseAnimation()
                     statusText.text = "已连接"
                     statusText.setTextColor(Color.parseColor(colors.green))
                 }
@@ -913,6 +924,7 @@ class ConnectFragment : Fragment() {
                 disconnectBtn.visibility = View.VISIBLE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
+                stopPulseAnimation()
                 val manual = prefCtrl.isManuallyDisconnected()
                 statusText.text = if (manual) "已手动断开" else "未连接电脑"
                 statusText.setTextColor(Color.parseColor(if (manual) "#FF4D4F" else colors.text2))
@@ -957,6 +969,32 @@ class ConnectFragment : Fragment() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    // ==================== 脉冲动画 ====================
+
+    private fun startPulseAnimation() {
+        if (pulseAnimator?.isRunning == true) return
+        pulseAnimator = ValueAnimator.ofFloat(1f, 2.5f).apply {
+            duration = 2000
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.RESTART
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                val scale = it.animatedValue as Float
+                val alpha = (1f - (scale - 1f) / 1.5f).coerceIn(0f, 1f)
+                pulseRing.scaleX = scale
+                pulseRing.scaleY = scale
+                pulseRing.alpha = alpha
+            }
+            start()
+        }
+    }
+
+    private fun stopPulseAnimation() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        pulseRing.animate().scaleX(1f).scaleY(1f).alpha(0f).setDuration(150).start()
     }
 
     // ==================== v7: 连接策略 & 通道状态 ====================

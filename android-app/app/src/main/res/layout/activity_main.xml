@@ -4,20 +4,26 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:tag="bg"
-    android:background="#111318">
+    android:background="#111318"
+    android:paddingStart="12dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp">
 
     <!-- ViewPager2 容器 -->
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/viewPager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:clipToPadding="false" />
 
     <!-- 底部导航栏 -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:tag="bg2"
+        android:layout_height="72dp"
+        android:layout_marginTop="10dp"
+        android:tag="navBar"
         android:background="#1A1D24"
         android:gravity="center"
         android:orientation="horizontal">
@@ -30,20 +36,20 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🔗"
-                android:textSize="20sp" />
+            <ImageView
+                android:id="@+id/tabConnectIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_tab_connect" />
 
             <TextView
                 android:id="@+id/tabConnectLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="4dp"
                 android:text="设置"
                 android:tag="goldLight"
                 android:textColor="#F0C040"
@@ -58,20 +64,20 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📋"
-                android:textSize="20sp" />
+            <ImageView
+                android:id="@+id/tabCallLogIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_tab_records" />
 
             <TextView
                 android:id="@+id/tabCallLogLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="4dp"
                 android:text="记录"
                 android:tag="text2"
                 android:textColor="#A09070"
@@ -86,20 +92,20 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📊"
-                android:textSize="20sp" />
+            <ImageView
+                android:id="@+id/tabStatsIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_tab_stats" />
 
             <TextView
                 android:id="@+id/tabStatsLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="4dp"
                 android:text="统计"
                 android:tag="text2"
                 android:textColor="#A09070"
@@ -114,20 +120,20 @@
             android:layout_weight="1"
             android:gravity="center"
             android:orientation="vertical"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📝"
-                android:textSize="20sp" />
+            <ImageView
+                android:id="@+id/tabRegisterIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_tab_register" />
 
             <TextView
                 android:id="@+id/tabRegisterLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="4dp"
                 android:text="登记"
                 android:tag="text2"
                 android:textColor="#A09070"
@@ -139,7 +145,7 @@
     <!-- 底部安全区域 -->
     <View
         android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_height="2dp"
         android:tag="divider"
         android:background="#111318" />
 

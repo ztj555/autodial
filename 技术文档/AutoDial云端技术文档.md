@@ -1,6 +1,6 @@
 # AutoDial 云端技术文档
 
-> 基于实际代码 | Python | PIN 中继 + JWT 双模并存
+> 最后修改：2026-06-29 00:08 | Python | SQLite 访问登记 + WS 实时推送
 
 ---
 

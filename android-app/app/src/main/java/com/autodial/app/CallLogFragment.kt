@@ -19,12 +19,14 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.text.SimpleDateFormat
@@ -146,6 +148,27 @@ class CallLogAdapter(
     override fun getItemCount(): Int = records.size
 }
 
+/**
+ * RecyclerView item animator: items slide up with staggered delay on add.
+ */
+class SlideUpItemAnimator : DefaultItemAnimator() {
+    override fun animateAdd(holder: RecyclerView.ViewHolder?): Boolean {
+        holder?.itemView?.apply {
+            translationY = 100f
+            alpha = 0f
+            animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(400)
+                .setStartDelay((holder.adapterPosition * 50L).coerceAtMost(400L))
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
+        dispatchAddFinished(holder)
+        return false
+    }
+}
+
 class CallLogFragment : Fragment() {
 
     companion object {
@@ -158,6 +181,7 @@ class CallLogFragment : Fragment() {
     private lateinit var permissionHint: View
     private lateinit var lastCallHintBanner: View
     private lateinit var lastCallHintText: TextView
+    private lateinit var emptyDialBtn: TextView
 
     // 连接状态
     private lateinit var connectionStatusDot: ImageView
@@ -262,6 +286,7 @@ class CallLogFragment : Fragment() {
         topReconnectBtn = view.findViewById(R.id.topReconnectBtn)
         todayLuckText = view.findViewById(R.id.todayLuckText)
         todayFortuneText = view.findViewById(R.id.todayFortuneText)
+        emptyDialBtn = view.findViewById(R.id.emptyDialBtn)
 
         // v6: 顶部小按钮 — 状态和连接页保持一致
         topReconnectBtn.setOnClickListener {
@@ -307,6 +332,13 @@ class CallLogFragment : Fragment() {
         }
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        recyclerView.itemAnimator = SlideUpItemAnimator()
+
+        // 空状态「立即拨号」按钮
+        emptyDialBtn.setOnClickListener {
+            val intent = Intent(Intent.ACTION_DIAL)
+            startActivity(intent)
+        }
 
         // 初始化连接状态（根据 DialService 当前状态）
         updateConnectionStatus(DialService.isConnected, DialService._instance?.connectionMode ?: "")
@@ -642,6 +674,7 @@ class CallLogFragment : Fragment() {
         if (records.isEmpty()) {
             recyclerView.visibility = View.GONE
             emptyView.visibility = View.VISIBLE
+            ThemeManager.applyToView(emptyView, colors)
         } else {
             recyclerView.visibility = View.VISIBLE
             emptyView.visibility = View.GONE

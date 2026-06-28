@@ -229,12 +229,14 @@ class RegisterFragment : Fragment() {
         if (!isAdded) return
 
         if (result.success) {
-            // 成功：设置成功状态
+            // 成功：设置成功状态（绿色）
             isSubmitting = false
             isSuccessCooldown = true
             btnSubmit.text = "✅登记成功"
             btnSubmit.isEnabled = false
             btnSubmit.alpha = 1.0f
+            btnSubmit.setBackgroundColor(Color.parseColor("#2ECC71"))
+            btnSubmit.setTextColor(Color.WHITE)
 
             // 保存登记时间戳（保留最近66天）
             val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
@@ -276,8 +278,12 @@ class RegisterFragment : Fragment() {
                 }
             }, 2000)
         } else {
-            // 失败：Toast 提示，恢复按钮
-            setSubmittingState(false)
+            // 失败：红色闪一下 + Toast 提示，恢复按钮
+            btnSubmit.setBackgroundColor(Color.parseColor("#E74C3C"))
+            btnSubmit.setTextColor(Color.WHITE)
+            handler.postDelayed({
+                if (isAdded) setSubmittingState(false)
+            }, 800)
             Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show()
         }
     }

@@ -1,8 +1,41 @@
 # AutoDial v4.1.0 更新日志
 
-> 发布日期：2026-06-27
+> 最后修改：2026-06-29 00:08
 
 ---
+
+## 2026-06-29 00:08 — UI 美化 + 性能优化
+
+### UI 美化（6 项）
+
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| SVG 图标替代 emoji | `res/drawable/ic_tab_*.xml` × 4 + `activity_main.xml` | 底部导航 🔗📋📊📝 → WiFi/日历/柱状图/笔 矢量图标 |
+| 连接状态脉冲动画 | `ConnectFragment.kt` | 绿点外圈呼吸扩散效果（ValueAnimator + pulseRing） |
+| Toggle 开关过渡 | `ThemeManager.kt` | 开关切换 200ms Argb 颜色渐变 |
+| 卡片 slide-up 入场 | `CallLogFragment.kt` + `slide_up_item.xml` | 列表逐条滑入（50ms stagger） |
+| SIM 标签加图标 | `item_call_log.xml` + `ic_phone_small.xml` | chip 旁添加小电话 SVG 图标 |
+| 空状态升级 | `fragment_call_log.xml` | 圆形插图 + 标题/副标题 + 「立即拨号」CTA 按钮 |
+
+### 性能优化
+
+| 优化 | 文件 | 说明 |
+|------|------|------|
+| PC 检测后台化 | `background.js` + `manifest.json` | `chrome.alarms` 15s 定时探测，拨号直接读缓存（2s 卡顿 → 0s） |
+| 拨号动画提前 | `DialEngine.kt` | `showDialAnimation()` 移到 `placeCall()` 前，点击即见反馈 |
+| SIM handle 缓存 | `DialEngine.kt` | `simHandleCache` 避免每次拨号查 SubscriptionManager（省 50-100ms） |
+
+### 新增文件
+
+`ic_tab_connect.xml` `ic_tab_records.xml` `ic_tab_stats.xml` `ic_tab_register.xml` `ic_phone_small.xml` `empty_state_bg.xml` `pulse_ring_bg.xml` `slide_up_item.xml` `设计文档/手机端UI设计规范.md` `设计文档/before-after.html`
+
+### 文档更新
+
+`README.md` `AutoDial-Extension/README.md` `AutoDial-Extension/AutoDial-API.md` `技术文档/AutoDial总技术文档.md` `技术文档/AutoDial-手机端技术文档.md` `CHANGELOG.md`
+
+---
+
+## 2026-06-27 — 初始交付
 
 ## 新增功能
 

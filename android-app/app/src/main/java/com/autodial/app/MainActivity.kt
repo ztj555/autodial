@@ -7,11 +7,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -33,6 +35,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabCallLogLabel: TextView
     private lateinit var tabStatsLabel: TextView
     private lateinit var tabRegisterLabel: TextView
+    private lateinit var tabConnectIcon: ImageView
+    private lateinit var tabCallLogIcon: ImageView
+    private lateinit var tabStatsIcon: ImageView
+    private lateinit var tabRegisterIcon: ImageView
 
     private val fragments = listOf<Fragment>(
         ConnectFragment(),
@@ -88,6 +94,10 @@ class MainActivity : AppCompatActivity() {
         tabCallLogLabel = findViewById(R.id.tabCallLogLabel)
         tabStatsLabel = findViewById(R.id.tabStatsLabel)
         tabRegisterLabel = findViewById(R.id.tabRegisterLabel)
+        tabConnectIcon = findViewById(R.id.tabConnectIcon)
+        tabCallLogIcon = findViewById(R.id.tabCallLogIcon)
+        tabStatsIcon = findViewById(R.id.tabStatsIcon)
+        tabRegisterIcon = findViewById(R.id.tabRegisterIcon)
 
         ThemeManager.addOnThemeChangedListener(themeListener)
 
@@ -204,18 +214,31 @@ class MainActivity : AppCompatActivity() {
         tabStatsLabel.setTextColor(inactiveColor)
         tabRegisterLabel.setTextColor(inactiveColor)
 
+        tabConnectIcon.setColorFilter(inactiveColor, PorterDuff.Mode.SRC_IN)
+        tabCallLogIcon.setColorFilter(inactiveColor, PorterDuff.Mode.SRC_IN)
+        tabStatsIcon.setColorFilter(inactiveColor, PorterDuff.Mode.SRC_IN)
+        tabRegisterIcon.setColorFilter(inactiveColor, PorterDuff.Mode.SRC_IN)
+
         when (index) {
-            0 -> tabConnectLabel.setTextColor(activeColor)
+            0 -> {
+                tabConnectLabel.setTextColor(activeColor)
+                tabConnectIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
+            }
             1 -> {
                 tabCallLogLabel.setTextColor(activeColor)
+                tabCallLogIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
                 (fragments.getOrNull(1) as? CallLogFragment)?.refreshIfNeeded()
                 (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
             }
             2 -> {
                 tabStatsLabel.setTextColor(activeColor)
+                tabStatsIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
                 (fragments.getOrNull(2) as? StatsFragment)?.refreshIfNeeded()
             }
-            3 -> tabRegisterLabel.setTextColor(activeColor)
+            3 -> {
+                tabRegisterLabel.setTextColor(activeColor)
+                tabRegisterIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
+            }
         }
     }
 
