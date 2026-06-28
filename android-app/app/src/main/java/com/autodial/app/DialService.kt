@@ -571,7 +571,7 @@ class DialService : Service() {
     }
 
     private fun onDialSuccess(number: String, simSlot: Int) {
-        dialEngine.onDialSuccess(number, simSlot)
+        dialEngine.onDialSuccessAfterPlaceCall(number, simSlot)
     }
 
     private fun copyNumberToClipboard(number: String) {
