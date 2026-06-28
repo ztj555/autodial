@@ -1,6 +1,6 @@
 # AutoDial 手机端 UI 设计稿
 
-> 最后修改：2026-06-29 00:08 | MasterGo 用 | sky-blue 亮色 | 顾问工具 App
+> 最后修改：2026-06-29 00:25 | MasterGo 用 | sky-blue 亮色 | 顾问工具 App
 
 ## 色彩
 

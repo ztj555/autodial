@@ -15,10 +15,10 @@
     --text2: #6B6491;
     --green: #2ECC71;
     --red: #E74C3C;
-    --radius-sm: 5px;
-    --radius-md: 10px;
-    --radius-lg: 24px;
-    --shadow: none;
+    --radius-sm: 10px;
+    --radius-md: 18px;
+    --radius-lg: 28px;
+    --shadow: 0 18px 48px rgba(5, 8, 20, 0.15);
     --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
     --gradient-green: linear-gradient(135deg, #27AE60, #1E8449);
     --gradient-red: linear-gradient(135deg, #C0392B, #96281B);
@@ -291,7 +291,7 @@
   .number-lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
   .clip-hint { font-size: 9px; color: var(--gold); }
   .clip-hint.flash { animation: flash 0.4s ease; }
-  @keyframes flash { 50%{ color: var(--gold-light); } }
+  @keyframes flash { 50%{ filter: brightness(1.15); } }
   .number-input {
     background: none; border: none; outline: none;
     font-size: 24px; font-weight: 700;
