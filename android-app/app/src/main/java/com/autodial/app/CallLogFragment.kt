@@ -100,7 +100,7 @@ class CallLogAdapter(
         val d = androidx.core.content.ContextCompat.getDrawable(holder.itemView.context, iconRes)
         d?.setTint(tintColor)
         // 用 44dp 大图标（比默认 intrinsic ~20dp 大一倍多）
-        val iconSize = (44 * view.resources.displayMetrics.density).toInt()
+        val iconSize = (44 * holder.itemView.resources.displayMetrics.density).toInt()
         d?.setBounds(0, 0, iconSize, iconSize)
         holder.callType.setCompoundDrawables(null, d, null, null)
         // 先设颜色防覆盖

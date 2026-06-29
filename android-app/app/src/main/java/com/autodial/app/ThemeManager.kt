@@ -444,10 +444,10 @@ object ThemeManager {
         if (view is TextView && view.compoundDrawables.any { it != null }) {
             val tc = view.currentTextColor
             view.compoundDrawables.forEach { d ->
-                if (d != null) { try { if (!d.colorFilter) d.setTint(tc) } catch (_: Exception) {} }
+                if (d != null) { try { if (d.colorFilter == null) d.setTint(tc) } catch (_: Exception) {} }
             }
             view.compoundDrawablesRelative.forEach { d ->
-                if (d != null) { try { if (!d.colorFilter) d.setTint(tc) } catch (_: Exception) {} }
+                if (d != null) { try { if (d.colorFilter == null) d.setTint(tc) } catch (_: Exception) {} }
             }
         }
 
