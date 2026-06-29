@@ -41,8 +41,8 @@
 
             <ImageView
                 android:id="@+id/tabConnectIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:src="@drawable/ic_ph_wifi_high" />
 
             <TextView
@@ -69,8 +69,8 @@
 
             <ImageView
                 android:id="@+id/tabCallLogIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:src="@drawable/ic_ph_list_numbers" />
 
             <TextView
@@ -97,8 +97,8 @@
 
             <ImageView
                 android:id="@+id/tabStatsIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:src="@drawable/ic_ph_chart_bar" />
 
             <TextView
@@ -125,8 +125,8 @@
 
             <ImageView
                 android:id="@+id/tabRegisterIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:src="@drawable/ic_ph_note_pencil" />
 
             <TextView

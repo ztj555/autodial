@@ -439,11 +439,16 @@ object ThemeManager {
             view.setHintTextColor(parseColor(colors.text2))
         }
 
-        // 自动着色所有 TextView 的复合 Drawable（如 drawableStart）
+        // 自动着色尚未着色的复合 Drawable（如页面标题的 drawableStart）
+        // 跳过已通过代码显式设置颜色的 ImageView（避免覆盖 CallLogFragment 的绿/红通话类型图标）
         if (view is TextView && view.compoundDrawables.any { it != null }) {
             val tc = view.currentTextColor
-            view.compoundDrawables.forEach { it?.setTint(tc) }
-            view.compoundDrawablesRelative.forEach { it?.setTint(tc) }
+            view.compoundDrawables.forEach { d ->
+                if (d != null) { try { if (!d.colorFilter) d.setTint(tc) } catch (_: Exception) {} }
+            }
+            view.compoundDrawablesRelative.forEach { d ->
+                if (d != null) { try { if (!d.colorFilter) d.setTint(tc) } catch (_: Exception) {} }
+            }
         }
 
         // v4: 全局 letterSpacing 提升中文可读性

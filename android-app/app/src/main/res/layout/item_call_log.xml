@@ -97,17 +97,17 @@
             <TextView
                 android:id="@+id/itemCallType"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="28dp"
                 android:layout_gravity="end"
-                android:text="📞"
-                android:textSize="18sp" />
+                android:textSize="22sp"
+                android:textColor="#42C077" />
 
             <!-- 通话状态文字 -->
             <TextView
                 android:id="@+id/itemCallStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="2dp"
                 android:gravity="end"
                 android:text="接通 12s"
                 android:tag="text2"
