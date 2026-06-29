@@ -23,7 +23,9 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📝 来访登记"
+            android:text="来访登记"
+            android:drawableStart="@drawable/ic_ph_note_pencil"
+            android:drawablePadding="6dp"
             android:tag="goldLight"
             android:textColor="#F0C040"
             android:textSize="18sp"

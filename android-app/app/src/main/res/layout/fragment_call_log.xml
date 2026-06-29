@@ -24,7 +24,9 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📋 通话记录"
+            android:text="通话记录"
+            android:drawableStart="@drawable/ic_ph_clipboard_text"
+            android:drawablePadding="6dp"
             android:tag="goldLight"
             android:textColor="#F0C040"
             android:textSize="18sp"
@@ -227,7 +229,9 @@
         android:background="#2A1A1A"
         android:gravity="center"
         android:padding="10dp"
-        android:text="📵 需要通话记录权限才能显示"
+        android:text="需要通话记录权限才能显示"
+        android:drawableStart="@drawable/ic_ph_phone_x"
+        android:drawablePadding="6dp"
         android:textColor="#E74C3C"
         android:textSize="12sp"
         android:visibility="gone" />
@@ -251,8 +255,8 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📞 "
-            android:textSize="16sp" />
+            android:src="@drawable/ic_ph_phone_outgoing"
+            android:layout_gravity="center_vertical" />
 
         <TextView
             android:id="@+id/lastCallHintText"

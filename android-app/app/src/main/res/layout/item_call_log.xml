@@ -61,7 +61,7 @@
                         android:layout_width="12dp"
                         android:layout_height="12dp"
                         android:layout_marginEnd="4dp"
-                        android:src="@drawable/ic_phone_small" />
+                        android:src="@drawable/ic_ph_sim_card" />
 
                     <TextView
                         android:id="@+id/itemSimSlot"

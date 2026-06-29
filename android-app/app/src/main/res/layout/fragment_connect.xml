@@ -251,12 +251,11 @@
                 android:orientation="horizontal"
                 android:padding="10dp">
 
-                <TextView
+                <ImageView
                     android:layout_width="20dp"
                     android:layout_height="20dp"
-                    android:gravity="center"
-                    android:text="🏠"
-                    android:textSize="14sp" />
+                    android:src="@drawable/ic_ph_house"
+                    android:contentDescription="局域网" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -1153,7 +1152,9 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="📖 使用说明"
+                android:text="使用说明"
+                android:drawableStart="@drawable/ic_ph_book_open_text"
+                android:drawablePadding="6dp"
                 android:textColor="#C9A84C"
                 android:textSize="15sp"
                 android:textStyle="bold" />

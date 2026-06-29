@@ -85,13 +85,21 @@ class CallLogAdapter(
         // 时间
         holder.time.text = timeFormat.format(Date(record.time))
 
-        // 通话类型图标
-        holder.callType.text = when (record.type) {
-            CallLog.Calls.OUTGOING_TYPE -> "📤"
-            CallLog.Calls.INCOMING_TYPE -> "📥"
-            CallLog.Calls.MISSED_TYPE -> "📵"
-            else -> "📞"
+        // 通话类型图标（Phosphor）
+        holder.callType.text = ""
+        val iconRes = when (record.type) {
+            CallLog.Calls.OUTGOING_TYPE -> R.drawable.ic_ph_phone_outgoing
+            CallLog.Calls.INCOMING_TYPE -> R.drawable.ic_ph_phone_incoming
+            CallLog.Calls.MISSED_TYPE -> R.drawable.ic_ph_phone_x
+            else -> R.drawable.ic_ph_phone_outgoing
         }
+        val tintColor = when (record.type) {
+            CallLog.Calls.MISSED_TYPE -> android.graphics.Color.parseColor(colors.red)
+            else -> android.graphics.Color.parseColor(colors.green)
+        }
+        val d = androidx.core.content.ContextCompat.getDrawable(holder.itemView.context, iconRes)
+        d?.setTint(tintColor)
+        holder.callType.setCompoundDrawablesWithIntrinsicBounds(null, d, null, null)
 
         // 通话状态文字 + 颜色
         when (record.type) {
@@ -529,7 +537,7 @@ class CallLogFragment : Fragment() {
             num.substring(0, 3) + "****" + num.substring(num.length - 4)
         } else num
 
-        val items = arrayOf("📞 重拨  $displayNum", "💬 发短信给  $displayNum")
+        val items = arrayOf("重拨  $displayNum", "发短信给  $displayNum")
 
         val dialog = AlertDialog.Builder(requireContext())
             .setItems(items) { _, which ->

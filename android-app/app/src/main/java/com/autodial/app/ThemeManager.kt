@@ -329,14 +329,14 @@ object ThemeManager {
             "bg3" -> {
                 view.background = roundedFill(blendedBg3, 16f, blendColors(colors.text2, colors.bg3, 72), 1f)
             }
-            "text" -> if (view is TextView) view.setTextColor(parseColor(colors.text))
-            "text2" -> if (view is TextView) view.setTextColor(parseColor(colors.text2))
-            "gold" -> if (view is TextView) view.setTextColor(parseColor(colors.gold))
+            "text" -> if (view is TextView) { view.setTextColor(parseColor(colors.text)); tintDrawables(view, colors.text) }
+            "text2" -> if (view is TextView) { view.setTextColor(parseColor(colors.text2)); tintDrawables(view, colors.text2) }
+            "gold" -> if (view is TextView) { view.setTextColor(parseColor(colors.gold)); tintDrawables(view, colors.gold) }
                      else view.setBackgroundColor(parseColor(colors.gold))
-            "goldLight" -> if (view is TextView) view.setTextColor(parseColor(colors.goldLight))
+            "goldLight" -> if (view is TextView) { view.setTextColor(parseColor(colors.goldLight)); tintDrawables(view, colors.goldLight) }
             "goldDark" -> view.setBackgroundColor(parseColor(colors.goldDark))
-            "green" -> if (view is TextView) view.setTextColor(parseColor(colors.green))
-            "red" -> if (view is TextView) view.setTextColor(parseColor(colors.red))
+            "green" -> if (view is TextView) { view.setTextColor(parseColor(colors.green)); tintDrawables(view, colors.green) }
+            "red" -> if (view is TextView) { view.setTextColor(parseColor(colors.red)); tintDrawables(view, colors.red) }
             "goldBtn" -> {
                 view.background = verticalGradient(colors.goldLight, colors.goldDark, 18f)
                 if (view is ViewGroup) {
@@ -439,6 +439,13 @@ object ThemeManager {
             view.setHintTextColor(parseColor(colors.text2))
         }
 
+        // 自动着色所有 TextView 的复合 Drawable（如 drawableStart）
+        if (view is TextView && view.compoundDrawables.any { it != null }) {
+            val tc = view.currentTextColor
+            view.compoundDrawables.forEach { it?.setTint(tc) }
+            view.compoundDrawablesRelative.forEach { it?.setTint(tc) }
+        }
+
         // v4: 全局 letterSpacing 提升中文可读性
         if (view is TextView && view.letterSpacing == 0f) {
             view.letterSpacing = 0.02f
@@ -472,7 +479,15 @@ object ThemeManager {
         return String.format("#%02X%02X%02X", r, g, b)
     }
 
-    // 判断是否为浅色模式
+    /** 给 TextView 的复合 Drawable 着色 */
+    private fun tintDrawables(view: View, colorHex: String) {
+        if (view !is TextView) return
+        val color = parseColor(colorHex)
+        view.compoundDrawables.forEach { it?.setTint(color) }
+        view.compoundDrawablesRelative.forEach { it?.setTint(color) }
+    }
+
+    /** 判断是否为浅色模式 */
     fun isLightMode(context: Context): Boolean {
         val colors = getColors(context)
         val bg = parseColor(colors.bg)
