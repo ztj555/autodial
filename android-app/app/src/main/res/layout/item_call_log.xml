@@ -93,13 +93,14 @@
             android:gravity="center_vertical|end"
             android:orientation="vertical">
 
-            <!-- 通话类型图标 -->
+            <!-- 通话类型：图标+文字 -->
             <TextView
                 android:id="@+id/itemCallType"
                 android:layout_width="wrap_content"
-                android:layout_height="28dp"
+                android:layout_height="wrap_content"
                 android:layout_gravity="end"
-                android:textSize="22sp"
+                android:drawablePadding="4dp"
+                android:textSize="16sp"
                 android:textColor="#42C077" />
 
             <!-- 通话状态文字 -->

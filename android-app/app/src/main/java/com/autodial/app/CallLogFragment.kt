@@ -85,25 +85,17 @@ class CallLogAdapter(
         // 时间
         holder.time.text = timeFormat.format(Date(record.time))
 
-        // 通话类型图标（Phosphor）—— 用大尺寸 compoundDrawable 替代 emoji
-        holder.callType.text = ""
-        val iconRes = when (record.type) {
-            CallLog.Calls.OUTGOING_TYPE -> R.drawable.ic_ph_phone_outgoing
-            CallLog.Calls.INCOMING_TYPE -> R.drawable.ic_ph_phone_incoming
-            CallLog.Calls.MISSED_TYPE -> R.drawable.ic_ph_phone_x
-            else -> R.drawable.ic_ph_phone_outgoing
+        // 通话类型：图标 + 文字标签
+        val (typeText, iconRes, tintColor) = when (record.type) {
+            CallLog.Calls.OUTGOING_TYPE -> Triple("拨出", R.drawable.ic_ph_phone_outgoing, android.graphics.Color.parseColor(colors.green))
+            CallLog.Calls.INCOMING_TYPE -> Triple("来电", R.drawable.ic_ph_phone_incoming, android.graphics.Color.parseColor(colors.green))
+            CallLog.Calls.MISSED_TYPE -> Triple("未接", R.drawable.ic_ph_phone_x, android.graphics.Color.parseColor(colors.red))
+            else -> Triple("", R.drawable.ic_ph_phone_outgoing, android.graphics.Color.parseColor(colors.green))
         }
-        val tintColor = when (record.type) {
-            CallLog.Calls.MISSED_TYPE -> android.graphics.Color.parseColor(colors.red)
-            else -> android.graphics.Color.parseColor(colors.green)
-        }
+        holder.callType.text = typeText
         val d = androidx.core.content.ContextCompat.getDrawable(holder.itemView.context, iconRes)
         d?.setTint(tintColor)
-        // 用 44dp 大图标（比默认 intrinsic ~20dp 大一倍多）
-        val iconSize = (44 * holder.itemView.resources.displayMetrics.density).toInt()
-        d?.setBounds(0, 0, iconSize, iconSize)
-        holder.callType.setCompoundDrawables(null, d, null, null)
-        // 先设颜色防覆盖
+        holder.callType.setCompoundDrawablesWithIntrinsicBounds(d, null, null, null)
         holder.callType.setTextColor(tintColor)
 
         // 通话状态文字 + 颜色
@@ -542,7 +534,7 @@ class CallLogFragment : Fragment() {
             num.substring(0, 3) + "****" + num.substring(num.length - 4)
         } else num
 
-        val items = arrayOf("重拨  $displayNum", "发短信给  $displayNum")
+        val items = arrayOf("\uD83D\uDCDE 重拨  $displayNum", "\uD83D\uDCAC 发短信给  $displayNum")
 
         val dialog = AlertDialog.Builder(requireContext())
             .setItems(items) { _, which ->
