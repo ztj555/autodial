@@ -6,7 +6,7 @@
     android:background="#111318"
     android:orientation="vertical"
     android:paddingStart="12dp"
-    android:paddingTop="12dp"
+    android:paddingTop="0dp"
     android:paddingEnd="12dp"
     android:paddingBottom="0dp">
 
@@ -137,7 +137,7 @@
         android:id="@+id/dialModeBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:tag="bg2"
         android:background="#1A1D24"
         android:gravity="center"
@@ -222,7 +222,7 @@
         android:id="@+id/callLogPermissionHint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:tag="infoBanner"
         android:background="#2A1A1A"
         android:gravity="center"
@@ -237,7 +237,7 @@
         android:id="@+id/lastCallHintBanner"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:tag="infoBanner"
         android:background="#1A2030"
         android:gravity="center"
@@ -272,7 +272,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:clipToPadding="false"
         android:paddingBottom="12dp" />
 

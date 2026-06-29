@@ -60,8 +60,12 @@ object ThemeManager {
     }
 
     /**
-     * 通知所有注册的监听器主题已变更
+     * 通知所有注册的监听器主题已变更（包括卡片透明度变更）
      */
+    fun notifyRefresh() {
+        notifyThemeChanged()
+    }
+
     private fun notifyThemeChanged() {
         listeners.toList().forEach { listener ->
             try { listener() } catch (_: Exception) {}
@@ -291,7 +295,7 @@ object ThemeManager {
     fun applyToView(view: View, colors: ThemeColors) {
         val ctx = view.context
         val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        val opacity = prefs.getInt("card_opacity", 0)
+        val opacity = prefs.getInt("card_opacity", 100)
         val blendedBg2 = blendColors(colors.bg2, colors.bg, opacity)
         val blendedBg3 = blendColors(colors.bg3, colors.bg, opacity)
         val tag = view.tag?.toString() ?: ""

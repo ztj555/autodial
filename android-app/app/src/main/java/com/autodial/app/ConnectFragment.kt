@@ -1413,7 +1413,7 @@ class ConnectFragment : Fragment() {
                 (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
                 setOnClickListener {
                     prefCtrl.setCardOpacity(v)
-                    ThemeManager.applyToView(requireView(), colors)
+                    ThemeManager.notifyRefresh()
                     refreshButtons()
                 }
             }

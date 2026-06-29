@@ -7,7 +7,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:layout_marginStart="2dp"
         android:layout_marginEnd="2dp"
         android:tag="bg2"
@@ -15,9 +15,9 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingTop="16dp"
+        android:paddingTop="10dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="10dp">
 
         <!-- 左侧：号码行（号码+卡标签横排）+ 时间 -->
         <LinearLayout
@@ -124,6 +124,6 @@
         android:background="#2A3040"
         android:layout_marginStart="22dp"
         android:layout_marginEnd="22dp"
-        android:layout_marginTop="6dp" />
+        android:layout_marginTop="4dp" />
 
 </LinearLayout>
