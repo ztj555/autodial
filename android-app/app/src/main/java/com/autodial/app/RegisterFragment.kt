@@ -8,6 +8,8 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -23,11 +25,12 @@ class RegisterFragment : Fragment() {
 
     private lateinit var etCustomerName: EditText
     private lateinit var etCustomerMobile: EditText
-    private lateinit var tvAdvisorMobile: TextView
+    private lateinit var etManagerName: EditText
     private lateinit var tvVisitType: TextView
     private lateinit var btnSubmit: TextView
 
     private var pin: String = ""
+    private var managerName: String = ""
     private var brand: String = "1833"
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -61,7 +64,7 @@ class RegisterFragment : Fragment() {
 
         etCustomerName = view.findViewById(R.id.etCustomerName)
         etCustomerMobile = view.findViewById(R.id.etCustomerMobile)
-        tvAdvisorMobile = view.findViewById(R.id.tvAdvisorMobile)
+        etManagerName = view.findViewById(R.id.etManagerName)
         tvVisitType = view.findViewById(R.id.tvVisitType)
         btnSubmit = view.findViewById(R.id.btnSubmit)
 
@@ -69,9 +72,37 @@ class RegisterFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
         pin = prefs.getString("pin", "") ?: ""
         brand = prefs.getString("brand", "1833") ?: "1833"
+        managerName = prefs.getString("manager_name", "") ?: ""
 
-        // 设置顾问手机号
-        tvAdvisorMobile.text = pin.ifEmpty { "未设置" }
+        // 如果本地没有姓名但 PIN 已设置，异步从云中继查询
+        if (managerName.isEmpty() && pin.isNotEmpty()) {
+            executor.execute {
+                val nameFromCloud = fetchManagerNameFromCloud(pin)
+                if (nameFromCloud != null) {
+                    managerName = nameFromCloud
+                    prefs.edit().putString("manager_name", nameFromCloud).apply()
+                    handler.post {
+                        if (isAdded) {
+                            etManagerName.setText(nameFromCloud)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 设置接待顾问姓名
+        etManagerName.setText(managerName)
+        etManagerName.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val newName = s.toString().trim()
+                if (newName != managerName) {
+                    managerName = newName
+                    prefs.edit().putString("manager_name", newName).apply()
+                }
+            }
+        })
 
         // 设置来访事由（固定值）
         tvVisitType.text = VISIT_TYPE
@@ -104,6 +135,7 @@ class RegisterFragment : Fragment() {
         // EditText text color is not set by tag system, set explicitly
         etCustomerName.setTextColor(Color.parseColor(colors.text))
         etCustomerMobile.setTextColor(Color.parseColor(colors.text))
+        etManagerName.setTextColor(Color.parseColor(colors.text))
     }
 
     /**
@@ -136,6 +168,7 @@ class RegisterFragment : Fragment() {
     private fun handleSubmit() {
         val name = etCustomerName.text.toString().trim()
         val mobile = etCustomerMobile.text.toString().trim()
+        val mgrName = etManagerName.text.toString().trim()
 
         // 验证客户称呼
         if (name.isEmpty()) {
@@ -148,6 +181,15 @@ class RegisterFragment : Fragment() {
             Toast.makeText(requireContext(), "请填写正确的11位手机号（1开头）", Toast.LENGTH_SHORT).show()
             return
         }
+
+        // 验证顾问姓名
+        if (mgrName.isEmpty()) {
+            Toast.makeText(requireContext(), "请填写接待顾问姓名", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 更新缓存的经理姓名
+        managerName = mgrName
 
         // 设置提交中状态
         setSubmittingState(true)
@@ -181,7 +223,7 @@ class RegisterFragment : Fragment() {
                 "brand" to brand,
                 "name" to name,
                 "mobile" to mobile,
-                "kefu_tel" to pin,
+                "kefu_tel" to managerName,
                 "visit_type" to VISIT_TYPE
             )
             val postData = params.entries.joinToString("&") { (key, value) ->
@@ -306,6 +348,37 @@ class RegisterFragment : Fragment() {
     }
 
     /**
+     * 从云中继查询 PIN 对应的顾问姓名。返回 null 表示查询失败或未找到。
+     */
+    private fun fetchManagerNameFromCloud(pin: String): String? {
+        try {
+            val ctx = requireContext().applicationContext
+            val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val serverUrl = prefs.getString("cloud_server", "") ?: ""
+            if (serverUrl.isEmpty()) return null
+
+            val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+            val url = URL("$baseUrl/api/v1/advisor/name?pin=${URLEncoder.encode(pin, "UTF-8")}")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            val code = conn.responseCode
+            if (code != 200) {
+                conn.disconnect()
+                return null
+            }
+            val body = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            val json = org.json.JSONObject(body)
+            if (json.optBoolean("ok", false)) {
+                return json.optString("name", null)
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    /**
      * 将本地登记同步到云中继的 /api/v1/visit 接口，确保云端也存一份。
      */
     private fun syncToCloudRelay(name: String, mobile: String) {
@@ -319,7 +392,7 @@ class RegisterFragment : Fragment() {
                 val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
                 val params = "name=${URLEncoder.encode(name, "UTF-8")}" +
                         "&mobile=${URLEncoder.encode(mobile, "UTF-8")}" +
-                        "&kefu_tel=${URLEncoder.encode(pin, "UTF-8")}" +
+                        "&kefu_tel=${URLEncoder.encode(managerName, "UTF-8")}" +
                         "&visit_type=${URLEncoder.encode("贷款咨询", "UTF-8")}" +
                         "&source=phone"
                 val fullUrl = "$baseUrl/api/v1/visit?$params"

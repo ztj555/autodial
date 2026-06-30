@@ -71,7 +71,7 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'visits.db')
 def init_db():
     """初始化 visits 表及索引，失败时降级到内存数据库"""
     global DB_PATH
-    create_sql = '''CREATE TABLE IF NOT EXISTS visits (
+    create_visits = '''CREATE TABLE IF NOT EXISTS visits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pin TEXT NOT NULL,
         name TEXT NOT NULL,
@@ -82,12 +82,19 @@ def init_db():
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )'''
+    create_advisor = '''CREATE TABLE IF NOT EXISTS advisor_names (
+        pin TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )'''
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute(create_sql)
+        c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        c.execute(create_advisor)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         conn.commit()
         conn.close()
         log.info(f'Visits DB initialized at {DB_PATH}')
@@ -96,9 +103,11 @@ def init_db():
         DB_PATH = ':memory:'
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute(create_sql)
+        c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        c.execute(create_advisor)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         conn.commit()
         conn.close()
 
@@ -868,6 +877,55 @@ async def health_check_handler(path, request_headers):
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
     
+    # ===== 顾问姓名映射 =====
+
+    # 注册/更新顾问姓名: GET /api/v1/advisor/register?pin=xxx&name=xxx
+    # Chrome 扩展检测到 CRM 姓名后调用此接口上传
+    if path == '/api/v1/advisor/register':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        name = qs.get('name', [''])[0].strip()
+        if not pin or not name:
+            return (200, JSON_HDR, _err_json('MISSING', 'pin 和 name 不能为空'))
+        
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute(
+                'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
+                'ON CONFLICT(pin) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at',
+                (pin, name, now_str)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            log.error(f'Advisor register error: {e}')
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        
+        log.info(f'ADVISOR_REGISTER pin={pin} name={name}')
+        return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin, 'name': name}).encode('utf-8'))
+
+    # 查询顾问姓名: GET /api/v1/advisor/name?pin=xxx
+    # Android/Chrome 根据 PIN 查询对应姓名
+    if path == '/api/v1/advisor/name':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('SELECT name FROM advisor_names WHERE pin = ?', (pin,))
+            row = c.fetchone()
+            conn.close()
+            if row:
+                return (200, JSON_HDR, json.dumps({'ok': True, 'name': row[0]}).encode('utf-8'))
+            else:
+                return (200, JSON_HDR, _err_json('NOT_FOUND', '未找到该PIN对应的顾问姓名'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
     # ===== 一键登记 API（GET + query params，与 dial 风格一致） =====
 
     # 创建登记: GET /api/v1/visit?name=...&mobile=...&...

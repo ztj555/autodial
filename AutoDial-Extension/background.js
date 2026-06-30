@@ -120,6 +120,25 @@ function resetPcStatus() {
   isPcAlive();
 }
 
+// ==================== 上传顾问姓名到云中继 ====================
+
+async function uploadAdvisorName(pin, name) {
+  try {
+    const apiUrl = await getCloudApi();
+    const encodedName = encodeURIComponent(name);
+    const encodedPin = encodeURIComponent(pin);
+    const res = await fetch(`${apiUrl}/api/v1/advisor/register?pin=${encodedPin}&name=${encodedName}`);
+    const data = await res.json();
+    if (data.ok) {
+      console.log('[AutoDial BG] 顾问姓名已上传云端:', pin, '→', name);
+    } else {
+      console.warn('[AutoDial BG] 上传顾问姓名失败:', data.code);
+    }
+  } catch (e) {
+    // 静默失败，云端不可达时不影响本地使用
+  }
+}
+
 // ==================== 双模拨号（PIN 版） ====================
 
 async function dial(phone, tabId) {
@@ -170,12 +189,16 @@ async function registerVisit(name, phone, tabId) {
     return { success: false, error: 'PIN未设置，请先打开CRM页面检测坐席手机号' };
   }
 
+  // 获取经理姓名（从存储中读取，与网页版对接）
+  const stored = await chrome.storage.local.get(['manager_name']);
+  const managerName = stored.manager_name || pin; // 兜底：没有姓名时用 PIN
+
   try {
     const apiUrl = await getCloudApi();
     const params = new URLSearchParams({
       name: name,
       mobile: phone,
-      kefu_tel: pin,
+      kefu_tel: managerName,
       visit_type: '贷款咨询',
       source: 'plugin'
     });
@@ -270,10 +293,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // 坐席手机号检测 -> 存为 PIN + 刷新服务器列表
+  // 坐席手机号检测 -> 存为 PIN + 刷新服务器列表 + 上传姓名到云端
   if (msg.type === 'selfPhoneDetected') {
     chrome.storage.local.set({ self_phone: msg.phone });
     console.log('[AutoDial BG] 坐席手机号已检测:', msg.phone);
+    if (msg.name) {
+      chrome.storage.local.set({ manager_name: msg.name });
+      // 上传到云中继，让手机端能按 PIN 查到姓名
+      uploadAdvisorName(msg.phone, msg.name);
+    }
     fetchCloudList().catch(() => {}); // 后台刷新，不阻塞
     return;
   }
@@ -287,6 +315,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     chrome.storage.local.set({ pin: p, self_phone: p }, () => {
       console.log('[AutoDial BG] PIN 已设置:', p);
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+
+  // 设置经理姓名
+  if (msg.type === 'setManagerName') {
+    const n = (msg.name || '').trim();
+    if (!n) {
+      sendResponse({ success: false, error: '姓名不能为空' });
+      return true;
+    }
+    chrome.storage.local.set({ manager_name: n }, () => {
+      console.log('[AutoDial BG] 经理姓名已设置:', n);
       sendResponse({ success: true });
     });
     return true;

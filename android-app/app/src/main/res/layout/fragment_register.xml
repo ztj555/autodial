@@ -118,41 +118,32 @@
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="16dp" />
 
-                <!-- 顾问手机号（只读） -->
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <!-- 接待顾问姓名 -->
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:text="接待顾问姓名"
+                    android:tag="text"
+                    android:textColor="#E8DCC8"
+                    android:textSize="14sp"
+                    android:layout_marginBottom="8dp" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="顾问手机号"
-                        android:tag="text"
-                        android:textColor="#E8DCC8"
-                        android:textSize="14sp" />
-
-                    <View
-                        android:layout_width="0dp"
-                        android:layout_height="0dp"
-                        android:layout_weight="1" />
-
-                    <TextView
-                        android:id="@+id/tvAdvisorMobile"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:tag="chip"
-                        android:background="#22262F"
-                        android:gravity="end"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:paddingTop="10dp"
-                        android:paddingBottom="10dp"
-                        android:text="--"
-                        android:textColor="#908070"
-                        android:textSize="14sp" />
-                </LinearLayout>
+                <EditText
+                    android:id="@+id/etManagerName"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:tag="inputField"
+                    android:background="#22262F"
+                    android:hint="请填写接待顾问姓名"
+                    android:inputType="textPersonName"
+                    android:maxLines="1"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true"
+                    android:imeOptions="actionDone"
+                    android:textColor="#E8DCC8"
+                    android:textColorHint="#605040"
+                    android:textSize="15sp" />
 
                 <!-- 来访事由（固定） -->
                 <LinearLayout
@@ -160,7 +151,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:layout_marginTop="12dp">
+                    android:layout_marginTop="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"

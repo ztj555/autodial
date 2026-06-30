@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 加载保存的服务器地址和 PIN（手动设置优先，其次自动获取）
-  chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched', 'self_phone', 'pin'], (s) => {
+  chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched', 'self_phone', 'pin', 'manager_name'], (s) => {
     serverInput.value = cleanAddr(s.cloud_api) ||
                         (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '262ao85kz470.vicp.fun:55535');
     if (s.pin || s.self_phone) {
@@ -34,6 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
       showStatus(s.pin || s.self_phone);
     } else {
       showSetup();
+    }
+    // 加载经理姓名
+    if (s.manager_name) {
+      document.getElementById('mgrNameInput').value = s.manager_name;
     }
     testServer(fullUrl(serverInput.value));
   });
@@ -87,6 +91,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // 保存经理姓名
+  document.getElementById('saveMgrNameBtn').addEventListener('click', () => {
+    const mgrName = document.getElementById('mgrNameInput').value.trim();
+    if (!mgrName) {
+      document.getElementById('mgrNameStatus').textContent = '请输入接待顾问姓名';
+      document.getElementById('mgrNameStatus').className = 'server-status err';
+      return;
+    }
+    chrome.storage.local.set({ manager_name: mgrName }, () => {
+      document.getElementById('mgrNameStatus').textContent = '✓ 姓名已保存';
+      document.getElementById('mgrNameStatus').className = 'server-status ok';
+      setTimeout(() => { document.getElementById('mgrNameStatus').textContent = ''; }, 1500);
+    });
+  });
+
   // 回车键保存 PIN
   pinInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -101,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 修改服务器（PIN 保持不动）
+  // 修改服务器（PIN 和经理姓名保持不动）
   document.getElementById('editServerBtn').addEventListener('click', () => {
     document.getElementById('setupPanel').style.display = 'block';
     document.getElementById('statusPanel').style.display = 'none';
@@ -109,6 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('savePinBtn').style.display = 'none';
     document.getElementById('pinStatus').style.display = 'none';
     document.getElementById('backToStatusBtn').style.display = 'inline-block';
+    // 保留经理姓名输入可见
+    document.getElementById('mgrNameInput').style.display = '';
+    document.getElementById('saveMgrNameBtn').style.display = '';
+    document.getElementById('mgrNameStatus').style.display = '';
   });
 
   // 返回状态面板（不改 PIN）
@@ -117,6 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('savePinBtn').style.display = '';
     document.getElementById('pinStatus').style.display = '';
     document.getElementById('backToStatusBtn').style.display = 'none';
+    document.getElementById('mgrNameInput').style.display = '';
+    document.getElementById('saveMgrNameBtn').style.display = '';
+    document.getElementById('mgrNameStatus').style.display = '';
     chrome.storage.local.get(['pin', 'self_phone'], (s) => {
       showStatus(s.pin || s.self_phone);
     });
@@ -139,6 +165,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('setupPanel').style.display = 'none';
     document.getElementById('statusPanel').style.display = 'block';
     document.getElementById('myPhone').textContent = pin || '--';
+
+    // 显示经理姓名（优先自动检测）
+    chrome.storage.local.get(['manager_name'], (s) => {
+      var mgr = s.manager_name || '未检测到（可在下方设置）';
+      document.getElementById('myMgrName').textContent = mgr;
+      document.getElementById('myMgrName').onclick = () => {
+        document.getElementById('editServerBtn').click();
+        setTimeout(() => { document.getElementById('mgrNameInput').focus(); }, 100);
+      };
+      if (s.manager_name) {
+        document.getElementById('mgrNameInput').value = s.manager_name;
+      }
+    });
 
     // 显示当前云端地址（手动设置优先，其次自动获取）
     chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {

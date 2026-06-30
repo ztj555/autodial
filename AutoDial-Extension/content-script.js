@@ -17,11 +17,44 @@
   // 融鑫汇CRM手机号是裸StaticText节点，在页面顶部，无class/id
   // TreeWalker从body顶部向下扫，第一个命中的手机号就是坐席的
   function getMyPhoneFromCRM() {
-    const PHONE_RE = /1[3-9]\d{9}/;
-    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const result = getMyPhoneAndNameFromCRM();
+    return result ? result.phone : null;
+  }
+
+  /**
+   * 从 CRM 页面同时检测坐席手机号和姓名。
+   * DOM 结构（已确认）：div.user-name = 姓名，div.user-phone = 手机号。
+   * CSS 选择器优先；选择器失效时回退到 TreeWalker 文本扫描。
+   */
+  function getMyPhoneAndNameFromCRM() {
+    // 方式一: CSS 选择器（精确匹配已知 DOM 结构）
+    try {
+      var phoneEl = document.querySelector('.user-phone');
+      var nameEl = document.querySelector('.user-name');
+      if (phoneEl) {
+        var phoneText = phoneEl.textContent.trim();
+        var m = phoneText.match(/1[3-9]\d{9}/);
+        if (m) {
+          var name = nameEl ? nameEl.textContent.trim() : '';
+          return { phone: m[0], name: name };
+        }
+      }
+    } catch(e) {}
+
+    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化）
+    var PHONE_RE = /1[3-9]\d{9}/;
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var prevText = '';
     while (w.nextNode()) {
-      const m = w.currentNode.textContent.match(PHONE_RE);
-      if (m) return m[0];
+      var text = w.currentNode.textContent.trim();
+      var m = text.match(PHONE_RE);
+      if (m) {
+        return { phone: m[0], name: prevText };
+      }
+      // 记录不含数字、长度2-10的纯文本（可能是姓名）
+      if (text && !/\d/.test(text) && text.length >= 2 && text.length <= 10) {
+        prevText = text;
+      }
     }
     return null;
   }
@@ -1280,6 +1313,8 @@
       if (old) old.remove();
 
       var pin = window.__adMyPhone || '';
+      var mgrName = window.__adMyName || pin; // 优先用自动检测的姓名，兜底用 PIN
+
       var t = T();
       var overlay = document.createElement('div');
       overlay.id = 'autodial-register-overlay';
@@ -1293,7 +1328,7 @@
         '<div style="text-align:left;margin-bottom:16px;">' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户姓名：</span>' + escHtml(name) + '</div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户手机号：</span>' + escHtml(phone) + '</div>' +
-        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">顾问手机号：</span>' + escHtml(pin || '未设置') + '</div>' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">接待顾问：</span>' + escHtml(mgrName || '未设置') + '</div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">事由：</span>贷款咨询</div>' +
         '</div>' +
         '<div style="display:flex;gap:12px;">' +
@@ -1335,13 +1370,19 @@
 
     function detectPin() {
       try {
-        const myPhone = getMyPhoneFromCRM();
-        if (myPhone && myPhone !== _lastPhone) {
-          _lastPhone = myPhone;
-          window.__adMyPhone = myPhone;
-          chrome.storage.local.set({ self_phone: myPhone });
-          console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', myPhone);
-          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: myPhone });
+        const result = getMyPhoneAndNameFromCRM();
+        if (result && result.phone && result.phone !== _lastPhone) {
+          _lastPhone = result.phone;
+          window.__adMyPhone = result.phone;
+          chrome.storage.local.set({ self_phone: result.phone });
+          console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', result.phone);
+          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: result.phone, name: result.name || '' });
+          // 同步检测并存储经理姓名
+          if (result.name) {
+            window.__adMyName = result.name;
+            chrome.storage.local.set({ manager_name: result.name });
+            console.log('[AutoDial v4] 检测到经理姓名:', result.name);
+          }
           return true;
         }
       } catch(e) {}
@@ -1378,14 +1419,18 @@
         flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
       }
       if (msg.type === 'reDetect') {
-        // 用户点拨号时background让重新扫手机号
-        const phone = getMyPhoneFromCRM();
-        if (phone) {
-          _lastPhone = phone;
-          window.__adMyPhone = phone;
-          chrome.storage.local.set({ self_phone: phone });
+        // 用户点拨号时background让重新扫手机号和姓名
+        const result = getMyPhoneAndNameFromCRM();
+        if (result && result.phone) {
+          _lastPhone = result.phone;
+          window.__adMyPhone = result.phone;
+          chrome.storage.local.set({ self_phone: result.phone });
+          if (result.name) {
+            window.__adMyName = result.name;
+            chrome.storage.local.set({ manager_name: result.name });
+          }
         }
-        sendResponse({ phone: phone || null });
+        sendResponse({ phone: result ? result.phone : null });
         return true;
       }
     });
