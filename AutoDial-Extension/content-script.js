@@ -218,9 +218,90 @@
   // ═══════════════════════════════════════════════
   // 顶层页面：创建浮动拖动按钮
   // ═══════════════════════════════════════════════
+
+  /**
+   * 从 CRM 来访列表页抓取记录，同步到云中继（主管功能）。
+   * 顶层和 iframe 共用，通过 toastFn 参数适配不同上下文。
+   */
+  function handleSyncVisitList(sendResponse, toastFn) {
+    if (!toastFn) toastFn = (typeof showToast !== 'undefined' ? showToast : alert);
+    // 1) 检查是否在来访列表页
+    if (!window.location.href.includes('list_user_visit.html')) {
+      var msg = '请先打开【日志报表→查看来访客户】页面';
+      toastFn('✗ ' + msg);
+      sendResponse({ ok: false, error: msg });
+      return;
+    }
+    // 2) 检查是否为管理员
+    var pin = window.__adMyPhone || '';
+    chrome.runtime.sendMessage({ type: 'getPin' }, function(resp) {
+      if (resp && resp.pin) pin = resp.pin;
+      if (!pin) {
+        var msg = '未检测到 PIN，请先打开 CRM 主页面';
+        toastFn('✗ ' + msg);
+        sendResponse({ ok: false, error: msg });
+        return;
+      }
+      chrome.runtime.sendMessage({ type: 'checkIsAdmin', pin: pin }, function(adminResp) {
+        if (!adminResp || !adminResp.is_admin) {
+          var msg = '当前账号不是主管，请让主管来同步';
+          toastFn('✗ ' + msg);
+          sendResponse({ ok: false, error: msg });
+          return;
+        }
+        // 3) 抓取表格数据
+        var visits = [];
+        var rows = document.querySelectorAll('form[name="fdsf"] table tr');
+        for (var r = 1; r < rows.length; r++) {
+          var cells = rows[r].querySelectorAll('td');
+          if (cells.length < 12) continue;
+          var id = (cells[0].textContent || '').trim();
+          var name = (cells[1].textContent || '').replace(/\(.*\)$/, '').trim();
+          var mobileCell = (cells[2].textContent || '').trim();
+          var mobile = (mobileCell.match(/1[3-9]\d{9}/) || [''])[0];
+          var visitType = (cells[4].textContent || '').trim();
+          var advisorPhone = (cells[5].textContent || '').trim();
+          var advisorName = (cells[6].textContent || '').trim();
+          var visitTime = (cells[11].textContent || '').trim();
+          if (!name || !mobile) continue;
+          visits.push({
+            crm_id: id, name: name, mobile: mobile,
+            visit_type: visitType, advisor_phone: advisorPhone,
+            advisor_name: advisorName, visit_time: visitTime
+          });
+        }
+        if (visits.length === 0) {
+          var msg = '未找到登记记录';
+          toastFn('✗ ' + msg);
+          sendResponse({ ok: false, error: msg });
+          return;
+        }
+        // 4) 批量提交到云端
+        toastFn('正在同步 ' + visits.length + ' 条记录...');
+        chrome.runtime.sendMessage({
+          type: 'batchSyncVisits',
+          pin: pin,
+          visits: visits
+        }, function(syncResp) {
+          if (syncResp && syncResp.ok) {
+            var msg = '✅ 已同步 ' + syncResp.synced + '/' + syncResp.total + ' 条';
+            toastFn(msg);
+            sendResponse({ ok: true, synced: syncResp.synced, total: syncResp.total });
+          } else {
+            var msg = '✗ 同步失败: ' + (syncResp ? syncResp.error : '未知错误');
+            toastFn(msg);
+            sendResponse({ ok: false, error: syncResp ? syncResp.error : '未知错误' });
+          }
+        });
+      });
+    });
+  }
+
   if (isTopFrame) {
     let floatEl = null;
     let currentPhone = null;
+
+    // ═══════════════════════════════════════════════
 
     function createFloat() {
       if (document.getElementById('__ad_float')) return;
@@ -1433,6 +1514,11 @@
         sendResponse({ phone: result ? result.phone : null });
         return true;
       }
+      // 同步登记列表（主管功能）
+      if (msg.type === 'syncVisitList') {
+        handleSyncVisitList(sendResponse);
+        return true;
+      }
     });
 
     // 监听子iframe发来的客户姓名
@@ -1448,6 +1534,32 @@
   // ═══════════════════════════════════════════════
   // 子iframe：扫描手机号并拦截"点击拨打"
   // ═══════════════════════════════════════════════
+
+  /**
+   * iframe 内简易 toast（不依赖顶层 showToast）
+   */
+  function iframeToast(text) {
+    var old = document.getElementById('__ad_iframe_toast');
+    if (old) old.remove();
+    var div = document.createElement('div');
+    div.id = '__ad_iframe_toast';
+    var isOk = text.indexOf('✅') >= 0 || text.indexOf('正在') >= 0;
+    div.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);' +
+      'background:' + (isOk ? '#2ECC71' : '#E74C3C') + ';color:#fff;padding:10px 24px;' +
+      'border-radius:8px;z-index:2147483647;font-size:14px;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+    div.textContent = text;
+    document.body.appendChild(div);
+    setTimeout(function() { div.remove(); }, 3000);
+  }
+
+  // 响应同步登记列表
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type !== 'syncVisitList') return false;
+    // 只在来访列表页处理
+    if (!window.location.href.includes('list_user_visit.html')) return false;
+    handleSyncVisitList(sendResponse, iframeToast);
+    return true;
+  });
 
   // 监听主题变更，刷新"点击拨打"链接颜色
   window.addEventListener('message', (e) => {

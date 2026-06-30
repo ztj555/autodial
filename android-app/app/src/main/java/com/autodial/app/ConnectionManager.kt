@@ -904,6 +904,8 @@ class ConnectionManager(private val context: Context) {
             cloudWebSocket = cloudClient.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
                 override fun onOpen(ws: WebSocket, response: Response) {
                     v6LogI(TAG, pin, "Cloud WebSocket 已打开: $currentCloudServer")
+                    // 云端重连后，补推离线期间积压的登记记录
+                    RegisterFragment.flushPendingSyncs(context)
                     try {
                         val probeId = "probe_" + System.currentTimeMillis()
                         pcProbeMessageId = probeId

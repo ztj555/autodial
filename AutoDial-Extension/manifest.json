@@ -3,7 +3,7 @@
   "name": "AutoDial",
   "version": "4.1.0",
   "description": "一键拨号 - CRM客户手机号自动拨打（PIN整合版）",
-  "permissions": ["activeTab", "storage", "clipboardWrite", "alarms"],
+  "permissions": ["activeTab", "storage", "clipboardWrite", "alarms", "contextMenus"],
   "host_permissions": [
     "*://guwen.zhudaicms.com/*",
     "*://*.zhudaicms.com/*",

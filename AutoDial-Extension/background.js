@@ -193,6 +193,45 @@ async function registerVisit(name, phone, tabId) {
   const stored = await chrome.storage.local.get(['manager_name']);
   const managerName = stored.manager_name || pin; // 兜底：没有姓名时用 PIN
 
+  // === 1) 直接提交到 CRM（姓名→kid→POST，不依赖云中继） ===
+  let crmOk = false, crmErr = '';
+  try {
+    const kid = await lookupKidFromCrm(managerName);
+    if (kid) {
+      const crmParams = new URLSearchParams({
+        brand: '1833',
+        name: name,
+        mobile: phone,
+        kid: kid,
+        visit_type: '贷款咨询'
+      });
+      const crmRes = await fetch('https://guwen.zhudaicms.com/bserve/saoma_indb.html', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Origin': 'https://guwen.zhudaicms.com',
+          'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
+        },
+        body: crmParams.toString()
+      });
+      const crmData = await crmRes.json();
+      if (crmData.code === 1) {
+        crmOk = true;
+        console.log('[AutoDial BG] CRM direct OK:', name, 'kid:', kid);
+      } else {
+        crmErr = crmData.msg || 'CRM 返回失败';
+        console.warn('[AutoDial BG] CRM direct FAIL:', crmErr);
+      }
+    } else {
+      crmErr = '未找到顾问「' + managerName + '」，请确认姓名与CRM一致';
+    }
+  } catch (e) {
+    crmErr = 'CRM 网络错误: ' + (e.message || '');
+    console.warn('[AutoDial BG] CRM direct error:', e.message);
+  }
+
+  // === 2) 同步到云中继（本地记录 + 手机推送） ===
+  let cloudOk = false;
   try {
     const apiUrl = await getCloudApi();
     const params = new URLSearchParams({
@@ -205,21 +244,56 @@ async function registerVisit(name, phone, tabId) {
     const res = await fetch(apiUrl + '/api/v1/visit?' + params.toString(), {
       headers: { 'X-AutoDial-PIN': pin }
     });
-
     const data = await res.json();
-    if (data.ok) {
-      console.log('[AutoDial BG] 登记成功:', name, phone);
-      return { success: true };
-    } else {
-      return { success: false, error: data.message || '登记失败' };
+    cloudOk = !!data.ok;
+    if (!cloudOk) {
+      console.warn('[AutoDial BG] Cloud relay returned error:', data.code);
     }
   } catch (e) {
-    console.error('[AutoDial BG] 登记失败:', e);
-    if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
-      return { success: false, error: '无法连接云端，请先启动云中继服务' };
-    }
-    return { success: false, error: '网络错误：' + e.message };
+    console.warn('[AutoDial BG] Cloud relay unreachable:', e.message);
   }
+
+  // CRM 写入 + 云端记录，两者都成功才算成功
+  if (crmOk && cloudOk) {
+    return { success: true };
+  }
+  if (crmOk && !cloudOk) {
+    return { success: false, error: '云端服务器同步失败' };
+  }
+  if (!crmOk && cloudOk) {
+    return { success: false, error: 'CRM 提交失败，云端已暂存' };
+  }
+  return { success: false, error: crmErr || '登记失败' };
+}
+
+/**
+ * 调用 CRM search 接口，将顾问姓名转换为 kid（内部ID）。
+ */
+async function lookupKidFromCrm(managerName) {
+  try {
+    const params = new URLSearchParams({ keyword: managerName, brand: '1833' });
+    const res = await fetch('https://guwen.zhudaicms.com/bserve/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://guwen.zhudaicms.com',
+        'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
+      },
+      body: params.toString()
+    });
+    const data = await res.json();
+    if (data.code === 1 && data.data && data.data.length) {
+      // 精确匹配优先
+      for (const item of data.data) {
+        if (item.name === managerName) return String(item.id);
+      }
+      // 兜底取第一个
+      return String(data.data[0].id);
+    }
+  } catch (e) {
+    console.warn('[AutoDial BG] lookupKid failed:', e.message);
+  }
+  return null;
 }
 
 // ==================== 挂断 + 短信（PIN 版） ====================
@@ -334,6 +408,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // 获取 PIN
+  if (msg.type === 'getPin') {
+    getPin().then(p => sendResponse({ pin: p }));
+    return true;
+  }
+
   // 获取状态
   if (msg.type === 'getStatus') {
     getPin().then(pin => {
@@ -371,3 +451,64 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 chrome.tabs.onRemoved.addListener(tabId => { delete tabPhones[tabId]; });
+
+// ==================== 右键菜单：同步登记列表 ====================
+
+chrome.contextMenus.create({
+  id: 'syncVisitList',
+  title: '同步登记列表',
+  contexts: ['page'],
+  documentUrlPatterns: ['*://guwen.zhudaicms.com/*']
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== 'syncVisitList') return;
+  chrome.tabs.sendMessage(tab.id, { type: 'syncVisitList' }, (resp) => {
+    // 通过 content-script 弹出 toast 显示结果
+    // 如果 content-script 已自行处理 toast，此处无需额外操作
+  });
+});
+
+// 管理员检查 + 同步处理
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // 检查是否为管理员
+  if (msg.type === 'checkIsAdmin') {
+    const pin = msg.pin;
+    if (!pin) { sendResponse({ ok: false }); return true; }
+    getCloudApi().then(apiUrl => {
+      return fetch(`${apiUrl}/api/v1/advisor/is_admin?pin=${encodeURIComponent(pin)}`);
+    }).then(r => r.json()).then(d => {
+      sendResponse({ ok: d.ok, is_admin: d.is_admin });
+    }).catch(() => {
+      sendResponse({ ok: false });
+    });
+    return true;
+  }
+
+  // 批量同步登记记录到云端
+  if (msg.type === 'batchSyncVisits') {
+    const pin = msg.pin;
+    const visits = msg.visits; // array of visit objects
+    getCloudApi().then(apiUrl => {
+      // 逐条提交（简单可靠）
+      let count = 0;
+      const promises = visits.map(v => {
+        const params = new URLSearchParams({
+          name: v.name, mobile: v.mobile,
+          kefu_tel: v.advisor_name || pin,
+          visit_type: v.visit_type || '贷款咨询',
+          source: 'crm_sync'
+        });
+        return fetch(`${apiUrl}/api/v1/visit?${params.toString()}`, {
+          headers: { 'X-AutoDial-PIN': pin }
+        }).then(r => r.json()).then(d => { if (d.ok) count++; });
+      });
+      return Promise.all(promises).then(() => count);
+    }).then(count => {
+      sendResponse({ ok: true, synced: count, total: visits.length });
+    }).catch(e => {
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true;
+  }
+});

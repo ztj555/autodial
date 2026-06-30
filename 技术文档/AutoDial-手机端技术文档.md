@@ -1,6 +1,6 @@
 # AutoDial Android 端技术文档
 
-> 最后修改：2026-06-29 00:25 | Kotlin | 包名 `com.autodial.app` | UI美化 + 动画
+> 最后修改：2026-06-30 21:15 | Kotlin | 包名 `com.autodial.app` | 登记kid适配 + 离线补推 + 姓名查询
 
 ---
 
@@ -433,11 +433,13 @@ getLastDialInfo(number, context)
 - `fragments` 列表新增 `RegisterFragment()`
 - `switchTab()` 新增 index=3 分支
 
-### 登记流程
-1. 顾问手机号自动从 `SharedPreferences("autodial").getString("pin")` 填入（只读）
+### 登记流程（v4.1.1 更新）
+1. 「接待顾问姓名」可编辑输入，也可按 PIN 从云中继自动查询（`/api/v1/advisor/name`），持久化到 SharedPreferences
 2. 来访事由固定「贷款咨询」
-3. 提交 → POST CRM API → 本地存时间戳 → GET 云中继 `/api/v1/visit` 同步
+3. 提交 → `lookupKid()` 调 `/bserve/search` 姓名→ID → POST CRM API（`kid` 替代 `kefu_tel`）
 4. 成功后按钮「✅ 登记成功」+ 2秒恢复
+5. 后台 `syncToCloudRelay()` 同步云端，失败则 `savePendingVisit()` 入本地队列
+6. 云端 WebSocket 重连后 `flushPendingSyncs()` 补推离线记录
 
 ### 上门统计
 - 登记时间戳存储：`SharedPreferences("autodial")."registration_timestamps"`（逗号分隔 epoch millis，保留66天）

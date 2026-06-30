@@ -79,6 +79,7 @@ def init_db():
         kefu_tel TEXT NOT NULL,
         visit_type TEXT DEFAULT '贷款咨询',
         source TEXT DEFAULT 'plugin',
+        crm_synced INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )'''
@@ -86,6 +87,16 @@ def init_db():
         pin TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         updated_at TEXT NOT NULL
+    )'''
+    create_admins = '''CREATE TABLE IF NOT EXISTS admins (
+        pin TEXT PRIMARY KEY,
+        added_by TEXT DEFAULT '',
+        created_at TEXT NOT NULL
+    )'''
+    create_groups = '''CREATE TABLE IF NOT EXISTS pin_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL
     )'''
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -95,7 +106,14 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
+        c.execute(create_groups)
+        c.execute(create_admins)
         conn.commit()
+        # 兼容旧版 DB：添加新列
+        try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
+        except: pass
+        try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
+        except: pass
         conn.close()
         log.info(f'Visits DB initialized at {DB_PATH}')
     except Exception as e:
@@ -108,7 +126,13 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
+        c.execute(create_groups)
+        c.execute(create_admins)
         conn.commit()
+        try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
+        except: pass
+        try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
+        except: pass
         conn.close()
 
 init_db()
@@ -714,14 +738,14 @@ def _lookup_kid(manager_name, brand='1833'):
         log.warning(f'Lookup kid for "{manager_name}" failed: {e}')
     return None
 
-def _sync_to_crm(name, mobile, kefu_tel, visit_type):
-    """后台同步到 CRM 系统。新版 CRM 要求 kid 参数（顾问内部ID）而非 kefu_tel。"""
+def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
+    """后台同步到 CRM 系统。新版 CRM 要求 kid 参数（顾问内部ID）而非 kefu_tel。
+    成功后将 crm_synced 置 1。"""
     try:
         import urllib.request as urlreq
-        # 将顾问姓名转换为 kid
         kid = _lookup_kid(kefu_tel)
         if not kid:
-            log.warning(f'CRM sync SKIP name={name}: 未找到顾问 "{kefu_tel}" 的 kid')
+            log.warning(f'CRM sync SKIP id={visit_id}: 未找到顾问 "{kefu_tel}" 的 kid')
             return
         crm_data = urlencode({
             'brand': '1833', 'name': name, 'mobile': mobile,
@@ -740,9 +764,19 @@ def _sync_to_crm(name, mobile, kefu_tel, visit_type):
         resp = urlreq.urlopen(req, timeout=10)
         body = json.loads(resp.read())
         if body.get('code') == 1:
-            log.info(f'CRM sync OK name={name} kid={kid}')
+            log.info(f'CRM sync OK visit_id={visit_id} kid={kid}')
+            # 标记为已同步
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute('UPDATE visits SET crm_synced=1, updated_at=? WHERE id=?',
+                          (datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), visit_id))
+                conn.commit()
+                conn.close()
+            except:
+                pass
         else:
-            log.warning(f'CRM sync FAIL name={name} kid={kid} msg={body.get("msg")}')
+            log.warning(f'CRM sync FAIL visit_id={visit_id} kid={kid} msg={body.get("msg")}')
     except Exception as e:
         log.warning(f'CRM sync error: {e}')
 
@@ -968,6 +1002,146 @@ async def health_check_handler(path, request_headers):
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
+    # ===== 管理员标记 =====
+
+    # 检查是否为管理员: GET /api/v1/advisor/is_admin?pin=xxx
+    if path == '/api/v1/advisor/is_admin':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('SELECT 1 FROM admins WHERE pin = ?', (pin,))
+            is_admin = c.fetchone() is not None
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True, 'is_admin': is_admin}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 管理员开关: GET /api/v1/advisor/set_admin?pin=xxx (设为管理)
+    #          GET /api/v1/advisor/del_admin?pin=xxx (取消管理)
+    # 仪表盘手动操作，无权限校验
+    if path == '/api/v1/advisor/set_admin':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            c.execute('INSERT OR IGNORE INTO admins (pin, added_by, created_at) VALUES (?, ?, ?)',
+                      (pin, 'dashboard', now_str))
+            conn.commit()
+            conn.close()
+            log.info(f'ADMIN_SET pin={pin}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    if path == '/api/v1/advisor/del_admin':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('DELETE FROM admins WHERE pin = ?', (pin,))
+            conn.commit()
+            conn.close()
+            log.info(f'ADMIN_DEL pin={pin}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # ===== PIN 列表 + 分组管理 =====
+
+    # 所有已注册 PIN（含姓名、管理员状态、分组）
+    if path == '/api/v1/pins':
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('''SELECT a.pin, a.name, a.group_id, a.updated_at,
+                         (SELECT 1 FROM admins WHERE pin = a.pin) AS is_admin
+                         FROM advisor_names a ORDER BY a.updated_at DESC''')
+            rows = [dict(r) for r in c.fetchall()]
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True, 'pins': rows}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 设置 PIN 分组: GET /api/v1/pin/set_group?pin=xxx&group_id=N
+    if path == '/api/v1/pin/set_group':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        gid = qs.get('group_id', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING', 'pin 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('UPDATE advisor_names SET group_id=? WHERE pin=?', (int(gid) if gid else None, pin))
+            conn.commit()
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 分组列表: GET /api/v1/groups
+    if path == '/api/v1/groups':
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('SELECT * FROM pin_groups ORDER BY id')
+            rows = [dict(r) for r in c.fetchall()]
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True, 'groups': rows}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 添加分组: GET /api/v1/group/add?name=xxx
+    if path == '/api/v1/group/add':
+        qs = parse_qs(parsed.query)
+        name = qs.get('name', [''])[0].strip()
+        if not name:
+            return (200, JSON_HDR, _err_json('MISSING', '分组名不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            c.execute('INSERT INTO pin_groups (name, created_at) VALUES (?, ?)', (name, now_str))
+            conn.commit()
+            rid = c.lastrowid
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True, 'id': rid, 'name': name}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 删除分组: GET /api/v1/group/del?id=N
+    if path == '/api/v1/group/del':
+        qs = parse_qs(parsed.query)
+        gid = qs.get('id', [''])[0]
+        if not gid:
+            return (200, JSON_HDR, _err_json('MISSING', 'id 不能为空'))
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('UPDATE advisor_names SET group_id=NULL WHERE group_id=?', (int(gid),))
+            c.execute('DELETE FROM pin_groups WHERE id=?', (int(gid),))
+            conn.commit()
+            conn.close()
+            return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+
+    # 根据分组查询 visits: GET /api/v1/visits?group=N
+    # 修改现有 visits 查询，支持 group_id 参数
+
     # ===== 一键登记 API（GET + query params，与 dial 风格一致） =====
 
     # 创建登记: GET /api/v1/visit?name=...&mobile=...&...
@@ -1006,23 +1180,35 @@ async def health_check_handler(path, request_headers):
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
                         'kefu_tel': kefu_tel, 'visit_type': visit_type, 'source': source,
                         'created_at': now_str, 'updated_at': now_str}
-        asyncio.get_running_loop().run_in_executor(None, _sync_to_crm, name, mobile, kefu_tel, visit_type)
+        asyncio.get_running_loop().run_in_executor(None, _sync_to_crm, row_id, name, mobile, kefu_tel, visit_type)
         _push_visit_to_phone(pin, visit_record)
 
         log.info(f'VISIT_CREATE pin={pin} name={name} id={row_id}')
         return (200, JSON_HDR, json.dumps({'ok': True, 'code': 'ACCEPTED', 'id': row_id}).encode('utf-8'))
 
-    # 查询列表: GET /api/v1/visits?pin=xxx
+    # 查询列表: GET /api/v1/visits?pin=xxx[&group=N]
     if path == '/api/v1/visits':
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0]
-        if not pin:
-            return (200, JSON_HDR, _err_json('MISSING_PIN', '缺少 PIN 参数'))
+        group_id = qs.get('group', [''])[0]
         try:
             conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
-            c.execute('SELECT * FROM visits WHERE pin=? ORDER BY created_at DESC', (pin,))
+            if group_id:
+                # 按分组查询：先找出该分组的所有 PIN，再查 visits
+                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (int(group_id),))
+                group_pins = [r['pin'] for r in c.fetchall()]
+                if group_pins:
+                    placeholders = ','.join(['?'] * len(group_pins))
+                    c.execute(f'SELECT * FROM visits WHERE pin IN ({placeholders}) ORDER BY created_at DESC',
+                              group_pins)
+                else:
+                    c.execute('SELECT * FROM visits WHERE 1=0')
+            elif pin:
+                c.execute('SELECT * FROM visits WHERE pin=? ORDER BY created_at DESC', (pin,))
+            else:
+                c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
             rows = [dict(r) for r in c.fetchall()]
             conn.close()
             return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))

@@ -1,6 +1,6 @@
 # AutoDial 技术文档（当前版本）
 
-> 最后修改：2026-06-29 00:25 | v4.1.0 | UI美化 + 性能优化
+> 最后修改：2026-06-30 21:15 | v4.1.1 | 登记kid适配 + 云端管理面板 + 姓名检测 + PIN分组
 
 ---
 
@@ -11,10 +11,10 @@
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | 11 位 PIN |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | 11 位 PIN |
 | **云中继（主）** | **v2** | Python + websockets + SQLite | PIN（4位或11位手机号） |
-| **Chrome 扩展** | **v4.1.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
-| **Android 端** | **v4.53** | Kotlin + HttpURLConnection | PIN + WS 双通道 |
+| **Chrome 扩展** | **v4.1.1** | MV3 + Service Worker | X-AutoDial-PIN Header |
+| **Android 端** | **v4.54** | Kotlin + HttpURLConnection | PIN + WS 双通道 |
 
-> **v4.1.0 新增**：来访登记（Android 第4个Tab）、一键登记（Chrome 扩展右键）、云中继 SQLite 访问记录存储、上门统计。详见 CHANGELOG.md。
+> **v4.1.1 新增**：登记 CRM kid 适配（姓名→ID 两步提交）、云端管理面板重构（PIN/分组/管理员/未同步筛选/CSV导出/趋势图）、CRM 姓名自动检测（CSS选择器）、右键同步登记列表、手机端离线补推、云中继 advisor_names / admins / pin_groups 表。
 
 ---
 
@@ -51,7 +51,7 @@
                             └───────────────────┘
 ```
 
-**v4.1.0 新增**：Chrome 扩展一键登记（CRM 详情页右键）、Android 来访登记模块、云中继 SQLite 存储+CRM同步、全链路上门统计。
+**v4.1.1 更新**：登记路径改为直连 CRM 两步提交（/bserve/search→kid→POST），Chrome 扩展 CRM 姓名自动检测（CSS 选择器 `.user-name`），管理面板支持 PIN 列表/分组/管理员/CSV导出/趋势图，手机端离线补推队列。
 
 **双通道设计**：PC 端和手机端均支持 LAN 直连（WebSocket 35432）和 Cloud 中继（WebSocket 35430）双通道，由 PhoneConnectionManager（Electron）/ ConnectionManager（Android）自动管理优先级和降级切换。
 
@@ -75,12 +75,19 @@ cloud_relay_v2.py
 │   ├── /api/v1/dial?number=xxx
 │   ├── /api/v1/hangup
 │   ├── /api/v1/status
-│   ├── /api/v1/visit?name=...&mobile=...（v4.1 新增）
-│   └── /api/v1/visits 查询/更新/删除（v4.1 新增）
-├── SQLite 数据库（v4.1 新增）
-│   └── visits.db：visits 表 + pin/created_at 索引
-├── CRM 后台同步（v4.1 新增）
-│   └── POST https://guwen.zhudaicms.com/bserve/saoma_indb.html
+│   ├── /api/v1/visit?name=...&mobile=...（登记）
+│   ├── /api/v1/visits 查询/更新/删除（支持 group 参数）
+│   ├── /api/v1/advisor/*（顾问管理）
+│   ├── /api/v1/pins + /api/v1/groups（PIN 分组）
+│   └── /api/v1/pin/set_group（设置分组）
+├── SQLite 数据库（4 张表）
+│   ├── visits：登记记录（含 crm_synced 同步状态）
+│   ├── advisor_names：PIN→姓名映射（含 group_id）
+│   ├── admins：管理员 PIN 列表
+│   └── pin_groups：分组定义
+├── CRM 后台同步（v4.1.1）
+│   ├── _lookup_kid()：姓名→CRM内部ID 转换
+│   └── _sync_to_crm()：两步提交，成功后标记 crm_synced=1
 └── 系统托盘（pystray，启停/日志/Web面板）
 ```
 
@@ -97,6 +104,7 @@ class PinGroup:
 - 同一 PIN 的设备自动归入同一组
 - 双向转发：`forward_to_phones()` / `forward_to_pcs()`
 - 所有设备断开时自动清理组
+- 手机端重连后自动 flushPendingSyncs() 补推离线登记
 
 ### 3.3 REST 端点设计
 

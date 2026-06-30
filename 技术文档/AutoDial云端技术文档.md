@@ -1,6 +1,6 @@
 # AutoDial 云端技术文档
 
-> 最后修改：2026-06-29 00:25 | Python | SQLite 访问登记 + WS 实时推送
+> 最后修改：2026-06-30 21:15 | Python | SQLite 4表 | 管理面板2.0 | CRM kid同步
 
 ---
 

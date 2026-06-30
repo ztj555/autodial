@@ -49,6 +49,65 @@ class RegisterFragment : Fragment() {
     companion object {
         private const val API_URL = "https://guwen.zhudaicms.com/bserve/saoma_indb.html"
         private const val VISIT_TYPE = "贷款咨询"
+        private const val PENDING_SYNCS_KEY = "pending_cloud_syncs"
+
+        /**
+         * 云端同步失败时暂存记录，等重连后补推。
+         */
+        fun savePendingVisit(name: String, mobile: String, managerName: String, pin: String, context: Context) {
+            val prefs = context.applicationContext.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val json = prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]"
+            val arr = org.json.JSONArray(json)
+            arr.put(org.json.JSONObject().apply {
+                put("name", name); put("mobile", mobile)
+                put("kefu_tel", managerName); put("pin", pin)
+                put("visit_type", VISIT_TYPE); put("source", "phone_retry")
+            })
+            prefs.edit().putString(PENDING_SYNCS_KEY, arr.toString()).apply()
+        }
+
+        /**
+         * 云端 WebSocket 重连后调用，补推积压的登记记录。
+         */
+        fun flushPendingSyncs(context: Context) {
+            val prefs = context.applicationContext.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val serverUrl = prefs.getString("cloud_server", "") ?: ""
+            if (serverUrl.isEmpty()) return
+
+            val json = prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]"
+            if (json == "[]") return
+            val arr = org.json.JSONArray(json)
+            val remaining = org.json.JSONArray()
+
+            val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+            val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+            executor.execute {
+                for (i in 0 until arr.length()) {
+                    val item = arr.getJSONObject(i)
+                    try {
+                        val params = "name=${URLEncoder.encode(item.optString("name"), "UTF-8")}" +
+                                "&mobile=${URLEncoder.encode(item.optString("mobile"), "UTF-8")}" +
+                                "&kefu_tel=${URLEncoder.encode(item.optString("kefu_tel"), "UTF-8")}" +
+                                "&visit_type=${URLEncoder.encode(item.optString("visit_type"), "UTF-8")}" +
+                                "&source=${URLEncoder.encode(item.optString("source"), "UTF-8")}"
+                        val url = java.net.URL("$baseUrl/api/v1/visit?$params")
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "GET"
+                        conn.connectTimeout = 8000
+                        conn.readTimeout = 8000
+                        conn.setRequestProperty("X-AutoDial-PIN", item.optString("pin"))
+                        if (conn.responseCode in 200..299) continue // 成功，不加入 remaining
+                        conn.disconnect()
+                    } catch (_: Exception) {}
+                    remaining.put(item) // 失败，保留
+                }
+                if (remaining.length() > 0) {
+                    prefs.edit().putString(PENDING_SYNCS_KEY, remaining.toString()).apply()
+                } else {
+                    prefs.edit().remove(PENDING_SYNCS_KEY).apply()
+                }
+            }
+        }
     }
 
     override fun onCreateView(
@@ -428,7 +487,8 @@ class RegisterFragment : Fragment() {
             conn.disconnect()
             val json = org.json.JSONObject(body)
             if (json.optBoolean("ok", false)) {
-                return json.optString("name", null)
+                val name = json.optString("name", "")
+                return name.ifEmpty { null }
             }
         } catch (_: Exception) {}
         return null
@@ -436,6 +496,7 @@ class RegisterFragment : Fragment() {
 
     /**
      * 将本地登记同步到云中继的 /api/v1/visit 接口，确保云端也存一份。
+     * 失败时存入待同步队列，等云端重连后自动补推。
      */
     private fun syncToCloudRelay(name: String, mobile: String) {
         executor.execute {
@@ -459,11 +520,18 @@ class RegisterFragment : Fragment() {
                 conn.connectTimeout = 10000
                 conn.readTimeout = 10000
                 conn.setRequestProperty("X-AutoDial-PIN", pin)
-                conn.responseCode  // 触发请求
-                conn.disconnect()
-            } catch (_: Exception) {
-                // 静默失败，本地已存储
-            }
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    val body = conn.inputStream.bufferedReader().readText()
+                    conn.disconnect()
+                    val json = org.json.JSONObject(body)
+                    if (json.optBoolean("ok", false)) return@execute
+                } else {
+                    conn.disconnect()
+                }
+            } catch (_: Exception) {}
+            // 同步失败 → 存入队列，等云端重连后补推
+            savePendingVisit(name, mobile, managerName, pin, requireContext())
         }
     }
 
