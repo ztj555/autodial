@@ -203,11 +203,65 @@ class RegisterFragment : Fragment() {
     }
 
     /**
+     * 通过 /bserve/search 接口将顾问姓名转换为 CRM 内部 kid。
+     * 返回 kid 字符串，失败返回 null。
+     */
+    private fun lookupKid(managerName: String, brand: String): String? {
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL("https://guwen.zhudaicms.com/bserve/search")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.doInput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.setRequestProperty("Origin", "https://guwen.zhudaicms.com")
+            connection.setRequestProperty("Referer", "https://guwen.zhudaicms.com/bserve/saoma.html?brand=$brand")
+
+            val searchParams = "keyword=${URLEncoder.encode(managerName, "UTF-8")}&brand=$brand"
+            val writer = OutputStreamWriter(connection.outputStream, "UTF-8")
+            writer.write(searchParams)
+            writer.flush()
+            writer.close()
+
+            if (connection.responseCode != 200) return null
+            val body = connection.inputStream.bufferedReader().readText()
+            val json = org.json.JSONObject(body)
+            if (json.optInt("code", -1) == 1) {
+                val data = json.optJSONArray("data") ?: return null
+                // 优先精确匹配
+                for (i in 0 until data.length()) {
+                    val item = data.getJSONObject(i)
+                    if (item.optString("name") == managerName) {
+                        return item.optString("id")
+                    }
+                }
+                // 兜底取第一个
+                if (data.length() > 0) {
+                    return data.getJSONObject(0).optString("id")
+                }
+            }
+        } catch (_: Exception) {} finally {
+            connection?.disconnect()
+        }
+        return null
+    }
+
+    /**
      * 执行 HTTP POST 表单提交到登记 API。
+     * 新版 CRM 要求 kid (顾问ID) 而非 kefu_tel (姓名)。
      */
     private fun submitRegistration(name: String, mobile: String): SubmitResult {
         var connection: HttpURLConnection? = null
         try {
+            // 1) 先将顾问姓名转换为 kid
+            val kid = lookupKid(managerName, brand)
+            if (kid == null) {
+                return SubmitResult(success = false, message = "未找到顾问「$managerName」，请确认姓名正确")
+            }
+
             val url = URL(API_URL)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
@@ -217,13 +271,15 @@ class RegisterFragment : Fragment() {
             connection.readTimeout = 15000
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Origin", "https://guwen.zhudaicms.com")
+            connection.setRequestProperty("Referer", "https://guwen.zhudaicms.com/bserve/saoma.html?brand=$brand")
 
-            // 构建表单参数
+            // 构建表单参数（使用 kid 替代 kefu_tel）
             val params = linkedMapOf(
                 "brand" to brand,
                 "name" to name,
                 "mobile" to mobile,
-                "kefu_tel" to managerName,
+                "kid" to kid,
                 "visit_type" to VISIT_TYPE
             )
             val postData = params.entries.joinToString("&") { (key, value) ->

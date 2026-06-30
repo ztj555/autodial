@@ -686,23 +686,65 @@ def _err_json(code, message):
 
 # ==================== 访问登记辅助函数 ====================
 
-def _sync_to_crm(name, mobile, kefu_tel, visit_type):
-    """后台同步到 CRM 系统（在 executor 线程中运行）"""
+def _lookup_kid(manager_name, brand='1833'):
+    """通过 /bserve/search 接口将顾问姓名转换为 CRM 内部 ID (kid)。
+    返回 kid 字符串，失败返回 None。"""
     try:
-        import urllib.request
+        import urllib.request as urlreq
+        search_data = urlencode({'keyword': manager_name, 'brand': brand}).encode('utf-8')
+        req = urlreq.Request(
+            'https://guwen.zhudaicms.com/bserve/search',
+            data=search_data,
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'AutoDial/4.1',
+                'Origin': 'https://guwen.zhudaicms.com',
+                'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=%s' % brand
+            }
+        )
+        resp = urlreq.urlopen(req, timeout=8)
+        body = json.loads(resp.read())
+        if body.get('code') == 1 and body.get('data'):
+            # 优先精确匹配，其次取第一个结果
+            for item in body['data']:
+                if item.get('name') == manager_name:
+                    return str(item['id'])
+            return str(body['data'][0]['id'])
+    except Exception as e:
+        log.warning(f'Lookup kid for "{manager_name}" failed: {e}')
+    return None
+
+def _sync_to_crm(name, mobile, kefu_tel, visit_type):
+    """后台同步到 CRM 系统。新版 CRM 要求 kid 参数（顾问内部ID）而非 kefu_tel。"""
+    try:
+        import urllib.request as urlreq
+        # 将顾问姓名转换为 kid
+        kid = _lookup_kid(kefu_tel)
+        if not kid:
+            log.warning(f'CRM sync SKIP name={name}: 未找到顾问 "{kefu_tel}" 的 kid')
+            return
         crm_data = urlencode({
             'brand': '1833', 'name': name, 'mobile': mobile,
-            'kefu_tel': kefu_tel, 'visit_type': visit_type
+            'kid': kid, 'visit_type': visit_type
         }).encode('utf-8')
-        req = urllib.request.Request(
+        req = urlreq.Request(
             'https://guwen.zhudaicms.com/bserve/saoma_indb.html',
             data=crm_data,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'AutoDial/4.1',
+                'Origin': 'https://guwen.zhudaicms.com',
+                'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
+            }
         )
-        urllib.request.urlopen(req, timeout=10)
-        log.info(f'CRM sync OK name={name}')
+        resp = urlreq.urlopen(req, timeout=10)
+        body = json.loads(resp.read())
+        if body.get('code') == 1:
+            log.info(f'CRM sync OK name={name} kid={kid}')
+        else:
+            log.warning(f'CRM sync FAIL name={name} kid={kid} msg={body.get("msg")}')
     except Exception as e:
-        log.warning(f'CRM sync failed: {e}')
+        log.warning(f'CRM sync error: {e}')
 
 def _push_visit_to_phone(pin, visit_record):
     """推送 visit_record 给对应 pin 的手机，离线则堆积"""
