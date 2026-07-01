@@ -511,4 +511,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+
+  // popup 点击"同步登记列表"按钮 → 找到 CRM tab 并发送消息
+  if (msg.type === 'triggerSync') {
+    const VISIT_LIST_URL = 'https://guwen.zhudaicms.com/manage/kefu_reportformlist/list_user_visit.html';
+    chrome.tabs.query({ url: '*://guwen.zhudaicms.com/*' }, (tabs) => {
+      // 1) 没有 CRM 页面 → 打开新标签页到登记列表
+      if (tabs.length === 0) {
+        chrome.tabs.create({ url: VISIT_LIST_URL }, () => {
+          sendResponse({ ok: false, result: '已打开登记列表页，加载完成后请重新点击同步按钮' });
+        });
+        return;
+      }
+      // 2) 已有 CRM 页面，找是否在来访列表页
+      let target = tabs.find(t => t.url && t.url.includes('list_user_visit'));
+      if (target) {
+        // 已在列表页 → 直接同步
+        chrome.tabs.sendMessage(target.id, { type: 'syncVisitList' }, (resp) => {
+          if (resp && resp.ok) {
+            sendResponse({ ok: true, result: '✅ 已同步 ' + resp.synced + '/' + resp.total + ' 条' });
+          } else if (resp && resp.error) {
+            sendResponse({ ok: false, result: resp.error });
+          } else {
+            sendResponse({ ok: false, result: '同步失败，请刷新页面后重试' });
+          }
+        });
+      } else {
+        // 3) 在 CRM 但不在列表页 → 自动跳转
+        chrome.tabs.update(tabs[0].id, { url: VISIT_LIST_URL, active: true }, () => {
+          sendResponse({ ok: false, result: '正在跳转到登记列表页，加载完成后请重新点击同步' });
+        });
+      }
+    });
+    return true;
+  }
 });

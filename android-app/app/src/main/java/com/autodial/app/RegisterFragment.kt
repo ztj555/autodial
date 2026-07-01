@@ -52,6 +52,40 @@ class RegisterFragment : Fragment() {
         private const val PENDING_SYNCS_KEY = "pending_cloud_syncs"
 
         /**
+         * 将云中继地址转为 HTTP 基地址（兼容 ws:// / wss:// / http:// / 纯IP:PORT）
+         */
+        private fun toHttpBase(serverUrl: String): String {
+            var url = serverUrl.trim()
+            if (url.startsWith("wss://")) url = url.replace("wss://", "https://")
+            else if (url.startsWith("ws://")) url = url.replace("ws://", "http://")
+            else if (!url.startsWith("http://") && !url.startsWith("https://")) url = "http://$url"
+            return url.removeSuffix("/")
+        }
+
+        /**
+         * 将本地登记写入 visit_records JSON（供统计页详情弹窗使用）
+         */
+        fun saveVisitRecord(name: String, mobile: String, prefs: android.content.SharedPreferences) {
+            try {
+                val existingJson = prefs.getString("visit_records", "[]") ?: "[]"
+                val arr = org.json.JSONArray(existingJson)
+                val obj = org.json.JSONObject().apply {
+                    put("name", name)
+                    put("mobile", mobile)
+                    put("created_at", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date()))
+                    put("timestamp", System.currentTimeMillis())
+                }
+                arr.put(obj)
+                // 最多保留 200 条
+                while (arr.length() > 200) {
+                    arr.remove(0)
+                }
+                prefs.edit().putString("visit_records", arr.toString()).apply()
+            } catch (_: Exception) {}
+        }
+
+        /**
          * 云端同步失败时暂存记录，等重连后补推。
          */
         fun savePendingVisit(name: String, mobile: String, managerName: String, pin: String, context: Context) {
@@ -79,7 +113,7 @@ class RegisterFragment : Fragment() {
             val arr = org.json.JSONArray(json)
             val remaining = org.json.JSONArray()
 
-            val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+            val baseUrl = toHttpBase(serverUrl)
             val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
             executor.execute {
                 for (i in 0 until arr.length()) {
@@ -416,6 +450,10 @@ class RegisterFragment : Fragment() {
             // 同步到云中继（在清空输入前读取）
             val visitorName = etCustomerName.text.toString().trim()
             val visitorMobile = etCustomerMobile.text.toString().trim()
+
+            // 也写入 visit_records JSON，供统计页详情弹窗使用
+            saveVisitRecord(visitorName, visitorMobile, prefs)
+
             syncToCloudRelay(visitorName, visitorMobile)
 
             // 清空输入
@@ -472,7 +510,7 @@ class RegisterFragment : Fragment() {
             val serverUrl = prefs.getString("cloud_server", "") ?: ""
             if (serverUrl.isEmpty()) return null
 
-            val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+            val baseUrl = toHttpBase(serverUrl)
             val url = URL("$baseUrl/api/v1/advisor/name?pin=${URLEncoder.encode(pin, "UTF-8")}")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -506,7 +544,7 @@ class RegisterFragment : Fragment() {
                 val serverUrl = prefs.getString("cloud_server", "") ?: ""
                 if (serverUrl.isEmpty()) return@execute
 
-                val baseUrl = if (serverUrl.startsWith("http")) serverUrl else "http://$serverUrl"
+                val baseUrl = toHttpBase(serverUrl)
                 val params = "name=${URLEncoder.encode(name, "UTF-8")}" +
                         "&mobile=${URLEncoder.encode(mobile, "UTF-8")}" +
                         "&kefu_tel=${URLEncoder.encode(managerName, "UTF-8")}" +

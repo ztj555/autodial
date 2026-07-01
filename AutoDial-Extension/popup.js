@@ -218,4 +218,17 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
+
+  // 同步登记列表按钮
+  document.getElementById('syncBtn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'triggerSync' }, (resp) => {
+      const st = document.getElementById('cloudStatus');
+      if (resp && resp.result) {
+        st.textContent = resp.result; st.style.color = resp.ok ? '#2ECC71' : '#E74C3C';
+        setTimeout(() => { st.textContent = '--'; st.style.color = '#A09070'; }, 3000);
+      } else {
+        st.textContent = '✗ 请先打开 CRM 页面'; st.style.color = '#E74C3C';
+      }
+    });
+  });
 });

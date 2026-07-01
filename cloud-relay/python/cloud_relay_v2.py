@@ -701,7 +701,7 @@ def get_logs(n=100):
         return []
 
 # ==================== HTTP 请求处理 ====================
-JSON_HDR = [('Content-Type', 'application/json')]
+JSON_HDR = [('Content-Type', 'application/json'), ('Access-Control-Allow-Origin', '*')]
 HEALTH_CORS = [('Access-Control-Allow-Origin', '*')]
 
 def _err_json(code, message):
@@ -838,7 +838,7 @@ async def health_check_handler(path, request_headers):
             'total_connections': len(ws_connections),
             'total_groups': len(pin_groups)
         }, ensure_ascii=False).encode('utf-8')
-        return (200, JSON_HDR + HEALTH_CORS, body)
+        return (200, JSON_HDR, body)
     
     # API: 状态
     if path == '/api/status':
@@ -1169,6 +1169,13 @@ async def health_check_handler(path, request_headers):
                 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (pin, name, mobile, kefu_tel, visit_type, source, now_str, now_str)
             )
+            # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
+            if kefu_tel and kefu_tel.strip():
+                c.execute(
+                    'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
+                    'ON CONFLICT(pin) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at',
+                    (pin, kefu_tel.strip(), now_str)
+                )
             conn.commit()
             row_id = c.lastrowid
             conn.close()
@@ -1176,11 +1183,10 @@ async def health_check_handler(path, request_headers):
             log.error(f'INSERT visit error: {e}')
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
 
-        # 后台同步 CRM + WS 推送
+        # 客户端已直接提交 CRM，云端只做记录 + WS 推送，不再重复提交 CRM
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
                         'kefu_tel': kefu_tel, 'visit_type': visit_type, 'source': source,
                         'created_at': now_str, 'updated_at': now_str}
-        asyncio.get_running_loop().run_in_executor(None, _sync_to_crm, row_id, name, mobile, kefu_tel, visit_type)
         _push_visit_to_phone(pin, visit_record)
 
         log.info(f'VISIT_CREATE pin={pin} name={name} id={row_id}')

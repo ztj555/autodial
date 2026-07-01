@@ -288,17 +288,41 @@
                 android:layout_marginBottom="16dp"
                 android:padding="16dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="上门统计"
-                    android:drawableStart="@drawable/ic_ph_chart_bar"
-                    android:drawablePadding="6dp"
-                    android:tag="goldLight"
-                    android:textColor="#F0C040"
-                    android:textSize="14sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="上门统计"
+                        android:drawableStart="@drawable/ic_ph_chart_bar"
+                        android:drawablePadding="6dp"
+                        android:tag="goldLight"
+                        android:textColor="#F0C040"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/statsVisitSyncBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔄 同步"
+                        android:textColor="#111318"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingBottom="6dp"
+                        android:background="@drawable/bg_gold_btn"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -330,7 +354,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -357,7 +383,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -384,7 +412,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -425,7 +455,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -452,7 +484,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -479,7 +513,9 @@
                             android:tag="text"
                             android:textSize="24sp"
                             android:textStyle="bold"
-                            android:fontFamily="monospace" />
+                            android:fontFamily="monospace"
+                            android:clickable="true"
+                            android:focusable="true" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>

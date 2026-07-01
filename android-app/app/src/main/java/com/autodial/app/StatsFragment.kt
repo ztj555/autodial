@@ -1,5 +1,6 @@
 package com.autodial.app
 
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -15,10 +16,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.Executors
+import org.json.JSONArray
+import org.json.JSONObject
 
 class StatsFragment : Fragment() {
 
@@ -60,6 +68,7 @@ class StatsFragment : Fragment() {
     private val refreshRunnable = Runnable { refreshIfNeeded() }
 
     private val dayOfWeekFormat = SimpleDateFormat("E", Locale.getDefault())
+    private val executor = Executors.newSingleThreadExecutor()
 
     // 上门统计 TextView
     private lateinit var visitToday: TextView
@@ -68,6 +77,10 @@ class StatsFragment : Fragment() {
     private lateinit var visitMonth: TextView
     private lateinit var visitLastMonth: TextView
     private lateinit var visit30Days: TextView
+    private lateinit var visitSyncBtn: TextView
+
+    // 缓存的上门记录：[{name, mobile, created_at, timestamp}, ...]
+    private var visitRecords: List<VisitRecord> = emptyList()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_stats, container, false)
@@ -89,6 +102,13 @@ class StatsFragment : Fragment() {
         visitMonth = view.findViewById(R.id.statsVisitMonth)
         visitLastMonth = view.findViewById(R.id.statsVisitLastMonth)
         visit30Days = view.findViewById(R.id.statsVisit30Days)
+        visitSyncBtn = view.findViewById(R.id.statsVisitSyncBtn)
+
+        // 同步按钮
+        visitSyncBtn.setOnClickListener { syncVisitsFromCloud() }
+
+        // 点击统计数字弹出详情
+        setupVisitClickListeners()
 
         // 注册新拨号广播
         try {
@@ -215,14 +235,28 @@ class StatsFragment : Fragment() {
     private fun loadVisitStats() {
         if (!isAdded) return
         val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
-        val timestampsStr = prefs.getString("registration_timestamps", "") ?: ""
-        if (timestampsStr.isEmpty()) return
+
+        // 加载存储的完整记录
+        val recordsJson = prefs.getString("visit_records", "[]") ?: "[]"
+        try {
+            val arr = JSONArray(recordsJson)
+            val records = mutableListOf<VisitRecord>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                records.add(VisitRecord(
+                    name = obj.optString("name", ""),
+                    mobile = obj.optString("mobile", ""),
+                    created_at = obj.optString("created_at", ""),
+                    timestamp = obj.optLong("timestamp", 0)
+                ))
+            }
+            visitRecords = records
+        } catch (_: Exception) {
+            visitRecords = emptyList()
+        }
 
         val now = System.currentTimeMillis()
         val cal = Calendar.getInstance()
-
-        // 解析所有时间戳
-        val timestamps = timestampsStr.split(",").mapNotNull { it.toLongOrNull() }
 
         // 今日 00:00
         cal.timeInMillis = now
@@ -254,13 +288,214 @@ class StatsFragment : Fragment() {
         // 近30天
         val thirtyDaysAgo = now - 30 * 24 * 3600_000L
 
-        visitToday.text = timestamps.count { it >= todayStart }.toString()
-        visitWeek.text = timestamps.count { it >= weekStart }.toString()
-        visit7Days.text = timestamps.count { it >= sevenDaysAgo }.toString()
-        visitMonth.text = timestamps.count { it >= monthStart }.toString()
-        visitLastMonth.text = timestamps.count { it in lastMonthStart until monthStart }.toString()
-        visit30Days.text = timestamps.count { it >= thirtyDaysAgo }.toString()
+        // 兼容旧数据：从 registration_timestamps 合并
+        val oldTimestamps = (prefs.getString("registration_timestamps", "") ?: "")
+            .split(",").mapNotNull { it.toLongOrNull() }
+
+        val allTimestamps = (visitRecords.map { it.timestamp } + oldTimestamps).distinct()
+
+        visitToday.text = allTimestamps.count { it >= todayStart }.toString()
+        visitWeek.text = allTimestamps.count { it >= weekStart }.toString()
+        visit7Days.text = allTimestamps.count { it >= sevenDaysAgo }.toString()
+        visitMonth.text = allTimestamps.count { it >= monthStart }.toString()
+        visitLastMonth.text = allTimestamps.count { it in lastMonthStart until monthStart }.toString()
+        visit30Days.text = allTimestamps.count { it >= thirtyDaysAgo }.toString()
     }
+
+    // ===== 点击统计数字弹出详情 =====
+
+    private fun setupVisitClickListeners() {
+        visitToday.setOnClickListener { showVisitDetail("今日上门") { it.timestamp >= todayStart() } }
+        visitWeek.setOnClickListener { showVisitDetail("本周上门") { it.timestamp >= weekStart() } }
+        visit7Days.setOnClickListener { showVisitDetail("近7天上门") { it.timestamp >= System.currentTimeMillis() - 7 * 24 * 3600_000L } }
+        visitMonth.setOnClickListener { showVisitDetail("当月上门") { it.timestamp >= monthStart() } }
+        visitLastMonth.setOnClickListener {
+            val ms = monthStart() - 1
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = ms
+                set(Calendar.DAY_OF_MONTH, 1)
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }
+            val lastMonthStart = cal.timeInMillis
+            showVisitDetail("上月上门") { it.timestamp in lastMonthStart until (monthStart()) }
+        }
+        visit30Days.setOnClickListener { showVisitDetail("近30天上门") { it.timestamp >= System.currentTimeMillis() - 30 * 24 * 3600_000L } }
+    }
+
+    private fun todayStart(): Long {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
+    private fun weekStart(): Long {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
+    private fun monthStart(): Long {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
+    private fun showVisitDetail(title: String, filter: (VisitRecord) -> Boolean) {
+        if (!isAdded) return
+        val filtered = visitRecords.filter(filter).sortedByDescending { it.timestamp }
+        if (filtered.isEmpty()) {
+            Toast.makeText(requireContext(), "暂无上门记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val sb = StringBuilder()
+        val timeFmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+        for ((i, r) in filtered.withIndex()) {
+            val timeStr = if (r.timestamp > 0) timeFmt.format(Date(r.timestamp)) else r.created_at
+            sb.append("${i + 1}. ${r.name}  ${r.mobile}\n")
+            sb.append("   ⏱ $timeStr\n")
+            if (i < filtered.size - 1) sb.append("\n")
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("$title（${filtered.size}条）")
+            .setMessage(sb.toString().trimEnd())
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    // ===== 云端同步上门数据 =====
+
+    private fun syncVisitsFromCloud() {
+        if (!isAdded) return
+        visitSyncBtn.text = "⏳ 同步中..."
+        visitSyncBtn.isEnabled = false
+
+        executor.execute {
+            val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val serverUrl = prefs.getString("cloud_server", "") ?: ""
+            val pin = prefs.getString("pin", "") ?: ""
+
+            if (serverUrl.isEmpty() || pin.isEmpty()) {
+                refreshHandler.post {
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), "请先连接云端并设置 PIN", Toast.LENGTH_SHORT).show()
+                        resetSyncBtn()
+                    }
+                }
+                return@execute
+            }
+
+            // URL 转换 (ws:// → http://)
+            var baseUrl = serverUrl.trim()
+            if (baseUrl.startsWith("wss://")) baseUrl = baseUrl.replace("wss://", "https://")
+            else if (baseUrl.startsWith("ws://")) baseUrl = baseUrl.replace("ws://", "http://")
+            else if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))
+                baseUrl = "http://$baseUrl"
+            baseUrl = baseUrl.removeSuffix("/")
+
+            try {
+                val url = URL("$baseUrl/api/v1/visits?pin=${URLEncoder.encode(pin, "UTF-8")}")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.setRequestProperty("X-AutoDial-PIN", pin)
+
+                if (conn.responseCode !in 200..299) {
+                    refreshHandler.post {
+                        if (isAdded) {
+                            Toast.makeText(requireContext(), "云端连接失败 (${conn.responseCode})", Toast.LENGTH_SHORT).show()
+                            resetSyncBtn()
+                        }
+                    }
+                    conn.disconnect()
+                    return@execute
+                }
+
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+
+                val arr = JSONArray(body)
+                val mergedRecords = JSONArray()
+
+                // 读已有记录
+                val existingJson = prefs.getString("visit_records", "[]") ?: "[]"
+                val existing = JSONArray(existingJson)
+                val existingTimestamps = mutableSetOf<Long>()
+                for (i in 0 until existing.length()) {
+                    existingTimestamps.add(existing.getJSONObject(i).optLong("timestamp", 0))
+                    mergedRecords.put(existing.getJSONObject(i))
+                }
+
+                // 合入云端记录（去重）
+                var newCount = 0
+                for (i in 0 until arr.length()) {
+                    val item = arr.getJSONObject(i)
+                    val ts = parseTimestamp(item.optString("created_at", ""))
+                    if (ts > 0 && !existingTimestamps.contains(ts)) {
+                        mergedRecords.put(JSONObject().apply {
+                            put("name", item.optString("name", ""))
+                            put("mobile", item.optString("mobile", ""))
+                            put("created_at", item.optString("created_at", ""))
+                            put("timestamp", ts)
+                        })
+                        newCount++
+                    }
+                }
+
+                prefs.edit().putString("visit_records", mergedRecords.toString()).apply()
+
+                refreshHandler.post {
+                    if (isAdded) {
+                        val msg = if (newCount > 0) "✅ 同步完成，新增 $newCount 条"
+                                  else "📋 数据已是最新，没有新变化"
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                        resetSyncBtn()
+                        loadVisitStats()
+                    }
+                }
+            } catch (e: Exception) {
+                refreshHandler.post {
+                    if (isAdded) {
+                        Toast.makeText(requireContext(), "❌ 同步失败，请检查云端连接", Toast.LENGTH_SHORT).show()
+                        resetSyncBtn()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun resetSyncBtn() {
+        if (!isAdded) return
+        visitSyncBtn.text = "🔄 同步"
+        visitSyncBtn.isEnabled = true
+    }
+
+    /** 解析 created_at (如 "2026-07-01T12:00:00") 为毫秒时间戳 */
+    private fun parseTimestamp(createdAt: String): Long {
+        if (createdAt.isEmpty()) return 0
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            sdf.parse(createdAt)?.time ?: 0
+        } catch (_: Exception) { 0 }
+    }
+
+    data class VisitRecord(
+        val name: String,
+        val mobile: String,
+        val created_at: String,
+        val timestamp: Long
+    )
 
     private fun buildChart(stats: List<CallLogDb.DayStats>) {
         chartContainer.removeAllViews()
