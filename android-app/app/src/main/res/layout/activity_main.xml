@@ -18,7 +18,7 @@
         android:layout_weight="1"
         android:clipToPadding="false" />
 
-    <!-- 底部导航栏 -->
+    <!-- 底部导航栏：通话 | 录上门 | 统计 | 设置 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="72dp"
@@ -28,35 +28,7 @@
         android:gravity="center"
         android:orientation="horizontal">
 
-        <!-- 连接/设置 -->
-        <LinearLayout
-            android:id="@+id/tabConnect"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp">
-
-            <ImageView
-                android:id="@+id/tabConnectIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_ph_wifi_high" />
-
-            <TextView
-                android:id="@+id/tabConnectLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="设置"
-                android:tag="goldLight"
-                android:textColor="#F0C040"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <!-- 通话记录 -->
+        <!-- 通话 -->
         <LinearLayout
             android:id="@+id/tabCallLog"
             android:layout_width="0dp"
@@ -78,7 +50,35 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="记录"
+                android:text="通话"
+                android:tag="text2"
+                android:textColor="#A09070"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- 录上门 -->
+        <LinearLayout
+            android:id="@+id/tabRegister"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
+
+            <ImageView
+                android:id="@+id/tabRegisterIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_ph_note_pencil" />
+
+            <TextView
+                android:id="@+id/tabRegisterLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="录上门"
                 android:tag="text2"
                 android:textColor="#A09070"
                 android:textSize="11sp" />
@@ -112,9 +112,9 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- 来访登记 -->
+        <!-- 设置 -->
         <LinearLayout
-            android:id="@+id/tabRegister"
+            android:id="@+id/tabConnect"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -124,17 +124,17 @@
             android:paddingBottom="10dp">
 
             <ImageView
-                android:id="@+id/tabRegisterIcon"
+                android:id="@+id/tabConnectIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_ph_note_pencil" />
+                android:src="@drawable/ic_tab_settings" />
 
             <TextView
-                android:id="@+id/tabRegisterLabel"
+                android:id="@+id/tabConnectLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="登记"
+                android:text="设置"
                 android:tag="text2"
                 android:textColor="#A09070"
                 android:textSize="11sp" />

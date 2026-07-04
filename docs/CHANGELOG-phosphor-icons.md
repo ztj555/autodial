@@ -10,10 +10,10 @@
 
 | 文件名 | Phosphor 图标 | 用途 |
 |--------|-------------|------|
-| `ic_ph_wifi_high.xml` | wifi-high | 底部导航"设置"Tab |
-| `ic_ph_list_numbers.xml` | list-numbers | 底部导航"记录"Tab |
+| `ic_tab_settings.xml` | gear | 底部导航"设置"Tab |
+| `ic_ph_list_numbers.xml` | list-numbers | 底部导航"通话"Tab |
 | `ic_ph_chart_bar.xml` | chart-bar | 底部导航"统计"Tab、统计页标题 |
-| `ic_ph_note_pencil.xml` | note-pencil | 底部导航"登记"Tab、登记页标题 |
+| `ic_ph_note_pencil.xml` | note-pencil | 底部导航"录上门"Tab、录上门页标题 |
 | `ic_ph_clipboard_text.xml` | clipboard-text | 通话记录页标题 |
 | `ic_ph_phone_outgoing.xml` | phone-outgoing | 拨出通话类型图标、上次通话提示 |
 | `ic_ph_phone_incoming.xml` | phone-incoming | 来电通话类型图标 |

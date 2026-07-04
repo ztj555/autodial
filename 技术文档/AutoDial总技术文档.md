@@ -46,8 +46,7 @@
                             ┌────────▼──────────┐
                             │   Android 手机端    │
                             │   DialService      │
-                            │   📝 登记 第4 Tab  │
-                            │   📊 上门统计       │
+                            │   录上门 · 统计·通话│
                             └───────────────────┘
 ```
 
@@ -323,13 +322,13 @@ AutoDial-Extension/
 | `CloudCtrl.kt` | 云服务器 CRUD + Gist 同步 + 连通测试 |
 | `DialAccessibilityService.kt` | Xiaomi/HyperOS SIM 自动点击 |
 | `FileLogger.kt` | 文件日志（10MB 轮转 + 环形缓冲降级） |
-| `RegisterFragment.kt` | **v4.1新增** 来访登记表单（第4个Tab） |
+| `RegisterFragment.kt` | **v4.1新增** 录上门表单（底部导航第2个Tab「录上门」） |
 | `StatsFragment.kt` | 统计页（含 **v4.1新增** 上门统计卡片） |
 
 ### 9.2 新功能（v4.1）
 
-- **来访登记**：第 4 个 Tab「📝 登记」，顾问手机号自动填入，提交后同步 CRM + 云中继
-- **上门统计**：「📊 上门统计」卡片，6 维度（今日/本周/近7天/当月/上月/近30天）
+- **录上门**：底部导航第 2 个 Tab「录上门」，顾问姓名从 CRM 列表选择，提交后同步 CRM + 云中继
+- **上门统计**：「上门统计」卡片，6 维度（今日/本周/近7天/当月/上月/近30天），支持云端同步和详情弹窗
 - **visit_record 接收**：WS 回调 `handleVisitRecord()`，存时间戳 + 系统通知 + 统计刷新
 - **SIM handle 缓存**：`simHandleCache` 避免每次拨号查 SubscriptionManager
 

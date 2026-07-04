@@ -144,14 +144,14 @@ Chrome 插件从 CRM 页面自动检测业务员姓名（`.user-name` + `.user-p
 
 ## 新增功能
 
-### 1. 来访登记模块（Android 第 4 个 Tab）
+### 1. 录上门模块（Android 第 2 个 Tab）
 
 **文件**：`RegisterFragment.kt`, `fragment_register.xml`
 
-- 新增「📝 登记」Tab，顾问帮客户填写来访信息
-- 顾问手机号自动从 PIN 填入（只读）
+- 新增「录上门」Tab，顾问帮客户填写来访信息
+- 顾问姓名从 CRM 列表点击选择
 - 来访事由固定「贷款咨询」
-- 提交时按钮置灰 + 加载态，成功后显示「✅ 登记成功」+ 2 秒恢复，失败 Toast 提示
+- 提交时按钮置灰 + 加载态，成功后显示「✅登记成功」+ 2 秒恢复，失败 Toast 提示
 - 提交到 CRM API：`POST https://guwen.zhudaicms.com/bserve/saoma_indb.html`
 
 ### 2. 上门统计卡片（统计页）

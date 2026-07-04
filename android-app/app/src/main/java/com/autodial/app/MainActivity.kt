@@ -41,10 +41,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tabRegisterIcon: ImageView
 
     private val fragments = listOf<Fragment>(
-        ConnectFragment(),
         CallLogFragment(),
+        RegisterFragment(),
         StatsFragment(),
-        RegisterFragment()
+        ConnectFragment()
     )
 
     private val connectionReceiver = object : BroadcastReceiver() {
@@ -104,10 +104,10 @@ class MainActivity : AppCompatActivity() {
         viewPager.adapter = ViewPagerAdapter(this, fragments)
         viewPager.isUserInputEnabled = false
 
-        tabConnect.setOnClickListener { switchTab(0) }
-        tabCallLog.setOnClickListener { switchTab(1) }
+        tabCallLog.setOnClickListener { switchTab(0) }
+        tabRegister.setOnClickListener { switchTab(1) }
         tabStats.setOnClickListener { switchTab(2) }
-        tabRegister.setOnClickListener { switchTab(3) }
+        tabConnect.setOnClickListener { switchTab(3) }
 
         ContextCompat.registerReceiver(this, connectionReceiver,
             IntentFilter("com.autodial.CONNECTION_CHANGE"),
@@ -221,14 +221,14 @@ class MainActivity : AppCompatActivity() {
 
         when (index) {
             0 -> {
-                tabConnectLabel.setTextColor(activeColor)
-                tabConnectIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
-            }
-            1 -> {
                 tabCallLogLabel.setTextColor(activeColor)
                 tabCallLogIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
-                (fragments.getOrNull(1) as? CallLogFragment)?.refreshIfNeeded()
-                (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
+                (fragments.getOrNull(0) as? CallLogFragment)?.refreshIfNeeded()
+                (fragments.getOrNull(0) as? CallLogFragment)?.updateDialModeBarUI()
+            }
+            1 -> {
+                tabRegisterLabel.setTextColor(activeColor)
+                tabRegisterIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
             }
             2 -> {
                 tabStatsLabel.setTextColor(activeColor)
@@ -236,8 +236,8 @@ class MainActivity : AppCompatActivity() {
                 (fragments.getOrNull(2) as? StatsFragment)?.refreshIfNeeded()
             }
             3 -> {
-                tabRegisterLabel.setTextColor(activeColor)
-                tabRegisterIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
+                tabConnectLabel.setTextColor(activeColor)
+                tabConnectIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
             }
         }
     }

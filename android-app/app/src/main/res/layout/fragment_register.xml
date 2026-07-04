@@ -23,7 +23,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="来访登记"
+            android:text="录上门"
             android:drawableStart="@drawable/ic_ph_note_pencil"
             android:drawablePadding="6dp"
             android:tag="goldLight"
@@ -210,7 +210,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="AutoDial · 来访登记"
+                android:text="AutoDial · 录上门"
                 android:textColor="#3A3540"
                 android:textSize="11sp"
                 android:layout_marginBottom="8dp" />

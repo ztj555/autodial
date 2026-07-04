@@ -14,10 +14,11 @@ android/app/src/main/java/com/autodial/app/
 ├── CallLogDb.kt                # SQLite 通话记录数据库
 ├── CloudCtrl.kt                # 云服务器配置 CRUD + 连通测试
 ├── DialMode.kt                 # 拨号模式枚举
-├── MainActivity.kt             # 主界面（ViewPager2 + 3 Tab）
-├── ConnectFragment.kt          # 连接管理页
-├── CallLogFragment.kt          # 通话记录页
+├── MainActivity.kt             # 主界面（ViewPager2 + 4 Tab）
+├── ConnectFragment.kt          # 设置页
+├── CallLogFragment.kt          # 通话页
 ├── StatsFragment.kt            # 统计页
+├── RegisterFragment.kt         # 录上门页
 ├── DialAccessibilityService.kt # 无障碍服务（SIM 自动点击）
 ├── DialAnimationOverlay.kt     # 拨号动画悬浮窗
 ├── SimSelectOverlay.kt         # SIM 选卡悬浮窗
@@ -32,45 +33,18 @@ android/app/src/main/java/com/autodial/app/
 
 ---
 
-## 二、连接方式（PIN + JWT 双兼容）
+## 二、连接方式（PIN 认证）
 
-> **说明**：Android v4.53 同时支持 PIN 认证（主用，连接云中继 v2:35430）和 JWT 认证（兼容旧版，连接云中继 v3:35440）。推荐使用 PIN 方式，JWT 方式为向后兼容保留。
-
-### PrefCtrl — JWT 字段
-
-```kotlin
-fun getJwtToken()       // SharedPreferences "jwt_token"
-fun setJwtToken(token)
-fun getRefreshToken()   // "refresh_token"
-fun setRefreshToken(token)
-fun getLoginPhone()     // "login_phone"
-fun setLoginPhone(phone)
-```
-
-### ConnectFragment — 登录流程
-
-当用户在连接页输入 11 位手机号：
-1. 检查 `PrefCtrl.getJwtToken()` 是否有已保存的 JWT
-2. 有 JWT → `auth_method: "jwt"` 直连云中继 v3 (35440)
-3. 无 JWT → 弹出登录对话框 → POST `/api/v1/auth/login` → 保存 JWT + refresh_token
-
-### ConnectionManager — 双模握手
-
-```kotlin
-val token = prefs.getString("jwt_token", "") ?: ""
-if (token.isNotEmpty()) {
-    hello.put("auth_method", "jwt")
-    hello.put("token", token)
-} // else 传统 PIN 方式
-```
+> **说明**：Android 统一使用 PIN 认证，连接云中继 v2 端口 35430。v3 JWT 模块已于 2026-07-04 全量移除。
 
 ### 云中继地址转换
 
 ```kotlin
-// ws://server:35440 → http://server:35441
-fun getCloudApiUrl(): String {
-    return server.replace("ws://", "http://")
-        .replace(":35440", ":35430")  // v4: 云中继统一到 35430
+// ws://server:35430 → http://server:35430
+fun toHttpBase(serverUrl: String): String {
+    return serverUrl
+        .replace("ws://", "http://")
+        .replace("wss://", "https://")
 }
 ```
 
@@ -101,7 +75,7 @@ BootReceiver / MainActivity.startService()
 | Action | 来源 | 说明 |
 |--------|------|------|
 | `ACTION_EXECUTE_PENDING_DIAL` | 通知点击 | 执行后台待拨号码 |
-| `CONNECT` | 连接页 | 携带 ip、pin 发起连接 |
+| `CONNECT` | 设置页 | 携带 ip、pin 发起连接 |
 | `DISCONNECT` | 连接页 | 主动断开所有连接 |
 | `DIAL_WITH_SIM` | SIM 选卡弹窗 | 携带 number、sim_slot 执行拨号 |
 | `DIAL_CANCELLED` | SIM 选卡取消 | 取消待拨号码 |
@@ -424,14 +398,14 @@ getLastDialInfo(number, context)
 
 | 组件 | 文件 | 说明 |
 |------|------|------|
-| RegisterFragment | `RegisterFragment.kt` | 来访登记表单（第4个Tab「📝 登记」） |
+| RegisterFragment | `RegisterFragment.kt` | 录上门表单（底部导航第2个Tab「录上门」） |
 | 上门统计 | `StatsFragment.kt` | 6维度统计卡片（今日/本周/近7天/当月/上月/近30天） |
 | visit_record 处理 | `ConnectionManager.kt` | WS 消息 → 存时间戳 + 通知 + 统计刷新 |
 
 ### MainActivity 改动
-- `activity_main.xml`：底部导航新增第4个Tab「📝 登记」
-- `fragments` 列表新增 `RegisterFragment()`
-- `switchTab()` 新增 index=3 分支
+- `activity_main.xml`：底部导航 Tab 顺序为「通话」「录上门」「统计」「设置」
+- `fragments` 列表顺序对应：CallLog → Register → Stats → Connect
+- `switchTab()` 分支 index 0=通话, 1=录上门, 2=统计, 3=设置
 
 ### 登记流程（v4.1.1 更新）
 1. 「接待顾问姓名」可编辑输入，也可按 PIN 从云中继自动查询（`/api/v1/advisor/name`），持久化到 SharedPreferences
