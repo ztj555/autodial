@@ -428,39 +428,32 @@ class StatsFragment : Fragment() {
                 conn.disconnect()
 
                 val arr = JSONArray(body)
-                val mergedRecords = JSONArray()
 
-                // 读已有记录
-                val existingJson = prefs.getString("visit_records", "[]") ?: "[]"
-                val existing = JSONArray(existingJson)
-                val existingTimestamps = mutableSetOf<Long>()
-                for (i in 0 until existing.length()) {
-                    existingTimestamps.add(existing.getJSONObject(i).optLong("timestamp", 0))
-                    mergedRecords.put(existing.getJSONObject(i))
-                }
-
-                // 合入云端记录（去重）
-                var newCount = 0
+                // 以云端为准：直接用云端数据替换本地记录
+                val newRecords = JSONArray()
                 for (i in 0 until arr.length()) {
                     val item = arr.getJSONObject(i)
                     val ts = parseTimestamp(item.optString("created_at", ""))
-                    if (ts > 0 && !existingTimestamps.contains(ts)) {
-                        mergedRecords.put(JSONObject().apply {
+                    if (ts > 0) {
+                        newRecords.put(JSONObject().apply {
                             put("name", item.optString("name", ""))
                             put("mobile", item.optString("mobile", ""))
                             put("created_at", item.optString("created_at", ""))
                             put("timestamp", ts)
                         })
-                        newCount++
                     }
                 }
 
-                prefs.edit().putString("visit_records", mergedRecords.toString()).apply()
+                prefs.edit()
+                    .putString("visit_records", newRecords.toString())
+                    .putString("registration_timestamps", "") // 清理旧格式
+                    .apply()
 
                 refreshHandler.post {
                     if (isAdded) {
-                        val msg = if (newCount > 0) "✅ 同步完成，新增 $newCount 条"
-                                  else "📋 数据已是最新，没有新变化"
+                        val count = newRecords.length()
+                        val msg = if (count > 0) "✅ 同步完成，共 ${count} 条上门记录"
+                                  else "📋 云端暂无上门记录"
                         Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                         resetSyncBtn()
                         loadVisitStats()
