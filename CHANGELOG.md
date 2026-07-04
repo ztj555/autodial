@@ -1,10 +1,98 @@
 # AutoDial v4.1.0 更新日志
 
-> 最后修改：2026-06-30 21:15
+> 最后修改：2026-07-04 18:50
+
+---
+
+## 2026-07-04 — UI 大改版：设置页重构 + 双通道状态 + 多项 Bug 修复
+
+### 🎨 设置页三大板块重构
+
+原设置页「当前连接状态」「高级设置」「其他设置」混乱堆叠，重构为清晰的三大板块体系：
+
+**▶ 跨屏连接设置**（原「高级设置」改名，合并通道状态）
+- 局域网/云中转通道 → 移入此板块最前
+- 连接策略（自动/仅LAN/仅云端）
+- 自动连接（开关）
+- 云服务器（管理/获取列表/PC同步）
+
+**▶ APP拨号设置**（原「其他设置」改名）
+- 拨号模式
+- 电池优化（从跨屏连接移入——影响拨号后台保活）
+- 自动复制号码
+- 拨号动画效果
+- 动画显示文字
+- 导出日志
+
+**▶ 主题/弹窗设置**（新增独立板块）
+- 主题（16套主题×7级亮度 + 更换）
+- 复制弹窗提醒（开关）
+
+**实现方式**：`ConnectFragment.kt` 新增 `rearrangeSections()` 方法，在 `onViewCreated` 时动态重组视图层级，避免大规模 XML 改写风险。
+
+### 📡 配对码区文案优化
+- 标题：`配对码↓` → `↓你的系统手机号↓`
+- 输入框 hint：`4位配对码 或 11位手机号` → `请填入11位手机号`
+- 发现提示：`🔍 输入4位配对码或11位手机号开始搜索` → `填入手机号后点击右上角连接按钮`
+
+### 🟢 状态大盘：PC/扩展双通道显示
+
+**问题**：Chrome 扩展通过 REST API 拨号时，手机端永远显示「等待PC上线」——云中继只通过 WS 感知 PC 桌面端，不知道扩展的存在。
+
+**方案**：利用现有扩展的 REST API 调用轨迹，无需修改扩展代码。
+
+| 改动 | 文件 |
+|------|------|
+| 云中继新增 `last_ext_activity[pin]` 字典 | `cloud_relay_v2.py` |
+| REST dial/hangup/visit 端点调用 `track_ext_activity(pin)` | `cloud_relay_v2.py` |
+| `phone_hello` auth_ok 回包加 `ext_online` 字段 | `cloud_relay_v2.py` |
+| `/api/v1/status` 加 `extOnline` 字段 | `cloud_relay_v2.py` |
+| 5 分钟内有 REST 请求 → 扩展视为在线 | `cloud_relay_v2.py` |
+| Android `ConnectionManager` 新增 `extOnline` | `ConnectionManager.kt` |
+| Android `DialService` 新增 `isExtOnline` | `DialService.kt` |
+
+**手机端状态显示三态**：
+
+| 状态 | 颜色 | 主文字 | 副文字 |
+|------|:---:|--------|--------|
+| PC桌面在线 | 🟢 | **PC就绪** | 🖥 已连接 |
+| 插件活跃 | 🟢 | **已就绪** | 🌐 浏览器在线 |
+| 云端已连但双方都不在 | 🟡 | **云端已连接，等待拨号** | 请在电脑上点击拨打 |
+
+**说明**：PC 在线时扩展走本地 `127.0.0.1:35432`，不会同时出现在云端，因此不会出现「PC+插件都在」的混淆状态。
+
+### ⚙️ 状态横幅删除
+
+`connectionBanner`（连接成功横幅）与状态大盘信息完全重复，已从 `ConnectFragment.kt` 和 `fragment_connect.xml` 中移除。
+
+### 🐞 Bug 修复：记录页空白
+
+**根因**：`CallLogFragment` 的 `lastDataFingerprint` 在 `onDestroyView()` 中未重置。ViewPager 切 Tab 后切回时，数据指纹不变 → 跳过 `loadCallLog()` 的 adapter 绑定 → RecyclerView 空白。
+
+**修复**：`CallLogFragment.onDestroyView()` 中加 `lastDataFingerprint = ""` + `callLogAdapter = null`。
+
+### 🐞 Bug 修复：轮选/相反模式无法识别历史通话
+
+**根因**：`getLastDialInfo()` 和 `getLastSimSlotGlobal()` 的 SQL 查询过滤 `status = 'ok'`。在部分机型上 `placeCall` 失败后走 `ACTION_CALL` 兜底→双方都失败→记录 `status = 'error'`→轮选查不到→不弹窗。
+
+**修复**：去除两个查询函数中的 `AND status = 'ok'` 过滤条件。insertDial 的 error 状态保留用于调试，查询不受影响。
+
+### 🐞 Bug 修复：OPPOSITE 模式注释/说明/代码三处不一致
+
+| 位置 | 修复前 | 修复后 |
+|------|--------|--------|
+| 注释 | 超过2天按**弹窗**处理 | 超过2天按**循环交替**处理 |
+| 说明文案 | 超过2天按**轮选**处理 | 超过2天按**循环交替**处理 |
+| 实际代码 | 循环交替（一直是对的） | 不变 |
+
+### 🧹 代码清理
+- 删除 `cloud-relay/python/auth.py`、`cloud_relay_v3.py`、`db.py`、`test_cloud_relay_v3.py`（v3 JWT 废弃模块）
+- `ConnectFragment.kt` 删除 JWT 自动登录相关代码，统一使用 PIN 认证
 
 ---
 
 ## 2026-06-30 — 登记页对标 saoma.html 重构 + 云端管理升级
+
 
 ### 🔴 根因修复：登记 CRM 不生效
 

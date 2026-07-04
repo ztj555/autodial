@@ -954,87 +954,89 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#252525" />
-
-            <!-- 主题 -->
-            <LinearLayout
-                android:id="@+id/themeSettingRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:tag="bg2"
-                android:background="#1A1D24"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="16dp"
-                android:paddingTop="12dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="12dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="主题"
-                        android:tag="text"
-                        android:textSize="16sp" />
-
-                    <TextView
-                        android:id="@+id/themeCurrentName"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="暗金 · 暗夜"
-                        android:tag="text2"
-                        android:textSize="12sp"
-            android:letterSpacing="0.02" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/themePreviewColors"
-                    android:layout_width="wrap_content"
-                    android:layout_height="26dp"
-                    android:gravity="center"
-                    android:orientation="horizontal">
-
-                    <View
-                        android:id="@+id/previewGold"
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:background="#C9A84C" />
-                    <View
-                        android:id="@+id/previewBg"
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:layout_marginStart="2dp"
-                        android:background="#111318" />
-                    <View
-                        android:id="@+id/previewBg2"
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:layout_marginStart="2dp"
-                        android:background="#1A1D24" />
-                    <View
-                        android:id="@+id/previewText"
-                        android:layout_width="14dp"
-                        android:layout_height="14dp"
-                        android:layout_marginStart="2dp"
-                        android:background="#E8DCC8" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="›"
-                    android:tag="text"
-                    android:textSize="20sp" />
-            </LinearLayout>
         </LinearLayout>
+
+        <!-- ═══════════════ 主题/弹窗设置 ═══════════════ -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="14dp"
+            android:tag="goldLight"
+            android:text="主题/弹窗"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- 主题 -->
+        <LinearLayout
+            android:id="@+id/themeSettingRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:tag="bg2"
+            android:background="#1A1D24"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:id="@+id/themeLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="主题"
+                android:tag="text"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:id="@+id/previewGold"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:background="#C9A84C" />
+                <View
+                    android:id="@+id/previewBg"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="2dp"
+                    android:background="#111318" />
+                <View
+                    android:id="@+id/previewBg2"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="2dp"
+                    android:background="#1A1D24" />
+                <View
+                    android:id="@+id/previewText"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="2dp"
+                    android:background="#E8DCC8" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="›"
+                android:tag="text"
+                android:textSize="20sp" />
+        </LinearLayout>
+
+        <!-- 主题/弹窗设置项（程序化插入锚点） -->
+        <LinearLayout
+            android:id="@+id/themeSectionAnchor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
         <!-- 使用说明书（折叠卡片） -->
         <LinearLayout
