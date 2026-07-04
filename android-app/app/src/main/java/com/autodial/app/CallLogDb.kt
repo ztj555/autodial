@@ -247,13 +247,12 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
      */
     fun getLastSimSlotGlobal(): Int {
         return try {
-            // 1. 优先查 APP 自身的拨号记录（最新一条成功的）
+            // 1. 优先查 APP 自身的拨号记录（最新一条）
             val db = readableDatabase
             val cursor = db.query(
                 TABLE_DIAL,
                 arrayOf(COL_SIM_SLOT),
-                "$COL_STATUS = 'ok'",
-                null,
+                null, null,
                 null, null, "$COL_TIME DESC", "1"
             )
             if (cursor.moveToFirst()) {
@@ -291,7 +290,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             val cursor = db.query(
                 TABLE_DIAL,
                 arrayOf(COL_SIM_SLOT),
-                "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
+                "$COL_NUMBER = ?",
                 arrayOf(number),
                 null, null, "$COL_TIME DESC", "1"
             )
@@ -334,7 +333,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             val cursor = db.query(
                 TABLE_DIAL,
                 arrayOf(COL_SIM_SLOT, COL_TIME),
-                "$COL_NUMBER = ? AND $COL_STATUS = 'ok'",
+                "$COL_NUMBER = ?",
                 arrayOf(number),
                 null, null, "$COL_TIME DESC", "1"
             )
