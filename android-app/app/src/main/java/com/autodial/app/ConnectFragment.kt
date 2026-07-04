@@ -63,22 +63,14 @@ class ConnectFragment : Fragment() {
     private lateinit var cloudServerTestBtn: TextView
     private lateinit var cloudServerSyncBtn: TextView
     private lateinit var cloudServerFetchBtn: TextView
-    private lateinit var cloudStatusText: TextView
     private lateinit var connectionStrategyRow: View
     private lateinit var connectionStrategyDesc: TextView
-    // 延迟显示（连接通道模块内联）
-    private lateinit var lanLatencyInline: TextView
-    private lateinit var cloudLatencyInline: TextView
     private lateinit var autoCopySwitch: TextView
     private lateinit var copyToastSwitch: TextView
     private lateinit var dialAnimationSwitch: TextView
     private lateinit var dialAnimationDesc: TextView
     private lateinit var dialAnimationTextPreview: TextView
     private lateinit var exportLogInfo: TextView
-    // v7: 通道状态面板
-    private lateinit var lanStatusText: TextView
-    private lateinit var lanStatusDot: ImageView
-    private lateinit var cloudStatusDot: ImageView
     // v7: 折叠卡片
     private lateinit var advancedHeader: View
     private lateinit var advancedContent: View
@@ -210,18 +202,14 @@ class ConnectFragment : Fragment() {
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
 
-            // v7: 新UI元素绑定（必须在所有使用前完成）
-            lanStatusText = view.findViewById(R.id.lanStatusText)
-            lanStatusDot = view.findViewById(R.id.lanStatusDot)
+            // v7: 折叠面板绑定
             advancedHeader = view.findViewById(R.id.advancedSectionHeader)
             advancedContent = view.findViewById(R.id.advancedSectionContent)
             advancedArrow = view.findViewById(R.id.advancedArrow)
             otherHeader = view.findViewById(R.id.otherSectionHeader)
             otherContent = view.findViewById(R.id.otherSectionContent)
             otherArrow = view.findViewById(R.id.otherArrow)
-            // v8: 内联延迟 + 使用说明折叠 + 励志语
-            lanLatencyInline = view.findViewById(R.id.lanLatencyInline)
-            cloudLatencyInline = view.findViewById(R.id.cloudLatencyInline)
+            // v8: 使用说明折叠 + 励志语
             usageGuideHeader = view.findViewById(R.id.usageGuideHeader)
             usageGuideContent = view.findViewById(R.id.usageGuideContent)
             usageGuideArrow = view.findViewById(R.id.usageGuideArrow)
@@ -340,9 +328,6 @@ class ConnectFragment : Fragment() {
             cloudServerSyncBtn = view.findViewById(R.id.cloudServerSyncBtn)
             cloudServerFetchBtn = view.findViewById(R.id.cloudServerFetchBtn)
             cloudServerCurrentText = view.findViewById(R.id.cloudServerCurrentText)
-            cloudStatusText = view.findViewById(R.id.cloudStatusText)
-            cloudStatusDot = view.findViewById(R.id.cloudStatusDot)
-
             updateCloudServerCurrentText()
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
             cloudServerTestBtn.setOnClickListener { testAllServers() }
@@ -425,7 +410,6 @@ class ConnectFragment : Fragment() {
             // 应用主题
             applyTheme()
             updateThemePreview()
-            updateChannelSection()
 
             // 注册主题变更监听
             ThemeManager.addOnThemeChangedListener(themeListener)
@@ -947,7 +931,6 @@ class ConnectFragment : Fragment() {
                     }
                 }
             }
-            updateChannelSection()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1638,24 +1621,10 @@ class ConnectFragment : Fragment() {
         }
     }
 
-    /** 页面结构重组：通道移入跨屏连接、电池移入拨号、主题/弹窗独立 */
+    /** 页面结构重组：电池移入拨号、主题/弹窗独立 */
     private fun rearrangeSections(root: View) {
         try {
-            // 1. 通道面板(channelSection) → 移入跨屏连接设置(advancedContent)最前面
-            val channel = root.findViewById<View>(R.id.channelSection)
-            val advContent = root.findViewById<LinearLayout>(R.id.advancedSectionContent)
-            if (channel != null && advContent != null) {
-                (channel.parent as? ViewGroup)?.removeView(channel)
-                advContent.addView(channel, 0)
-            }
-
-            // 2. 连接策略 → 移入advancedContent（目前已移入，确保在通道下方）
-            val strategyRow = root.findViewById<View>(R.id.connectionStrategyRow)
-            if (strategyRow != null) {
-                strategyRow.visibility = View.VISIBLE
-            }
-
-            // 3. 电池优化 → 从跨屏连接设置移到APP拨号设置
+            // 1. 电池优化 → 从跨屏连接设置移到APP拨号设置
             val batteryRow = root.findViewById<View>(R.id.batteryOptRow)
             val otherContent = root.findViewById<LinearLayout>(R.id.otherSectionContent)
             if (batteryRow != null && otherContent != null) {
@@ -1664,7 +1633,7 @@ class ConnectFragment : Fragment() {
                 otherContent.addView(batteryRow, if (dialModeIdx >= 0) dialModeIdx + 1 else 0)
             }
 
-            // 4. 创建"主题/弹窗设置"折叠面板，移入主题行+复制弹窗行
+            // 2. 创建"主题/弹窗设置"折叠面板，移入主题行+复制弹窗行
             val themeRow = root.findViewById<View>(R.id.themeSettingRow)
             val copyToastRow = root.findViewById<View>(R.id.copyToastRow)
             val scrollContent = root.findViewById<LinearLayout>(R.id.connectScrollContent) ?: return
@@ -1725,69 +1694,6 @@ class ConnectFragment : Fragment() {
                 // 更新箭头索引偏移
                 val delta = 2
                 scrollContent.indexOfChild(root.findViewById(R.id.usageGuideHeader))
-            }
-        } catch (_: Exception) {}
-    }
-
-    /** v7: 更新通道状态面板 */
-    private fun updateChannelSection() {
-        if (!isAdded) return
-        try {
-            val colors = ThemeManager.getColors(requireContext())
-            val lanOk = DialService.isLanConnected
-            val cloudOk = DialService.isCloudConnected
-            val pcOk = DialService.isPcReachable
-
-            val extOk = DialService.isExtOnline
-            val allPc = lanOk || pcOk
-
-            lanStatusText.text = when {
-                allPc -> "电脑在线"
-                lanOk -> "局域网已连通"
-                else -> "未连接"
-            }
-            lanStatusText.setTextColor(Color.parseColor(if (allPc) colors.green else if (lanOk) "#FF9800" else "#605040"))
-            lanStatusDot.setImageResource(when {
-                allPc -> R.drawable.dot_green
-                lanOk -> R.drawable.dot_orange
-                else -> R.drawable.dot_gray
-            })
-
-            cloudStatusText.text = when {
-                cloudOk && allPc -> "电脑在线"
-                cloudOk && !allPc -> "已连通，等待电脑"
-                else -> "未连接"
-            }
-            cloudStatusText.setTextColor(Color.parseColor(
-                if (cloudOk && allPc) colors.green else if (cloudOk && !allPc) "#FF9800" else "#605040"
-            ))
-            cloudStatusDot.setImageResource(
-                when {
-                    cloudOk && allPc -> R.drawable.dot_green
-                    cloudOk && !allPc -> R.drawable.dot_orange
-                    else -> R.drawable.dot_gray
-                }
-            )
-
-            // v8: 延迟内联显示（连接通道模块内）
-            val mgr = DialService._instance?.connectionManager
-            val lanLat = mgr?.lanLatencyMs ?: -1
-            val cloudLat = mgr?.cloudLatencyMs ?: -1
-
-            if (lanOk && lanLat >= 0) {
-                lanLatencyInline.text = "${lanLat}ms"
-                lanLatencyInline.setTextColor(Color.parseColor(colors.green))
-                lanLatencyInline.visibility = View.VISIBLE
-            } else {
-                lanLatencyInline.visibility = View.GONE
-            }
-
-            if (cloudOk && cloudLat >= 0) {
-                cloudLatencyInline.text = "${cloudLat}ms"
-                cloudLatencyInline.setTextColor(Color.parseColor(colors.green))
-                cloudLatencyInline.visibility = View.VISIBLE
-            } else {
-                cloudLatencyInline.visibility = View.GONE
             }
         } catch (_: Exception) {}
     }
