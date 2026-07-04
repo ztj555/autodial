@@ -155,6 +155,9 @@ class ConnectionManager(private val context: Context) {
     // PC 在线状态（通过云中继确认）
     @Volatile var pcConfirmedOnline = false
         private set
+    // 扩展在线状态（5分钟内有REST请求）
+    @Volatile var extOnline = false
+        private set
 
     // v4.57: 真探活 — 发 phone_hello 带 messageId，等 PC 回 ACK 才算 PC 在线
     private var pcProbeMessageId: String? = null
@@ -930,7 +933,8 @@ class ConnectionManager(private val context: Context) {
                                 lastCloudPongTime = System.currentTimeMillis()
                                 cloudPingInFlight = false
                                 pcConfirmedOnline = msg.optBoolean("pc_present", false)
-                                v6LogI(TAG, pin, "PC 在线状态: $pcConfirmedOnline")
+                                extOnline = msg.optBoolean("ext_online", false)
+                                v6LogI(TAG, pin, "PC: $pcConfirmedOnline Ext: $extOnline")
                                 // v4.57: 若 relay 未确认 PC 在线，发真探活包
                                 if (!pcConfirmedOnline) {
                                     startPcProbe(pin)
@@ -1015,6 +1019,7 @@ class ConnectionManager(private val context: Context) {
         try { cloudWebSocket?.cancel() } catch (_: Exception) {}
         cloudWebSocket = null
         pcConfirmedOnline = false
+        extOnline = false
         cancelPcProbe() // v4.57
         v6LogW(TAG, lastPin, "handleCloudDisconnect, transport=$transportMode")
 

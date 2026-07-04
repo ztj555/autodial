@@ -339,6 +339,19 @@ async def forward_to_phones(pin, message, exclude_ws=None):
 # ==================== WebSocket 处理 ====================
 server_instance = None
 ws_connections = set()
+EXT_ACTIVITY_TIMEOUT = 300  # 5分钟内收到过扩展REST请求视为在线
+last_ext_activity = {}  # pin -> datetime 记录扩展最后活跃时间
+
+def track_ext_activity(pin):
+    """记录扩展活跃时间（每次REST请求调用）"""
+    last_ext_activity[pin] = datetime.now()
+
+def is_ext_online(pin):
+    """扩展是否在线（5分钟内有REST请求）"""
+    last = last_ext_activity.get(pin)
+    if not last:
+        return False
+    return (datetime.now() - last).total_seconds() < EXT_ACTIVITY_TIMEOUT
 
 async def handle_connection(ws, path=None):
     client_ip = ws.remote_address[0] if ws.remote_address else 'unknown'
@@ -413,6 +426,7 @@ async def handle_connection(ws, path=None):
                     'pin': pin,
                     'pcCount': len(group.pcs),
                     'pc_present': pc_online,  # v8: 手机端据此判断 PC 是否可达
+                    'ext_online': is_ext_online(pin),  # 扩展是否在线（5分钟内有REST请求）
                     'newDevice': not is_first_device  # Fix ⏳5: 通知新设备它是否是后续加入的
                 }))
                 # Fix ⏳5: 如果非首设备加入已有组，广播通知给已有成员
@@ -887,6 +901,7 @@ async def health_check_handler(path, request_headers):
         # PIN 格式校验（4位或11位纯数字）
         if not validate_pin(pin):
             return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
+        track_ext_activity(pin)  # 记录扩展活跃时间
         # 号码校验：允许 3-20 位的数字/*/#/+，兼容 10086/固话/400/*100# 等
         if not number:
             return (200, JSON_HDR, _err_json('INVALID_NUMBER', '号码不能为空'))
@@ -923,6 +938,7 @@ async def health_check_handler(path, request_headers):
         pin = hdrs.get('x-autodial-pin', '')
         if not validate_pin(pin):
             return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
+        track_ext_activity(pin)
 
         group = pin_groups.get(pin)
         if group and group.pcs:
@@ -949,7 +965,8 @@ async def health_check_handler(path, request_headers):
             'pin': pin,
             'pcConnected': len(group.pcs) > 0 if group else False,
             'phoneConnected': len(group.phones) > 0 if group else False,
-            'phoneCount': len(group.phones) if group else 0
+            'phoneCount': len(group.phones) if group else 0,
+            'extOnline': is_ext_online(pin)
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
     
@@ -1149,6 +1166,7 @@ async def health_check_handler(path, request_headers):
         pin = hdrs.get('x-autodial-pin', '')
         if not validate_pin(pin):
             return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误，须为4位或11位数字'))
+        track_ext_activity(pin)
 
         qs = parse_qs(parsed.query)
         name = qs.get('name', [''])[0].strip()

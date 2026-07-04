@@ -118,7 +118,7 @@ class ConnectFragment : Fragment() {
     private var discoveredIP = ""
     private var discoveryJob: Job? = null
 
-    // v9: 定时刷新 waiting-for-PC 状态（云已通但 pcConfirmedOnline 尚未更新）
+    // v9: 定时刷新通道状态（云已通但PC/扩展在线状态尚未确认时）
     private var waitingForPcRefreshRunnable: Runnable? = null
     private val WAITING_FOR_PC_REFRESH_MS = 3000L
 
@@ -137,26 +137,22 @@ class ConnectFragment : Fragment() {
         }
     }
 
-    /** v9: 在云已连通但 PC 未达时启动定时刷新，自动修正状态 */
+    /** v9: 云已连通但通道未确认时启动定时刷新 */
     private fun scheduleWaitingForPcRefresh() {
         cancelWaitingForPcRefresh()
-        // 仅在 connected=true, LAN未连, cloud已连, pc未达 时启动
         if (!DialService.isConnected) return
         if (DialService.isLanConnected) return
         if (!DialService.isCloudConnected) return
-        if (DialService.isPcReachable) return
-        // 状态卡在"等待PC上线"
+        if (DialService.isPcReachable || DialService.isExtOnline) return
         waitingForPcRefreshRunnable = object : Runnable {
             override fun run() {
                 if (!isAdded) return
-                if (DialService.isPcReachable) {
-                    // PC 已上线！强制刷新 UI
+                if (DialService.isPcReachable || DialService.isExtOnline) {
                     updateConnectionUI(true, null)
                     cancelWaitingForPcRefresh()
                 } else if (!DialService.isConnected || DialService.isLanConnected) {
                     cancelWaitingForPcRefresh()
                 } else {
-                    // 继续等待
                     waitingForPcRefreshRunnable?.let {
                         view?.postDelayed(it, WAITING_FOR_PC_REFRESH_MS)
                     }
@@ -880,31 +876,26 @@ class ConnectFragment : Fragment() {
                 val lanOk = DialService.isLanConnected
                 val cloudOk = DialService.isCloudConnected
                 val pcOk = DialService.isPcReachable
+                val extOk = DialService.isExtOnline
 
-                // 状态指示：LAN 优先，Cloud 区分 PC 在线/离线
-                if (lanOk || pcOk) {
+                // 任一通道就绪 → 绿色；否则橙色等待
+                if (lanOk || pcOk || extOk) {
                     statusDot.setImageResource(R.drawable.dot_green)
                     startPulseAnimation()
-                    statusText.text = "已连接"
+                    statusText.text = "已就绪"
                     statusText.setTextColor(Color.parseColor(colors.green))
-                } else if (cloudOk && !pcOk) {
+                } else {
                     statusDot.setImageResource(R.drawable.dot_orange)
                     stopPulseAnimation()
-                    statusText.text = "等待PC上线"
+                    statusText.text = "等待通道"
                     statusText.setTextColor(Color.parseColor("#FF9800"))
-                } else {
-                    statusDot.setImageResource(R.drawable.dot_green)
-                    startPulseAnimation()
-                    statusText.text = "已连接"
-                    statusText.setTextColor(Color.parseColor(colors.green))
                 }
 
-                connectionMode.text = when {
-                    lanOk && cloudOk -> "LAN + Cloud"
-                    lanOk -> "局域网"
-                    cloudOk && pcOk -> "云中转"
-                    cloudOk && !pcOk -> "云中继已连接，等待PC上线"
-                    else -> ""
+                connectionMode.text = buildString {
+                    append("🖥 PC ")
+                    append(if (pcOk || lanOk) "●" else "○")
+                    append("　🌐 插件 ")
+                    append(if (extOk) "●" else "○")
                 }
                 connectionMode.visibility = View.VISIBLE
                 connectionBanner.visibility = View.VISIBLE
