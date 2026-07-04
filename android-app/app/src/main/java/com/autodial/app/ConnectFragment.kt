@@ -456,9 +456,8 @@ class ConnectFragment : Fragment() {
             val connected = DialService.isConnected
             if (connected && statusText.text.toString() != "已连接") {
                 updateConnectionUI(true, null)
-                // v9: 回到前台时若卡在「等待PC上线」，启动定时刷新
                 scheduleWaitingForPcRefresh()
-            } else if (!connected && connectionBanner.visibility == View.VISIBLE) {
+            } else if (!connected) {
                 updateConnectionUI(false, null)
             }
         } catch (_: Exception) {}
@@ -898,8 +897,6 @@ class ConnectFragment : Fragment() {
                     connectionMode.text = "请在电脑上点击拨打"
                 }
                 connectionMode.visibility = View.VISIBLE
-                connectionBanner.visibility = View.VISIBLE
-                bannerText.text = if (lanOk || pcOk) "✅ 已连接到电脑！等待拨号指令..." else "☁️ 云端已连通，等待电脑连接云端..."
                 discoveryHint.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
@@ -912,7 +909,6 @@ class ConnectFragment : Fragment() {
                 statusText.text = if (manual) "已手动断开" else "未连接电脑"
                 statusText.setTextColor(Color.parseColor(if (manual) "#FF4D4F" else colors.text2))
                 connectionMode.visibility = View.GONE
-                connectionBanner.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState(if (manual) "manual_disconnect" else "disconnected")
                 connectBtn.visibility = View.GONE
