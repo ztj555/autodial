@@ -878,24 +878,24 @@ class ConnectFragment : Fragment() {
                 val pcOk = DialService.isPcReachable
                 val extOk = DialService.isExtOnline
 
-                // 任一通道就绪 → 绿色；否则橙色等待
-                if (lanOk || pcOk || extOk) {
+                if (lanOk || pcOk) {
+                    statusDot.setImageResource(R.drawable.dot_green)
+                    startPulseAnimation()
+                    statusText.text = "PC就绪"
+                    statusText.setTextColor(Color.parseColor(colors.green))
+                    connectionMode.text = "🖥 已连接"
+                } else if (extOk) {
                     statusDot.setImageResource(R.drawable.dot_green)
                     startPulseAnimation()
                     statusText.text = "已就绪"
                     statusText.setTextColor(Color.parseColor(colors.green))
+                    connectionMode.text = "🌐 浏览器在线"
                 } else {
                     statusDot.setImageResource(R.drawable.dot_orange)
                     stopPulseAnimation()
-                    statusText.text = "等待通道"
+                    statusText.text = "云端已连接，等待拨号"
                     statusText.setTextColor(Color.parseColor("#FF9800"))
-                }
-
-                connectionMode.text = buildString {
-                    append("🖥 PC ")
-                    append(if (pcOk || lanOk) "●" else "○")
-                    append("　🌐 插件 ")
-                    append(if (extOk) "●" else "○")
+                    connectionMode.text = "请在电脑上点击拨打"
                 }
                 connectionMode.visibility = View.VISIBLE
                 connectionBanner.visibility = View.VISIBLE
