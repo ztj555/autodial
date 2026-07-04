@@ -1738,22 +1738,35 @@ class ConnectFragment : Fragment() {
             val cloudOk = DialService.isCloudConnected
             val pcOk = DialService.isPcReachable
 
-            lanStatusText.text = if (lanOk) "已连接" else "未连接"
-            lanStatusText.setTextColor(Color.parseColor(if (lanOk) colors.green else "#605040"))
-            lanStatusDot.setImageResource(if (lanOk) R.drawable.dot_green else R.drawable.dot_gray)
+            val extOk = DialService.isExtOnline
+            val allPc = lanOk || pcOk
+
+            lanStatusText.text = when {
+                allPc -> "电脑在线"
+                lanOk -> "局域网已连通"
+                else -> "未连接"
+            }
+            lanStatusText.setTextColor(Color.parseColor(if (allPc) colors.green else if (lanOk) "#FF9800" else "#605040"))
+            lanStatusDot.setImageResource(when {
+                allPc -> R.drawable.dot_green
+                lanOk -> R.drawable.dot_orange
+                else -> R.drawable.dot_gray
+            })
 
             cloudStatusText.text = when {
-                cloudOk && pcOk -> "已连接（PC在线）"
-                cloudOk && !pcOk -> "已连通，等待PC"
+                cloudOk && allPc -> "电脑在线"
+                cloudOk && !allPc -> "已连通，等待电脑"
                 else -> "未连接"
             }
             cloudStatusText.setTextColor(Color.parseColor(
-                if (cloudOk && pcOk) colors.green else if (cloudOk && !pcOk) "#FF9800" else "#605040"
+                if (cloudOk && allPc) colors.green else if (cloudOk && !allPc) "#FF9800" else "#605040"
             ))
             cloudStatusDot.setImageResource(
-                if (cloudOk && pcOk) R.drawable.dot_green
-                else if (cloudOk && !pcOk) R.drawable.dot_orange
-                else R.drawable.dot_gray
+                when {
+                    cloudOk && allPc -> R.drawable.dot_green
+                    cloudOk && !allPc -> R.drawable.dot_orange
+                    else -> R.drawable.dot_gray
+                }
             )
 
             // v8: 延迟内联显示（连接通道模块内）
