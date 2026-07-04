@@ -8,11 +8,10 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.text.Editable
-import android.text.TextWatcher
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -38,6 +37,9 @@ class RegisterFragment : Fragment() {
 
     private var isSubmitting: Boolean = false
     private var isSuccessCooldown: Boolean = false
+
+    // CRM 顾问列表缓存
+    private val advisorList = mutableListOf<Pair<String, String>>() // (name, kid)
 
     private val themeListener: () -> Unit = {
         if (isAdded) {
@@ -167,6 +169,12 @@ class RegisterFragment : Fragment() {
         brand = prefs.getString("brand", "1833") ?: "1833"
         managerName = prefs.getString("manager_name", "") ?: ""
 
+        // 设置输入提示
+        etManagerName.hint = "点击选择接待顾问"
+        etManagerName.isFocusable = false
+        etManagerName.isClickable = true
+        etManagerName.setOnClickListener { showAdvisorPicker() }
+
         // 如果本地没有姓名但 PIN 已设置，异步从云中继查询
         if (managerName.isEmpty() && pin.isNotEmpty()) {
             executor.execute {
@@ -183,19 +191,13 @@ class RegisterFragment : Fragment() {
             }
         }
 
+        // 后台加载 CRM 顾问列表（无论本地是否有姓名，提供备选）
+        if (pin.isNotEmpty()) {
+            executor.execute { fetchAdvisorListFromCrm() }
+        }
+
         // 设置接待顾问姓名
         etManagerName.setText(managerName)
-        etManagerName.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                val newName = s.toString().trim()
-                if (newName != managerName) {
-                    managerName = newName
-                    prefs.edit().putString("manager_name", newName).apply()
-                }
-            }
-        })
 
         // 设置来访事由（固定值）
         tvVisitType.text = VISIT_TYPE
@@ -229,6 +231,76 @@ class RegisterFragment : Fragment() {
         etCustomerName.setTextColor(Color.parseColor(colors.text))
         etCustomerMobile.setTextColor(Color.parseColor(colors.text))
         etManagerName.setTextColor(Color.parseColor(colors.text))
+    }
+
+    // ===== CRM 顾问列表 =====
+
+    /**
+     * 从 CRM 拉取全部顾问姓名列表，缓存到 advisorList。
+     */
+    private fun fetchAdvisorListFromCrm() {
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL("https://guwen.zhudaicms.com/bserve/search")
+            connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.doInput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            connection.setRequestProperty("Origin", "https://guwen.zhudaicms.com")
+            connection.setRequestProperty("Referer", "https://guwen.zhudaicms.com/bserve/saoma.html?brand=$brand")
+
+            val body = "keyword=&brand=$brand"
+            val writer = OutputStreamWriter(connection.outputStream, "UTF-8")
+            writer.write(body)
+            writer.flush()
+            writer.close()
+
+            if (connection.responseCode != 200) return
+            val respBody = connection.inputStream.bufferedReader().readText()
+            val json = org.json.JSONObject(respBody)
+            if (json.optInt("code", -1) != 1) return
+
+            val data = json.optJSONArray("data") ?: return
+            advisorList.clear()
+            for (i in 0 until data.length()) {
+                val item = data.getJSONObject(i)
+                val name = item.optString("name", "")
+                val kid = item.optString("id", "")
+                if (name.isNotEmpty()) {
+                    advisorList.add(Pair(name, kid))
+                }
+            }
+        } catch (_: Exception) {} finally {
+            connection?.disconnect()
+        }
+    }
+
+    /**
+     * 弹出顾问姓名选择器。
+     */
+    private fun showAdvisorPicker() {
+        if (!isAdded) return
+        if (advisorList.isEmpty()) {
+            Toast.makeText(requireContext(), "正在加载顾问列表，请稍后再试...", Toast.LENGTH_SHORT).show()
+            // 触发重新加载
+            executor.execute { fetchAdvisorListFromCrm() }
+            return
+        }
+        val names = advisorList.map { it.first }.toTypedArray<CharSequence>()
+        AlertDialog.Builder(requireContext())
+            .setTitle("选择接待顾问")
+            .setItems(names) { _, which ->
+                val selected = advisorList[which]
+                managerName = selected.first
+                etManagerName.setText(managerName)
+                val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                prefs.edit().putString("manager_name", managerName).apply()
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     /**
