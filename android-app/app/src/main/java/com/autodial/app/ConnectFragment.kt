@@ -420,6 +420,7 @@ class ConnectFragment : Fragment() {
 
             // v4: 卡片透明度调节
             addCardOpacityRow(view)
+            addCardBorderRow(view)
 
             // 应用主题
             applyTheme()
@@ -1403,6 +1404,41 @@ class ConnectFragment : Fragment() {
             row.addView(btn)
         }
         refreshButtons()
+        parent.addView(row)
+    }
+
+    /** 卡片边框开关：开启=显示卡片边框，关闭=隐藏所有卡片边框 */
+    private fun addCardBorderRow(root: View) {
+        val parent = root.findViewById<View>(R.id.exportLogRow).parent as? ViewGroup ?: return
+        val colors = ThemeManager.getColors(requireContext())
+
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 16, 0, 0)
+        }
+
+        val label = TextView(requireContext()).apply {
+            text = "卡片边框"
+            textSize = 14f; setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        row.addView(label)
+
+        val toggle = TextView(requireContext()).apply {
+            textSize = 12f; setPadding(10, 6, 10, 6); text = if (prefCtrl.getCardBorder()) "ON" else "OFF"
+            tag = "chip"
+            ThemeManager.applyToView(this, colors)
+            setOnClickListener {
+                val newVal = !prefCtrl.getCardBorder()
+                prefCtrl.setCardBorder(newVal)
+                text = if (newVal) "ON" else "OFF"
+                ThemeManager.applyToView(this, colors)
+                ThemeManager.notifyRefresh()
+            }
+        }
+        row.addView(toggle)
         parent.addView(row)
     }
 

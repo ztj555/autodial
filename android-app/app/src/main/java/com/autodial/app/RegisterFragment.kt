@@ -69,8 +69,14 @@ class RegisterFragment : Fragment() {
          */
         fun saveVisitRecord(name: String, mobile: String, prefs: android.content.SharedPreferences) {
             try {
-                val existingJson = prefs.getString("visit_records", "[]") ?: "[]"
-                val arr = org.json.JSONArray(existingJson)
+                var existingJson = prefs.getString("visit_records", "[]") ?: "[]"
+                var arr: org.json.JSONArray
+                try {
+                    arr = org.json.JSONArray(existingJson)
+                } catch (_: Exception) {
+                    // 数据损坏时重置为空数组
+                    arr = org.json.JSONArray()
+                }
                 val obj = org.json.JSONObject().apply {
                     put("name", name)
                     put("mobile", mobile)
@@ -84,7 +90,10 @@ class RegisterFragment : Fragment() {
                     arr.remove(0)
                 }
                 prefs.edit().putString("visit_records", arr.toString()).apply()
-            } catch (_: Exception) {}
+                android.util.Log.d("AutoDial", "saveVisitRecord: $name $mobile")
+            } catch (e: Exception) {
+                android.util.Log.e("AutoDial", "saveVisitRecord failed: ${e.message}")
+            }
         }
 
         /**

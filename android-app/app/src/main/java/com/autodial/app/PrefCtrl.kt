@@ -78,6 +78,8 @@ class PrefCtrl(private val context: Context) {
 
     fun getCardOpacity(): Int = prefs.getInt("card_opacity", 100)
     fun setCardOpacity(value: Int) = prefs.edit().putInt("card_opacity", value).apply()
+    fun getCardBorder(): Boolean = prefs.getBoolean("card_border", true)
+    fun setCardBorder(show: Boolean) = prefs.edit().putBoolean("card_border", show).apply()
 
     fun isManuallyDisconnected() = prefs.getBoolean("manual_disconnect", false)
     fun setManuallyDisconnected(v: Boolean) = prefs.edit().putBoolean("manual_disconnect", v).apply()

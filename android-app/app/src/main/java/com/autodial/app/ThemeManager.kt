@@ -296,6 +296,7 @@ object ThemeManager {
         val ctx = view.context
         val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
         val opacity = prefs.getInt("card_opacity", 100)
+        val showBorder = prefs.getBoolean("card_border", true)
         val blendedBg2 = blendColors(colors.bg2, colors.bg, opacity)
         val blendedBg3 = blendColors(colors.bg3, colors.bg, opacity)
         val tag = view.tag?.toString() ?: ""
@@ -321,13 +322,21 @@ object ThemeManager {
                 cornerRadius = radiusDp * density
             }
         }
+        fun border(hex: String, opacityPct: Int): String = if (showBorder) blendColors(hex, colors.bg2, opacityPct) else ""
+
+        fun borderRadius(color: String, radiusDp: Float, borderHex: String, borderPct: Int): GradientDrawable {
+            val b = border(borderHex, borderPct)
+            return if (b.isEmpty()) roundedFill(color, radiusDp)
+                   else roundedFill(color, radiusDp, b, 1f)
+        }
+
         when (tag) {
             "bg" -> view.setBackgroundColor(parseColor(colors.bg))
             "bg2" -> {
-                view.background = roundedFill(blendedBg2, 22f, blendColors(colors.text2, colors.bg2, 76), 1f)
+                view.background = borderRadius(blendedBg2, 22f, colors.text2, 76)
             }
             "bg3" -> {
-                view.background = roundedFill(blendedBg3, 16f, blendColors(colors.text2, colors.bg3, 72), 1f)
+                view.background = borderRadius(blendedBg3, 16f, colors.text2, 72)
             }
             "text" -> if (view is TextView) { view.setTextColor(parseColor(colors.text)); tintDrawables(view, colors.text) }
             "text2" -> if (view is TextView) { view.setTextColor(parseColor(colors.text2)); tintDrawables(view, colors.text2) }
@@ -349,11 +358,8 @@ object ThemeManager {
             }
             "goldBtnText" -> if (view is TextView) {
                 view.setTextColor(parseColor(colors.gold))
-                view.background = roundedFill(
-                    blendColors(colors.bg3, colors.bg2, 30),
-                    14f,
-                    blendColors(colors.gold, colors.bg2, 48),
-                    1f
+                view.background = borderRadius(
+                    blendColors(colors.bg3, colors.bg2, 30), 14f, colors.gold, 48
                 )
             }
             "switchOn" -> {
@@ -374,21 +380,21 @@ object ThemeManager {
                 val targetColor = parseColor(blendedBg3)
                 val fromColor = (view.background as? ColorDrawable)?.color ?: targetColor
                 if (fromColor == targetColor) {
-                    view.background = roundedFill(blendedBg3, 999f, blendColors(colors.text2, colors.bg3, 64), 1f)
+                    view.background = borderRadius(blendedBg3, 999f, colors.text2, 64)
                 } else {
                     ValueAnimator.ofArgb(fromColor, targetColor).apply {
                         duration = 200
-                        addUpdateListener { view.background = roundedFill(String.format("#%06X", 0xFFFFFF and (it.animatedValue as Int)), 999f) }
+                        addUpdateListener { view.background = borderRadius(String.format("#%06X", 0xFFFFFF and (it.animatedValue as Int)), 999f, colors.text2, 64) }
                         start()
                     }
                 }
                 if (view is TextView) view.setTextColor(parseColor(colors.text2))
             }
             "topBar" -> {
-                view.background = roundedFill(blendedBg2, 24f, blendColors(colors.text2, colors.bg2, 76), 1f)
+                view.background = borderRadius(blendedBg2, 24f, colors.text2, 76)
             }
             "navBar" -> {
-                view.background = roundedFill(blendedBg2, 24f, blendColors(colors.text2, colors.bg2, 80), 1f)
+                view.background = borderRadius(blendedBg2, 24f, colors.text2, 80)
             }
             "heroCard" -> {
                 view.background = verticalGradient(
@@ -396,38 +402,34 @@ object ThemeManager {
                     blendedBg2,
                     26f
                 ).apply {
-                    setStroke((1f * density).toInt().coerceAtLeast(1), parseColor(blendColors(colors.gold, colors.bg2, 56)))
+                    if (showBorder) {
+                        setStroke((1f * density).toInt().coerceAtLeast(1), parseColor(blendColors(colors.gold, colors.bg2, 56)))
+                    }
                 }
             }
             "sectionHeader" -> {
-                view.background = roundedFill(blendedBg2, 20f, blendColors(colors.text2, colors.bg2, 78), 1f)
+                view.background = borderRadius(blendedBg2, 20f, colors.text2, 78)
             }
             "inputField" -> {
-                view.background = roundedFill(blendedBg3, 18f, blendColors(colors.text2, colors.bg3, 58), 1f)
+                view.background = borderRadius(blendedBg3, 18f, colors.text2, 58)
                 if (view is TextView) view.setTextColor(parseColor(colors.text))
             }
             "outlineBtn" -> {
-                view.background = roundedFill(blendedBg3, 14f, blendColors(colors.gold, colors.bg3, 56), 1f)
+                view.background = borderRadius(blendedBg3, 14f, colors.gold, 56)
                 if (view is TextView) view.setTextColor(parseColor(colors.goldLight))
             }
             "successBanner" -> {
-                view.background = roundedFill(
-                    blendColors(colors.green, colors.bg2, 82),
-                    18f,
-                    blendColors(colors.green, colors.bg2, 58),
-                    1f
+                view.background = borderRadius(
+                    blendColors(colors.green, colors.bg2, 82), 18f, colors.green, 58
                 )
             }
             "infoBanner" -> {
-                view.background = roundedFill(
-                    blendColors(colors.goldDark, colors.bg2, 82),
-                    18f,
-                    blendColors(colors.gold, colors.bg2, 62),
-                    1f
+                view.background = borderRadius(
+                    blendColors(colors.goldDark, colors.bg2, 82), 18f, colors.gold, 62
                 )
             }
             "chip" -> {
-                view.background = roundedFill(blendedBg3, 999f, blendColors(colors.text2, colors.bg3, 64), 1f)
+                view.background = borderRadius(blendedBg3, 999f, colors.text2, 64)
                 if (view is TextView) view.setTextColor(parseColor(colors.text2))
             }
             "divider" -> view.setBackgroundColor(parseColor(colors.bg3))

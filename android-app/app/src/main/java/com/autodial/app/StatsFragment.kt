@@ -251,7 +251,9 @@ class StatsFragment : Fragment() {
                 ))
             }
             visitRecords = records
-        } catch (_: Exception) {
+            android.util.Log.d("StatsFragment", "loadVisitStats: ${records.size} records from visit_records")
+        } catch (e: Exception) {
+            android.util.Log.e("StatsFragment", "loadVisitStats JSON parse error: ${e.message}")
             visitRecords = emptyList()
         }
 

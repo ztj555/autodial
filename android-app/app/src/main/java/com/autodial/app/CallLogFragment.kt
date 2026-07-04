@@ -86,11 +86,12 @@ class CallLogAdapter(
         holder.time.text = timeFormat.format(Date(record.time))
 
         // 通话类型：图标 + 文字标签
+        val accentColor = android.graphics.Color.parseColor(colors.goldLight)
         val (typeText, iconRes, tintColor) = when (record.type) {
-            CallLog.Calls.OUTGOING_TYPE -> Triple("拨出", R.drawable.ic_ph_phone_outgoing, android.graphics.Color.parseColor(colors.green))
-            CallLog.Calls.INCOMING_TYPE -> Triple("来电", R.drawable.ic_ph_phone_incoming, android.graphics.Color.parseColor(colors.green))
+            CallLog.Calls.OUTGOING_TYPE -> Triple("拨出", R.drawable.ic_ph_phone_outgoing, accentColor)
+            CallLog.Calls.INCOMING_TYPE -> Triple("来电", R.drawable.ic_ph_phone_incoming, accentColor)
             CallLog.Calls.MISSED_TYPE -> Triple("未接", R.drawable.ic_ph_phone_x, android.graphics.Color.parseColor(colors.red))
-            else -> Triple("", R.drawable.ic_ph_phone_outgoing, android.graphics.Color.parseColor(colors.green))
+            else -> Triple("", R.drawable.ic_ph_phone_outgoing, accentColor)
         }
         holder.callType.text = typeText
         val d = androidx.core.content.ContextCompat.getDrawable(holder.itemView.context, iconRes)
@@ -99,11 +100,12 @@ class CallLogAdapter(
         holder.callType.setTextColor(tintColor)
 
         // 通话状态文字 + 颜色
+        val textColor = android.graphics.Color.parseColor(colors.text)
         when (record.type) {
             CallLog.Calls.OUTGOING_TYPE -> {
                 if (record.duration > 0) {
                     holder.callStatus.text = formatDuration(record.duration)
-                    holder.callStatus.setTextColor(android.graphics.Color.parseColor(colors.green))
+                    holder.callStatus.setTextColor(textColor)
                 } else {
                     holder.callStatus.text = "未接通"
                     holder.callStatus.setTextColor(android.graphics.Color.parseColor(colors.red))
@@ -112,7 +114,7 @@ class CallLogAdapter(
             CallLog.Calls.INCOMING_TYPE -> {
                 if (record.duration > 0) {
                     holder.callStatus.text = formatDuration(record.duration)
-                    holder.callStatus.setTextColor(android.graphics.Color.parseColor(colors.green))
+                    holder.callStatus.setTextColor(textColor)
                 } else {
                     holder.callStatus.text = "未接听"
                     holder.callStatus.setTextColor(android.graphics.Color.parseColor(colors.red))
@@ -130,11 +132,7 @@ class CallLogAdapter(
 
         // SIM卡标识
         holder.simSlot.text = "卡${record.simSlot + 1}"
-        if (record.simSlot == 1) {
-            holder.simSlot.setTextColor(android.graphics.Color.parseColor(colors.green))
-        } else {
-            holder.simSlot.setTextColor(android.graphics.Color.parseColor(colors.gold))
-        }
+        holder.simSlot.setTextColor(android.graphics.Color.parseColor(if (record.simSlot == 1) colors.goldLight else colors.text2))
 
         // 长按弹出操作菜单
         holder.root.setOnLongClickListener {
