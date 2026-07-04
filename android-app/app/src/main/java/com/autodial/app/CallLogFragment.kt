@@ -434,6 +434,9 @@ class CallLogFragment : Fragment() {
         try { requireContext().unregisterReceiver(lastCallHintReceiver) } catch (_: Exception) {}
         try { requireContext().unregisterReceiver(connectionReceiver) } catch (_: Exception) {}
         try { requireContext().contentResolver.unregisterContentObserver(callLogObserver) } catch (_: Exception) {}
+        // 重置状态，避免 ViewPager 切回时因指纹匹配而跳过 adapter 绑定导致空白
+        lastDataFingerprint = ""
+        callLogAdapter = null
     }
 
     fun refreshIfNeeded() {
