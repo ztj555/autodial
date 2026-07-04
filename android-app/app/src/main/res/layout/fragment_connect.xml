@@ -7,6 +7,7 @@
     android:fillViewport="true">
 
     <LinearLayout
+        android:id="@+id/connectScrollContent"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -149,7 +150,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom"
                 android:gravity="center"
-                android:text="配对码↓"
+                android:text="↓你的系统手机号↓"
                 android:tag="text"
                 android:textSize="14sp"
                 android:textStyle="bold" />
@@ -177,7 +178,7 @@
             android:layout_marginTop="6dp"
             android:tag="bg2"
             android:background="#1A1D24"
-            android:hint="4位配对码 或 11位手机号"
+            android:hint="请填入11位手机号"
             android:textSize="26sp"
             android:letterSpacing="0.3"
             android:gravity="center"
@@ -192,7 +193,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="🔍 输入4位配对码或11位手机号开始搜索"
+            android:text="填入手机号后点击右上角连接按钮"
             android:tag="text2"
             android:textSize="12sp"
             android:visibility="visible" />
@@ -397,7 +398,7 @@
             <View android:layout_width="60dp" android:layout_height="1dp" android:background="#2A2A2A" />
         </LinearLayout>
 
-        <!-- ═══════════════ ▶ 高级设置（折叠卡片） ═══════════════ -->
+        <!-- ═══════════════ ▶ 跨屏连接设置（折叠卡片） ═══════════════ -->
         <LinearLayout
             android:id="@+id/advancedSectionHeader"
             android:layout_width="match_parent"
@@ -416,7 +417,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="▶ 高级设置"
+                android:text="▶ 跨屏连接设置"
                 android:tag="text"
                 android:textSize="16sp" />
 
@@ -654,7 +655,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ═══════════════ ▶ 其他设置（折叠卡片） ═══════════════ -->
+        <!-- ═══════════════ ▶ APP拨号设置（折叠卡片） ═══════════════ -->
         <LinearLayout
             android:id="@+id/otherSectionHeader"
             android:layout_width="match_parent"
@@ -673,7 +674,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="▶ 其他设置"
+                android:text="▶ APP拨号设置"
                 android:tag="text"
                 android:textSize="16sp" />
 

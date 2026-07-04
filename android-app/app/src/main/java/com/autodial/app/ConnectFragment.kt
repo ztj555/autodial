@@ -251,6 +251,9 @@ class ConnectFragment : Fragment() {
             // v8: 每日励志语
             motivationalText.text = getDailyMotivationalQuote()
 
+            // === 页面结构重组 ===
+            rearrangeSections(view)
+
             // 主题设置入口
             themeSettingRow.setOnClickListener {
                 showThemeDialog()
@@ -1635,10 +1638,99 @@ class ConnectFragment : Fragment() {
         }
     }
 
+    /** 页面结构重组：通道移入跨屏连接、电池移入拨号、主题/弹窗独立 */
+    private fun rearrangeSections(root: View) {
+        try {
+            // 1. 通道面板(channelSection) → 移入跨屏连接设置(advancedContent)最前面
+            val channel = root.findViewById<View>(R.id.channelSection)
+            val advContent = root.findViewById<LinearLayout>(R.id.advancedSectionContent)
+            if (channel != null && advContent != null) {
+                (channel.parent as? ViewGroup)?.removeView(channel)
+                advContent.addView(channel, 0)
+            }
+
+            // 2. 连接策略 → 移入advancedContent（目前已移入，确保在通道下方）
+            val strategyRow = root.findViewById<View>(R.id.connectionStrategyRow)
+            if (strategyRow != null) {
+                strategyRow.visibility = View.VISIBLE
+            }
+
+            // 3. 电池优化 → 从跨屏连接设置移到APP拨号设置
+            val batteryRow = root.findViewById<View>(R.id.batteryOptRow)
+            val otherContent = root.findViewById<LinearLayout>(R.id.otherSectionContent)
+            if (batteryRow != null && otherContent != null) {
+                (batteryRow.parent as? ViewGroup)?.removeView(batteryRow)
+                val dialModeIdx = otherContent.indexOfChild(root.findViewById(R.id.dialModeRow))
+                otherContent.addView(batteryRow, if (dialModeIdx >= 0) dialModeIdx + 1 else 0)
+            }
+
+            // 4. 创建"主题/弹窗设置"折叠面板，移入主题行+复制弹窗行
+            val themeRow = root.findViewById<View>(R.id.themeSettingRow)
+            val copyToastRow = root.findViewById<View>(R.id.copyToastRow)
+            val scrollContent = root.findViewById<LinearLayout>(R.id.connectScrollContent) ?: return
+            val usageGuideIdx = scrollContent.indexOfChild(root.findViewById(R.id.usageGuideHeader))
+
+            if (themeRow != null && copyToastRow != null) {
+                val ctx = root.context
+                val density = ctx.resources.displayMetrics.density
+
+                // 区头
+                val header = TextView(ctx).apply {
+                    text = "▶ 主题/弹窗设置"
+                    setTextColor(Color.parseColor(ThemeManager.getColors(ctx).text))
+                    textSize = 14f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setPadding((14 * density).toInt(), (16 * density).toInt(), (14 * density).toInt(), (4 * density).toInt())
+                }
+
+                // 内容容器
+                val content = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    visibility = View.GONE
+                    id = View.generateViewId()
+                }
+
+                // 折叠箭头
+                val arrow = TextView(ctx).apply {
+                    text = "▸"
+                    setTextColor(Color.parseColor("#666666"))
+                    textSize = 12f
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(0, (16 * density).toInt(), (16 * density).toInt(), (4 * density).toInt())
+                }
+
+                val headerRow = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    addView(header, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(arrow)
+                    setOnClickListener {
+                        val show = content.visibility != View.VISIBLE
+                        content.visibility = if (show) View.VISIBLE else View.GONE
+                        arrow.text = if (show) "▾" else "▸"
+                    }
+                }
+
+                // 移走主题行和复制弹窗行
+                (themeRow.parent as? ViewGroup)?.removeView(themeRow)
+                (copyToastRow.parent as? ViewGroup)?.removeView(copyToastRow)
+                content.addView(themeRow)
+                content.addView(copyToastRow)
+
+                // 插入到使用说明之前
+                val insertIdx = if (usageGuideIdx >= 0) usageGuideIdx else scrollContent.childCount
+                scrollContent.addView(headerRow, insertIdx)
+                scrollContent.addView(content, insertIdx + 1)
+
+                // 更新箭头索引偏移
+                val delta = 2
+                scrollContent.indexOfChild(root.findViewById(R.id.usageGuideHeader))
+            }
+        } catch (_: Exception) {}
+    }
+
     /** v7: 更新通道状态面板 */
     private fun updateChannelSection() {
-        if (!isAdded) return
-        try {
             val colors = ThemeManager.getColors(requireContext())
             val lanOk = DialService.isLanConnected
             val cloudOk = DialService.isCloudConnected
