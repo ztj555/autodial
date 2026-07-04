@@ -37,22 +37,25 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/settingsContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
             android:gravity="center_horizontal">
 
         <!-- ═══════════════ 状态大盘（固定顶栏） ═══════════════ -->
         <LinearLayout
             android:id="@+id/statusDashboard"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="64dp"
             android:tag="bg2"
             android:background="#1A1D24"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="18dp">
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp">
 
             <FrameLayout
                 android:layout_width="28dp"
@@ -142,7 +145,7 @@
         <!-- ═══════════════ 配对码 ═══════════════ -->
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="36dp"
             android:layout_marginTop="20dp">
 
             <TextView
@@ -222,54 +225,13 @@
                 android:textSize="13sp" />
         </LinearLayout>
 
-        <!-- 连接按钮（未连接时的大按钮） -->
-        <LinearLayout
-            android:id="@+id/connectBtn"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="12dp"
-            android:tag="goldBtn"
-            android:background="#C9A84C"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="连接"
-                android:textColor="#111318"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
-        <!-- ═══════════════ 连接通道 ═══════════════ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="14dp">
-
-            <TextView
-                android:id="@+id/connectSectionTitle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="当前连接状态↓"
-                android:tag="text"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-        </LinearLayout>
-
+        <!-- ═══════════════ 连接通道状态 ═══════════════ -->
         <LinearLayout
             android:id="@+id/channelSection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
             android:tag="bg2"
-            android:background="#1A1D24"
             android:orientation="vertical"
             android:padding="4dp">
 
@@ -382,20 +344,25 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ═══ 分隔装饰 ═══ -->
+        <!-- 连接按钮（未连接时的大按钮） -->
         <LinearLayout
+            android:id="@+id/connectBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:layout_marginBottom="2dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:tag="goldBtn"
+            android:background="#C9A84C"
             android:gravity="center"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
 
-            <View android:layout_width="60dp" android:layout_height="1dp" android:background="#2A2A2A" />
-            <View android:layout_width="6dp" android:layout_height="6dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="#2A2A2A" android:rotation="45" />
-            <View android:layout_width="4dp" android:layout_height="4dp" android:layout_marginEnd="8dp" android:background="#222222" android:rotation="45" />
-            <View android:layout_width="3dp" android:layout_height="3dp" android:layout_marginEnd="8dp" android:background="#1A1A1A" android:rotation="45" />
-            <View android:layout_width="60dp" android:layout_height="1dp" android:background="#2A2A2A" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="连接"
+                android:textColor="#111318"
+                android:textSize="16sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <!-- ═══════════════ ▶ 跨屏连接设置（折叠卡片） ═══════════════ -->
@@ -403,7 +370,7 @@
             android:id="@+id/advancedSectionHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="40dp"
+            android:layout_marginTop="20dp"
             android:tag="bg2"
             android:background="#1A1D24"
             android:gravity="center_vertical"

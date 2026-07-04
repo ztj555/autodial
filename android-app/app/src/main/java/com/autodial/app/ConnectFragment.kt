@@ -1353,7 +1353,7 @@ class ConnectFragment : Fragment() {
 
     /** v4: 卡片透明度调节行 (0→25→50→75→100) */
     private fun addCardOpacityRow(root: View) {
-        val parent = root.findViewById<View>(R.id.exportLogRow).parent as? ViewGroup ?: return
+        val parent = root.findViewById<ViewGroup>(R.id.settingsContent) ?: return
         val colors = ThemeManager.getColors(requireContext())
         val values = intArrayOf(0, 25, 50, 75, 100)
 
@@ -1400,7 +1400,7 @@ class ConnectFragment : Fragment() {
 
     /** 卡片边框开关：开启=显示卡片边框，关闭=隐藏所有卡片边框 */
     private fun addCardBorderRow(root: View) {
-        val parent = root.findViewById<View>(R.id.exportLogRow).parent as? ViewGroup ?: return
+        val parent = root.findViewById<ViewGroup>(R.id.settingsContent) ?: return
         val colors = ThemeManager.getColors(requireContext())
 
         val row = android.widget.LinearLayout(requireContext()).apply {
@@ -1435,7 +1435,7 @@ class ConnectFragment : Fragment() {
 
     /** 弹窗通知分组 */
     private fun addNotifySection(root: View) {
-        val parent = root.findViewById<View>(R.id.exportLogRow).parent as? ViewGroup ?: return
+        val parent = root.findViewById<ViewGroup>(R.id.settingsContent) ?: return
         val colors = ThemeManager.getColors(requireContext())
 
         // 分组标题
