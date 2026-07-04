@@ -1731,6 +1731,8 @@ class ConnectFragment : Fragment() {
 
     /** v7: 更新通道状态面板 */
     private fun updateChannelSection() {
+        if (!isAdded) return
+        try {
             val colors = ThemeManager.getColors(requireContext())
             val lanOk = DialService.isLanConnected
             val cloudOk = DialService.isCloudConnected
