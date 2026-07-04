@@ -1625,7 +1625,6 @@ class ConnectFragment : Fragment() {
     }
 
     // ========== v3: JWT 代码已移除（2026-07-04），统一使用 PIN 认证 ==========
-    }
 
     /** 将 ws://host:port 转为 http://host:apiPort，保留非标准端口不做替换 */
     private fun wsToHttp(serverUrl: String, wsPort: String = "", apiPort: String = ""): String {
