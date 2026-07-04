@@ -560,7 +560,7 @@ class RegisterFragment : Fragment() {
             handler.postDelayed({
                 if (isAdded) setSubmittingState(false)
             }, 800)
-            Toast.makeText(requireContext(), result.message, Toast.LENGTH_LONG).show()
+            NotifyHelper.registerToast(requireContext(), result.message, Toast.LENGTH_LONG)
         }
     }
 

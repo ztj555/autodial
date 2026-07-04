@@ -252,10 +252,14 @@ class CallLogFragment : Fragment() {
             if (isAdded) {
                 lastCallHintText.text = hint
                 lastCallHintBanner.visibility = View.VISIBLE
-                // 10秒后自动隐藏
-                refreshHandler.postDelayed({
-                    if (isAdded) lastCallHintBanner.visibility = View.GONE
-                }, 10_000)
+                // 自动隐藏时间可通过设置页配置（默认10秒，0=一直显示）
+                val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                val durationSec = prefs.getInt("last_call_hint_duration", 10)
+                if (durationSec > 0) {
+                    refreshHandler.postDelayed({
+                        if (isAdded) lastCallHintBanner.visibility = View.GONE
+                    }, durationSec * 1000L)
+                }
             }
         }
     }
@@ -303,7 +307,7 @@ class CallLogFragment : Fragment() {
                         requireActivity().startService(Intent(requireActivity(), DialService::class.java).apply {
                             action = "CONNECT"; putExtra("pin", pin)
                         })
-                        Toast.makeText(requireActivity(), "正在重连...", Toast.LENGTH_SHORT).show()
+                        NotifyHelper.connToast(requireActivity(), "正在重连...", Toast.LENGTH_SHORT)
                     } else {
                         Toast.makeText(requireActivity(), "请先在连接页输入配对码", Toast.LENGTH_SHORT).show()
                     }
@@ -326,7 +330,7 @@ class CallLogFragment : Fragment() {
                         requireActivity().startService(Intent(requireActivity(), DialService::class.java).apply {
                             action = "CONNECT"; putExtra("pin", pin)
                         })
-                        Toast.makeText(requireActivity(), "正在连接...", Toast.LENGTH_SHORT).show()
+                        NotifyHelper.connToast(requireActivity(), "正在连接...", Toast.LENGTH_SHORT)
                     } else {
                         Toast.makeText(requireActivity(), "请先在连接页输入配对码", Toast.LENGTH_SHORT).show()
                     }

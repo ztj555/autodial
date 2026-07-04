@@ -421,6 +421,7 @@ class ConnectFragment : Fragment() {
             // v4: 卡片透明度调节
             addCardOpacityRow(view)
             addCardBorderRow(view)
+            addNotifySection(view)
 
             // 应用主题
             applyTheme()
@@ -930,7 +931,7 @@ class ConnectFragment : Fragment() {
                     "pin_wrong" -> {
                         statusText.text = "配对码错误"
                         statusText.setTextColor(Color.parseColor(colors.red))
-                        Toast.makeText(requireActivity(), "配对码不正确，请重新输入！", Toast.LENGTH_LONG).show()
+                        NotifyHelper.connToast(requireActivity(), "配对码不正确，请重新输入！", Toast.LENGTH_LONG)
                         discoveryHint.text = "⚠️ 配对码错误，请重新输入"
                         discoveryHint.visibility = View.VISIBLE
                     }
@@ -942,7 +943,7 @@ class ConnectFragment : Fragment() {
                     "connection_failed" -> {
                         statusText.text = "连接失败"
                         statusText.setTextColor(Color.parseColor(colors.red))
-                        Toast.makeText(requireActivity(), "无法连接到电脑，请检查：\n1. 电脑端是否已打开\n2. 手机和电脑是否在同一WiFi\n3. 电脑防火墙是否放行了端口", Toast.LENGTH_LONG).show()
+                        NotifyHelper.connToast(requireActivity(), "无法连接到电脑，请检查：\n1. 电脑端是否已打开\n2. 手机和电脑是否在同一WiFi\n3. 电脑防火墙是否放行了端口", Toast.LENGTH_LONG)
                         discoveryHint.text = "⚠️ 连接失败，请检查电脑端是否已打开且在同一网络"
                         discoveryHint.visibility = View.VISIBLE
                     }
@@ -1436,6 +1437,96 @@ class ConnectFragment : Fragment() {
                 text = if (newVal) "ON" else "OFF"
                 ThemeManager.applyToView(this, colors)
                 ThemeManager.notifyRefresh()
+            }
+        }
+        row.addView(toggle)
+        parent.addView(row)
+    }
+
+    /** 弹窗通知分组 */
+    private fun addNotifySection(root: View) {
+        val parent = root.findViewById<View>(R.id.exportLogRow).parent as? ViewGroup ?: return
+        val colors = ThemeManager.getColors(requireContext())
+
+        // 分组标题
+        val header = TextView(requireContext()).apply {
+            text = "通知弹窗"
+            textSize = 13f; setTextColor(Color.parseColor(colors.goldLight))
+            setPadding(0, 24, 0, 8)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        parent.addView(header)
+
+        // 连接状态通知
+        addNotifyToggle(parent, colors, "连接状态通知",
+            { prefCtrl.getNotifyConnState() },
+            { prefCtrl.setNotifyConnState(it) })
+
+        // 登记结果通知
+        addNotifyToggle(parent, colors, "登记结果通知",
+            { prefCtrl.getNotifyRegister() },
+            { prefCtrl.setNotifyRegister(it) })
+
+        // 上次通话提示时长
+        val opts = intArrayOf(5, 10, 30, 0)
+        val labels = arrayOf("5秒", "10秒", "30秒", "一直")
+        val cur = prefCtrl.getLastCallHintDuration()
+
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 12, 0, 0)
+        }
+        val label = TextView(requireContext()).apply {
+            text = "上次通话提示"
+            textSize = 14f; setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        row.addView(label)
+
+        fun refresh() {
+            val sel = prefCtrl.getLastCallHintDuration()
+            for (i in 0 until opts.size) {
+                val b = row.getChildAt(i + 1) as? TextView ?: continue
+                val active = opts[i] == sel
+                b.setTextColor(Color.parseColor(if (active) colors.bg else colors.gold))
+                b.setBackgroundColor(Color.parseColor(if (active) colors.gold else colors.bg3))
+            }
+        }
+        for (i in opts.indices) {
+            val btn = TextView(requireContext()).apply {
+                text = labels[i]; textSize = 11f; setPadding(10, 5, 10, 5)
+                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
+                setOnClickListener { prefCtrl.setLastCallHintDuration(opts[i]); refresh() }
+            }
+            row.addView(btn)
+        }
+        refresh()
+        parent.addView(row)
+    }
+
+    private fun addNotifyToggle(parent: ViewGroup, colors: ThemeColors, title: String,
+                                 get: () -> Boolean, set: (Boolean) -> Unit) {
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 10, 0, 0)
+        }
+        val label = TextView(requireContext()).apply {
+            text = title; textSize = 14f; setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        row.addView(label)
+        val toggle = TextView(requireContext()).apply {
+            textSize = 12f; setPadding(10, 6, 10, 6); text = if (get()) "ON" else "OFF"
+            tag = "chip"
+            ThemeManager.applyToView(this, colors)
+            setOnClickListener {
+                val v = !get(); set(v)
+                text = if (v) "ON" else "OFF"
+                ThemeManager.applyToView(this, colors)
             }
         }
         row.addView(toggle)
