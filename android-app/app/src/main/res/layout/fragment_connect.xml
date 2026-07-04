@@ -956,31 +956,59 @@
 
         </LinearLayout>
 
-        <!-- ═══════════════ 主题/弹窗设置 ═══════════════ -->
-        <TextView
+        <!-- ═══════════════ ▶ 主题/弹窗（折叠卡片） ═══════════════ -->
+        <LinearLayout
+            android:id="@+id/themeSectionHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginStart="14dp"
-            android:tag="goldLight"
-            android:text="主题/弹窗"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <!-- 主题 -->
-        <LinearLayout
-            android:id="@+id/themeSettingRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:tag="bg2"
             android:background="#1A1D24"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
-            android:paddingTop="12dp"
+            android:paddingTop="14dp"
             android:paddingEnd="16dp"
-            android:paddingBottom="12dp">
+            android:paddingBottom="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="▶ 主题/弹窗"
+                android:tag="text"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/themeSectionArrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▸"
+                android:tag="text"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/themeSectionContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- 主题 -->
+            <LinearLayout
+                android:id="@+id/themeSettingRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:tag="bg2"
+                android:background="#1A1D24"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="12dp">
 
             <TextView
                 android:id="@+id/themeLabel"
@@ -1037,6 +1065,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" />
+
+        </LinearLayout>
+        <!-- 关闭 themeSectionContent -->
 
         <!-- 使用说明书（折叠卡片） -->
         <LinearLayout

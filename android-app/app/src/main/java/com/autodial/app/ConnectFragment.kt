@@ -236,6 +236,17 @@ class ConnectFragment : Fragment() {
                 usageGuideContent.visibility = if (show) View.VISIBLE else View.GONE
                 usageGuideArrow.text = if (show) "▾" else "▸"
             }
+            // 主题/弹窗折叠（默认折叠）
+            val themeHeader = view.findViewById<View>(R.id.themeSectionHeader)
+            val themeArrow = view.findViewById<TextView>(R.id.themeSectionArrow)
+            val themeContent = view.findViewById<View>(R.id.themeSectionContent)
+            themeContent.visibility = View.GONE
+            themeArrow.text = "▸"
+            themeHeader.setOnClickListener {
+                val show = themeContent.visibility != View.VISIBLE
+                themeContent.visibility = if (show) View.VISIBLE else View.GONE
+                themeArrow.text = if (show) "▾" else "▸"
+            }
             // v8: 每日励志语
             motivationalText.text = getDailyMotivationalQuote()
 
