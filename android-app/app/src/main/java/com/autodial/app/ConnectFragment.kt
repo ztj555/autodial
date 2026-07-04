@@ -267,16 +267,6 @@ class ConnectFragment : Fragment() {
             // 读取保存的配对码
             pinInput.setText(prefCtrl.getPin())
 
-            // ========== v3: JWT 自动登录 ==========
-            val jwtToken = prefCtrl.getJwtToken()
-            if (jwtToken.isNotEmpty()) {
-                val phone = prefCtrl.getLoginPhone()
-                pinInput.setText(phone)
-                pinInput.hint = "已登录: $phone"
-                statusText.text = "已登录 · 点击连接"
-                // 不自动连接，用户仍需点「连接」按钮
-            }
-
             // v4: 绑定云管理回调
             cloudCtrl.onServerListChanged = { updateCloudServerCurrentText() }
 
@@ -1129,13 +1119,6 @@ class ConnectFragment : Fragment() {
                             Toast.makeText(requireActivity(), "请先在连接页输入配对码", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
-                        // v9 fix: 切换服务器时清除旧 JWT（不同服务器的 JWT secret 不同），
-                        // 让 phone_hello 走 PIN 模式，避免 token 验证失败
-                        val oldCloud = prefCtrl.getCloudServer()
-                        if (oldCloud.isNotEmpty() && oldCloud != server) {
-                            prefCtrl.setJwtToken("")
-                            prefCtrl.setRefreshToken("")
-                        }
                         requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE).edit()
                             .putString("cloud_server", server)
                             .putString("connection_strategy", "auto")
@@ -1641,122 +1624,7 @@ class ConnectFragment : Fragment() {
         return motivationalQuotes[index]
     }
 
-    // ========== v3: JWT 登录对话框 ==========
-
-    private fun doAutoLogin(phone: String, onResult: ((Boolean) -> Unit)? = null) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-                val json = org.json.JSONObject().apply { put("phone", phone) }
-                val body = okhttp3.RequestBody.create("application/json".toMediaType(), json.toString())
-                val apiUrl = getCloudApiUrl()
-                val request = okhttp3.Request.Builder()
-                    .url("$apiUrl/api/v1/auth/auto-login")
-                    .post(body).build()
-                android.util.Log.d("AutoDial", "auto-login URL: $apiUrl/api/v1/auth/auto-login")
-
-                val resp = client.newCall(request).execute()
-                val data = org.json.JSONObject(resp.body?.string() ?: "{}")
-                val ok = data.optBoolean("ok")
-
-                if (ok) {
-                    val tokenData = data.optJSONObject("data") ?: org.json.JSONObject()
-                    prefCtrl.setJwtToken(tokenData.optString("token", ""))
-                    prefCtrl.setRefreshToken(tokenData.optString("refresh_token", ""))
-                    prefCtrl.setLoginPhone(phone)
-                    withContext(Dispatchers.Main) {
-                        pinInput.setText(phone)
-                        pinInput.hint = "已登录: $phone"
-                        Toast.makeText(requireActivity(), "登录成功！点击连接即可", Toast.LENGTH_SHORT).show()
-                        onResult?.invoke(true)
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(requireActivity(), "登录失败: ${data.optString("error", "未知错误")}", Toast.LENGTH_LONG).show()
-                        onResult?.invoke(false)
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AutoDial", "auto-login failed: ${e::class.java.name}: ${e.message}", e)
-                val errMsg = when {
-                    e is java.net.ConnectException -> "无法连接服务器 ${getCloudApiUrl()}"
-                    e is java.net.SocketTimeoutException -> "连接超时，请检查网络"
-                    e is java.net.UnknownHostException -> "无法解析服务器地址"
-                    else -> "网络错误: ${e::class.java.simpleName}"
-                }
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(requireActivity(), errMsg, Toast.LENGTH_LONG).show()
-                    onResult?.invoke(false)
-                }
-            }
-        }
-    }
-
-    fun showLoginDialog(phone: String = "", onResult: ((Boolean) -> Unit)? = null) {
-        // 如果已有手机号，直接调auto-login，不弹窗
-        if (phone.length == 11 && phone.startsWith("1")) {
-            doAutoLogin(phone, onResult)
-            return
-        }
-
-        val builder = AlertDialog.Builder(requireActivity())
-        builder.setTitle("AutoDial v3 登录")
-        // ... 弹窗部分保持不变 ...
-
-        val layout = LinearLayout(requireActivity()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 24, 48, 24)
-        }
-        val phoneInput = EditText(requireActivity()).apply {
-            hint = "手机号"
-            inputType = android.text.InputType.TYPE_CLASS_PHONE
-            setText(prefCtrl.getLoginPhone())
-        }
-        val pwInput = EditText(requireActivity()).apply {
-            hint = "密码（任意输入即可）"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
-        layout.addView(phoneInput)
-        layout.addView(pwInput)
-        builder.setView(layout)
-
-        builder.setPositiveButton("登录") { _, _ ->
-            val phone = phoneInput.text.toString().trim()
-            if (phone.length != 11 || !phone.startsWith("1")) {
-                Toast.makeText(requireActivity(), "手机号格式错误", Toast.LENGTH_SHORT).show()
-                onResult?.invoke(false)
-                return@setPositiveButton
-            }
-            doAutoLogin(phone, onResult)
-        }
-        builder.setNegativeButton("取消", null)
-        builder.show()
-    }
-
-    /**
-     * 获取云中继 REST API 地址（HTTP），用于 auto-login / 状态查询。
-     * 优先使用用户当前指定的服务器（cloud_server，即"连"按钮或手动输入），
-     * 再兜底服务器列表。
-     */
-    private fun getCloudApiUrl(): String {
-        // v9 fix: 优先使用当前正在连接的服务器（"连"按钮写入的 cloud_server），
-        // 避免 auto-login 打到外部默认服务器导致 JWT 签名与本机云端不匹配。
-        val currentServer = prefCtrl.getCloudServer()
-        if (currentServer.isNotEmpty()) {
-            return wsToHttp(currentServer, "35440", "35441")
-        }
-        // 兜底：从服务器列表取第一个
-        val cloudCtrl = CloudCtrl(requireContext())
-        val servers = cloudCtrl.getServerList()
-        val firstServer = servers.firstOrNull { it.isNew } ?: servers.firstOrNull { it.isOld }
-        if (firstServer != null) {
-            return wsToHttp(firstServer.url, "35440", "35441")
-        }
-        return "http://192.168.3.75:35441"
+    // ========== v3: JWT 代码已移除（2026-07-04），统一使用 PIN 认证 ==========
     }
 
     /** 将 ws://host:port 转为 http://host:apiPort，保留非标准端口不做替换 */

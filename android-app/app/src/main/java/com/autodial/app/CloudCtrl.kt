@@ -19,7 +19,7 @@ import java.net.URL
  * your-server.com:35440
  * ```
  * - [old]: 4位PIN配对的老云端（端口通常35430）
- * - [new]: 11位手机号JWT认证的新云端（端口通常35440）
+ * - [new]: 11位PIN的新云端（端口通常35430，JWT已废弃）
  * - 无 [old]/[new] 标签的旧格式文件，全部默认归类为 [old]
  */
 class CloudCtrl(private val context: Context) {
