@@ -41,7 +41,6 @@ class ConnectFragment : Fragment() {
     private lateinit var connectionBanner: LinearLayout
     private lateinit var bannerText: TextView
     private lateinit var pinInput: EditText
-    private lateinit var connectBtn: View
     private lateinit var connectBtnText: TextView
     private lateinit var disconnectBtn: TextView
     private lateinit var discoveryHint: TextView
@@ -173,7 +172,6 @@ class ConnectFragment : Fragment() {
             connectionBanner = view.findViewById(R.id.connectionBanner)
             bannerText = view.findViewById(R.id.bannerText)
             pinInput = view.findViewById(R.id.pinInput)
-            connectBtn = view.findViewById(R.id.connectBtn)
             connectBtnText = view.findViewById(R.id.connectBtnText)
             connectionMode = view.findViewById(R.id.connectionMode)
             discoveryHint = view.findViewById(R.id.discoveryHint)
@@ -189,7 +187,6 @@ class ConnectFragment : Fragment() {
             previewBg2 = view.findViewById(R.id.previewBg2)
             previewText = view.findViewById(R.id.previewText)
 
-            connectBtn.setOnClickListener { handleConnectClick() }
             connectBtnText.setOnClickListener { handleConnectClick() }
 
             // v6: 断开按钮（红色描边）
@@ -901,8 +898,8 @@ class ConnectFragment : Fragment() {
                 discoveryHint.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
-                connectBtn.visibility = View.GONE
-                disconnectBtn.visibility = View.VISIBLE
+                connectBtnText.visibility = View.GONE
+                disconnectBtnText.visibility = View.VISIBLE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
                 stopPulseAnimation()
@@ -912,8 +909,8 @@ class ConnectFragment : Fragment() {
                 connectionMode.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState(if (manual) "manual_disconnect" else "disconnected")
-                connectBtn.visibility = View.GONE
-                disconnectBtn.visibility = View.GONE
+                connectBtnText.visibility = View.GONE
+                disconnectBtnText.visibility = View.GONE
 
                 when (reason) {
                     "pin_wrong" -> {
@@ -1643,7 +1640,6 @@ class ConnectFragment : Fragment() {
                 otherContent.addView(batteryRow, if (insertIdx >= 0) insertIdx + 1 else 0)
             }
         } catch (_: Exception) {}
-    }
     }
 
     /** v7: 拨号模式选择对话框 */
