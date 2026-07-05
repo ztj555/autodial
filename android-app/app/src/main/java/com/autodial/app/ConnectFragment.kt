@@ -899,7 +899,7 @@ class ConnectFragment : Fragment() {
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
                 connectBtnText.visibility = View.GONE
-                disconnectBtnText.visibility = View.VISIBLE
+                disconnectBtn.visibility = View.VISIBLE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
                 stopPulseAnimation()
@@ -910,7 +910,7 @@ class ConnectFragment : Fragment() {
                 foundPCInfo.visibility = View.GONE
                 updateBtnState(if (manual) "manual_disconnect" else "disconnected")
                 connectBtnText.visibility = View.GONE
-                disconnectBtnText.visibility = View.GONE
+                disconnectBtn.visibility = View.GONE
 
                 when (reason) {
                     "pin_wrong" -> {
@@ -1711,6 +1711,7 @@ class ConnectFragment : Fragment() {
             !url.startsWith("http://") && !url.startsWith("https://") -> url = "http://$url"
         }
         return url.removeSuffix("/")
+    }
 
     /** 更新通道状态（局域网/云中转） */
     private fun updateChannelStatus() {
