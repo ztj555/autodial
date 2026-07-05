@@ -52,7 +52,6 @@ class ConnectFragment : Fragment() {
     private lateinit var batteryOptBtn: TextView
     private lateinit var batteryOptOk: TextView
     private lateinit var themeSettingRow: View
-    private lateinit var themeCurrentName: TextView
     private lateinit var previewGold: View
     private lateinit var previewBg: View
     private lateinit var previewBg2: View
@@ -183,7 +182,6 @@ class ConnectFragment : Fragment() {
             batteryOptBtn = view.findViewById(R.id.batteryOptBtn)
             batteryOptOk = view.findViewById(R.id.batteryOptOk)
             themeSettingRow = view.findViewById(R.id.themeSettingRow)
-            themeCurrentName = view.findViewById(R.id.themeCurrentName)
             previewGold = view.findViewById(R.id.previewGold)
             previewBg = view.findViewById(R.id.previewBg)
             previewBg2 = view.findViewById(R.id.previewBg2)
@@ -1528,9 +1526,6 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         val theme = ThemeManager.getThemeById(ThemeManager.loadThemeId(requireContext()))
-        val mode = ThemeManager.loadMode(requireContext())
-        val modeName = ThemeManager.MODES.find { it.key == mode }?.name ?: "暗夜"
-        themeCurrentName.text = "${theme.name} · $modeName"
         previewGold.setBackgroundColor(Color.parseColor(colors.gold))
         previewBg.setBackgroundColor(Color.parseColor(colors.bg))
         previewBg2.setBackgroundColor(Color.parseColor(colors.bg2))
