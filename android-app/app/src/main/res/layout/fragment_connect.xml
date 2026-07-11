@@ -73,7 +73,7 @@
             android:tag="heroCard"
             android:background="#1A1D24"
             android:gravity="center_vertical"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             android:paddingStart="16dp"
             android:paddingTop="14dp"
             android:paddingEnd="16dp"
@@ -86,21 +86,21 @@
                 android:orientation="horizontal">
 
             <FrameLayout
-                android:layout_width="28dp"
-                android:layout_height="28dp">
+                android:layout_width="44dp"
+                android:layout_height="44dp">
 
                 <ImageView
                     android:id="@+id/pulseRing"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:layout_gravity="center"
                     android:src="@drawable/pulse_ring_bg"
                     android:alpha="0" />
 
                 <ImageView
                     android:id="@+id/statusDot"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
                     android:layout_gravity="center"
                     android:src="@drawable/dot_gray" />
             </FrameLayout>

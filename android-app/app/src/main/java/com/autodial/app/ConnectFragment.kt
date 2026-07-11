@@ -358,15 +358,12 @@ class ConnectFragment : Fragment() {
             view.findViewById<View>(R.id.cloudServerManageRow).setOnClickListener {
                 CloudServerSheet(requireActivity()) {
                     updateCloudServerCurrentText()
-                    refreshCloudServerList()
                 }.show()
             }
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
             cloudServerTestBtn.setOnClickListener { testAllServers() }
             cloudServerSyncBtn.setOnClickListener { syncFromPC() }
             cloudServerFetchBtn.setOnClickListener { fetchServersFromNetwork() }
-            refreshCloudServerList()
-            autoTestServersOnStart()
 
             // 拨号自动复制号码开关
             autoCopySwitch = view.findViewById(R.id.autoCopySwitch)
