@@ -268,13 +268,9 @@
             android:paddingTop="12dp"
             android:paddingBottom="12dp">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="▶ 跨屏连接设置"
-                android:tag="text"
-                android:textSize="14sp" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tint="#6685A6" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="跨屏连接设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自动 · LAN 优先" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/advancedArrow"
@@ -584,13 +580,9 @@
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="▶ APP拨号设置"
-                android:tag="text"
-                android:textSize="16sp" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_phone_outgoing" android:tint="#6685A6" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="APP 拨号设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="智能轮选 · 动画开启" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/otherArrow"
@@ -1012,13 +1004,9 @@
             android:paddingEnd="16dp"
             android:paddingBottom="14dp">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="▶ 主题/弹窗设置"
-                android:tag="text"
-                android:textSize="16sp" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_palette" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="主题 / 弹窗设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="天空蓝 · 亮白" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/themeSectionArrow"
@@ -1125,16 +1113,9 @@
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="使用说明"
-                android:drawableStart="@drawable/ic_ph_book_open_text"
-                android:drawablePadding="6dp"
-                android:textColor="#C9A84C"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_book_open_text" android:tint="#6685A6" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="使用说明" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看操作指南" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/usageGuideArrow"
