@@ -87,7 +87,7 @@
             android:orientation="vertical"
             android:gravity="end"
             android:layout_marginEnd="4dp"
-            android:visibility="gone">
+            android:visibility="visible">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -98,7 +98,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="今日财运: "
+                    android:text="今日财运 "
                     android:tag="text"
                     android:textSize="11sp" />
 
@@ -131,7 +131,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0分"
-                    android:textColor="#A78BFA"
+                    android:textColor="#7B2CBF"
                     android:textSize="14sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace" />
@@ -152,7 +152,8 @@
         android:paddingStart="12dp"
         android:paddingTop="8dp"
         android:paddingEnd="12dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="8dp"
+        android:visibility="gone">
 
         <TextView
             android:layout_width="wrap_content"
