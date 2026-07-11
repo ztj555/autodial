@@ -303,7 +303,9 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🖥 局域网"
+                    android:text="局域网"
+                    android:drawableStart="@drawable/ic_ph_wifi_high"
+                    android:drawablePadding="8dp"
                     android:tag="text"
                     android:textSize="13sp" />
 
@@ -333,7 +335,9 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="☁ 云中转"
+                    android:text="云中转"
+                    android:drawableStart="@drawable/ic_ph_cloud"
+                    android:drawablePadding="8dp"
                     android:tag="text"
                     android:textSize="13sp" />
 
@@ -696,7 +700,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号模式"
                         android:tag="text"
-                        android:textSize="16sp" />
+                    android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/dialModeCurrent"
@@ -748,7 +752,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号自动复制号码"
                         android:tag="text"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -800,7 +804,7 @@
                         android:layout_height="wrap_content"
                         android:text="复制号码弹窗提醒"
                         android:tag="text"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -852,7 +856,7 @@
                         android:layout_height="wrap_content"
                         android:text="拨号动画效果"
                         android:tag="text"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/dialAnimationDesc"
@@ -908,7 +912,7 @@
                         android:layout_height="wrap_content"
                         android:text="动画显示文字"
                         android:tag="text"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/dialAnimationTextPreview"
@@ -962,7 +966,7 @@
                         android:layout_height="wrap_content"
                         android:text="导出日志"
                         android:tag="text"
-                        android:textSize="16sp" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/exportLogInfo"

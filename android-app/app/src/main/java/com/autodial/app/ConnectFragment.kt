@@ -720,40 +720,33 @@ class ConnectFragment : Fragment() {
     private fun updateAutoConnectUI(enabled: Boolean) {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
-        if (enabled) {
-            autoConnectSwitch.text = "开"
-            autoConnectSwitch.setBackgroundColor(Color.parseColor(colors.primary))
-        } else {
-            autoConnectSwitch.text = "关"
-            autoConnectSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
-        }
+        renderSwitch(autoConnectSwitch, enabled, colors)
     }
 
     private fun updateAutoCopyUI(enabled: Boolean) {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
-        if (enabled) {
-            autoCopySwitch.text = "开"
-            autoCopySwitch.setBackgroundColor(Color.parseColor(colors.primary))
-            autoCopySwitch.setTextColor(Color.parseColor(colors.bg))
-        } else {
-            autoCopySwitch.text = "关"
-            autoCopySwitch.setBackgroundColor(Color.parseColor(colors.bg3))
-            autoCopySwitch.setTextColor(Color.parseColor("#888888"))
-        }
+        renderSwitch(autoCopySwitch, enabled, colors)
     }
 
     private fun updateCopyToastUI(enabled: Boolean) {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
-        if (enabled) {
-            copyToastSwitch.text = "开"
-            copyToastSwitch.setBackgroundColor(Color.parseColor(colors.primary))
-            copyToastSwitch.setTextColor(Color.parseColor(colors.bg))
-        } else {
-            copyToastSwitch.text = "关"
-            copyToastSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
-            copyToastSwitch.setTextColor(Color.parseColor("#888888"))
+        renderSwitch(copyToastSwitch, enabled, colors)
+    }
+
+    private fun renderSwitch(view: TextView, enabled: Boolean, colors: ThemeColors) {
+        val dp = resources.displayMetrics.density
+        view.text = if (enabled) "●" else "●"
+        view.gravity = if (enabled) android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+                       else android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+        view.setPadding((3 * dp).toInt(), 0, (3 * dp).toInt(), 0)
+        view.setTextColor(Color.WHITE)
+        view.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(Color.parseColor(if (enabled) colors.primary else colors.bg3))
+            cornerRadius = 99 * dp
+            if (!enabled) setStroke((1 * dp).toInt(), Color.parseColor(colors.text2))
         }
     }
 
@@ -767,7 +760,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         val label = DialAnimationOverlay.MODE_LABELS[mode] ?: "未知"
-        dialAnimationSwitch.text = label
+        dialAnimationSwitch.text = if (mode == DialAnimationOverlay.MODE_OFF) "关闭" else "选择 ›"
         if (mode == DialAnimationOverlay.MODE_OFF) {
             dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
             dialAnimationSwitch.setTextColor(Color.parseColor("#888888"))
