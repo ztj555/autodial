@@ -218,31 +218,31 @@ class ConnectFragment : Fragment() {
             advancedHeader.setOnClickListener {
                 val show = advancedContent.visibility != View.VISIBLE
                 advancedContent.visibility = if (show) View.VISIBLE else View.GONE
-                advancedArrow.text = if (show) "▾" else "▸"
+                advancedArrow.text = if (show) "⌄" else "›"
             }
             otherHeader.setOnClickListener {
                 val show = otherContent.visibility != View.VISIBLE
                 otherContent.visibility = if (show) View.VISIBLE else View.GONE
-                otherArrow.text = if (show) "▾" else "▸"
+                otherArrow.text = if (show) "⌄" else "›"
             }
             // v8: 使用说明折叠（默认折叠）
             usageGuideContent.visibility = View.GONE
-            usageGuideArrow.text = "▸"
+            usageGuideArrow.text = "›"
             usageGuideHeader.setOnClickListener {
                 val show = usageGuideContent.visibility != View.VISIBLE
                 usageGuideContent.visibility = if (show) View.VISIBLE else View.GONE
-                usageGuideArrow.text = if (show) "▾" else "▸"
+                usageGuideArrow.text = if (show) "⌄" else "›"
             }
             // 主题/弹窗折叠（默认折叠）
             val themeHeader = view.findViewById<View>(R.id.themeSectionHeader)
             val themeArrow = view.findViewById<TextView>(R.id.themeSectionArrow)
             val themeContent = view.findViewById<View>(R.id.themeSectionContent)
             themeContent.visibility = View.GONE
-            themeArrow.text = "▸"
+            themeArrow.text = "›"
             themeHeader.setOnClickListener {
                 val show = themeContent.visibility != View.VISIBLE
                 themeContent.visibility = if (show) View.VISIBLE else View.GONE
-                themeArrow.text = if (show) "▾" else "▸"
+                themeArrow.text = if (show) "⌄" else "›"
             }
             // v8: 每日励志语
             motivationalText.text = getDailyMotivationalQuote()
@@ -331,9 +331,8 @@ class ConnectFragment : Fragment() {
             val guideView = view.findViewById<TextView>(R.id.usageGuideText)
             guideView.text = "① 输入 11 位手机号（推荐）或 4 位配对码\n" +
                 "② 点击「连接」开始使用\n" +
-                "③ 点击「连接」开始使用" +
-                "💡 可按照个人习惯切换弹窗 轮选 系统等不同的拨号模式\n" +
-                "💡 连不上？检查电脑防火墙放行端口 35432"
+                "③ 可按个人习惯切换弹窗、轮选、系统等拨号模式\n" +
+                "④ 连不上时检查电脑防火墙是否放行端口 35432"
 
             // v7: 云服务器内联列表（纯配置UI，无连接动作）
             cloudServerListContainer = view.findViewById(R.id.cloudServerListContainer)
@@ -1407,14 +1406,15 @@ class ConnectFragment : Fragment() {
         row.addView(label)
 
         val toggle = TextView(requireContext()).apply {
-            textSize = 12f; setPadding(10, 6, 10, 6); text = if (prefCtrl.getCardBorder()) "ON" else "OFF"
-            tag = "chip"
-            ThemeManager.applyToView(this, colors)
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                (42 * resources.displayMetrics.density).toInt(),
+                (24 * resources.displayMetrics.density).toInt()
+            )
+            renderSwitch(this, prefCtrl.getCardBorder(), colors)
             setOnClickListener {
                 val newVal = !prefCtrl.getCardBorder()
                 prefCtrl.setCardBorder(newVal)
-                text = if (newVal) "ON" else "OFF"
-                ThemeManager.applyToView(this, colors)
+                renderSwitch(this, newVal, colors)
                 ThemeManager.notifyRefresh()
             }
         }
@@ -1447,7 +1447,10 @@ class ConnectFragment : Fragment() {
                 val button = row.getChildAt(i + 1) as? TextView ?: continue
                 val active = options[i].first == current
                 button.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
-                button.setBackgroundColor(Color.parseColor(if (active) colors.primary else colors.bg3))
+                button.background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(if (active) colors.primary else colors.bg3))
+                    cornerRadius = 10 * resources.displayMetrics.density
+                }
             }
         }
         options.forEach { (key, label) ->
@@ -1544,13 +1547,14 @@ class ConnectFragment : Fragment() {
         }
         row.addView(label)
         val toggle = TextView(requireContext()).apply {
-            textSize = 12f; setPadding(10, 6, 10, 6); text = if (get()) "ON" else "OFF"
-            tag = "chip"
-            ThemeManager.applyToView(this, colors)
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                (42 * resources.displayMetrics.density).toInt(),
+                (24 * resources.displayMetrics.density).toInt()
+            )
+            renderSwitch(this, get(), colors)
             setOnClickListener {
                 val v = !get(); set(v)
-                text = if (v) "ON" else "OFF"
-                ThemeManager.applyToView(this, colors)
+                renderSwitch(this, v, colors)
             }
         }
         row.addView(toggle)

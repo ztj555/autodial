@@ -276,7 +276,7 @@
                 android:id="@+id/advancedArrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="▸"
+                android:text="›"
                 android:tag="text"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -595,7 +595,7 @@
                 android:id="@+id/otherArrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="▸"
+                android:text="›"
                 android:tag="text"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -1020,7 +1020,7 @@
                 android:id="@+id/themeSectionArrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="▸"
+                android:text="›"
                 android:tag="text"
                 android:textSize="14sp" />
         </LinearLayout>
@@ -1129,7 +1129,7 @@
                 android:id="@+id/usageGuideArrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="▾"
+                android:text="›"
                 android:textColor="#C9A84C"
                 android:textSize="14sp" />
         </LinearLayout>
