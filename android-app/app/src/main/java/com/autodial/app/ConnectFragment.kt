@@ -415,6 +415,7 @@ class ConnectFragment : Fragment() {
             // v4: 卡片透明度调节
             addCardOpacityRow(view)
             addCardBorderRow(view)
+            addNavigationOrderRow(view)
             addNotifySection(view)
 
             // 应用主题
@@ -1404,6 +1405,51 @@ class ConnectFragment : Fragment() {
             }
         }
         row.addView(toggle)
+        parent.addView(row)
+    }
+
+    /** 底部导航顺序：保留页面索引，仅调整 Tab 的展示顺序。 */
+    private fun addNavigationOrderRow(root: View) {
+        val parent = root.findViewById<ViewGroup>(R.id.themeSectionAnchor) ?: return
+        val colors = ThemeManager.getColors(requireContext())
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 16, 0, 0)
+        }
+        row.addView(TextView(requireContext()).apply {
+            text = "底部导航顺序"
+            textSize = 14f
+            setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            )
+        })
+
+        val options = listOf("call_first" to "通话优先", "settings_first" to "设置优先")
+        fun refresh() {
+            val current = prefCtrl.getNavigationOrder()
+            for (i in options.indices) {
+                val button = row.getChildAt(i + 1) as? TextView ?: continue
+                val active = options[i].first == current
+                button.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
+                button.setBackgroundColor(Color.parseColor(if (active) colors.primary else colors.bg3))
+            }
+        }
+        options.forEach { (key, label) ->
+            row.addView(TextView(requireContext()).apply {
+                text = label
+                textSize = 11f
+                gravity = android.view.Gravity.CENTER
+                setPadding(12, 7, 12, 7)
+                setOnClickListener {
+                    prefCtrl.setNavigationOrder(key)
+                    refresh()
+                    (activity as? MainActivity)?.applyNavigationOrder()
+                }
+            })
+        }
+        refresh()
         parent.addView(row)
     }
 

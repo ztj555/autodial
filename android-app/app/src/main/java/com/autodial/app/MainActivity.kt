@@ -27,6 +27,7 @@ import androidx.viewpager2.widget.ViewPager2
 class MainActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
+    private lateinit var bottomNavContainer: LinearLayout
     private lateinit var tabConnect: LinearLayout
     private lateinit var tabCallLog: LinearLayout
     private lateinit var tabStats: LinearLayout
@@ -86,6 +87,7 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("manual_disconnect", false).apply()
 
         viewPager = findViewById(R.id.viewPager)
+        bottomNavContainer = findViewById(R.id.bottomNavContainer)
         tabConnect = findViewById(R.id.tabConnect)
         tabCallLog = findViewById(R.id.tabCallLog)
         tabStats = findViewById(R.id.tabStats)
@@ -103,6 +105,7 @@ class MainActivity : AppCompatActivity() {
 
         viewPager.adapter = ViewPagerAdapter(this, fragments)
         viewPager.isUserInputEnabled = false
+        applyNavigationOrder()
 
         tabCallLog.setOnClickListener { switchTab(0) }
         tabRegister.setOnClickListener { switchTab(1) }
@@ -176,7 +179,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun syncDialModeUI() {
-        (fragments.getOrNull(1) as? CallLogFragment)?.updateDialModeBarUI()
+        (fragments.getOrNull(0) as? CallLogFragment)?.updateDialModeBarUI()
+    }
+
+    fun applyNavigationOrder() {
+        val prefCtrl = PrefCtrl(this)
+        val orderedTabs = if (prefCtrl.getNavigationOrder() == "settings_first") {
+            listOf(tabConnect, tabCallLog, tabStats, tabRegister)
+        } else {
+            listOf(tabCallLog, tabRegister, tabStats, tabConnect)
+        }
+        orderedTabs.forEach { tab ->
+            (tab.parent as? LinearLayout)?.removeView(tab)
+            bottomNavContainer.addView(tab)
+        }
+        switchTab(viewPager.currentItem)
     }
 
     override fun onDestroy() {

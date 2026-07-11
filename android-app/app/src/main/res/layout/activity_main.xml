@@ -20,6 +20,7 @@
 
     <!-- 底部导航栏：通话 | 录上门 | 统计 | 设置 -->
     <LinearLayout
+        android:id="@+id/bottomNavContainer"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:layout_marginTop="8dp"

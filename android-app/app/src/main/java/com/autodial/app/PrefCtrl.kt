@@ -86,6 +86,8 @@ class PrefCtrl(private val context: Context) {
     fun setNotifyConnState(show: Boolean) = prefs.edit().putBoolean("notify_conn_state", show).apply()
     fun getNotifyRegister(): Boolean = prefs.getBoolean("notify_register", true)
     fun setNotifyRegister(show: Boolean) = prefs.edit().putBoolean("notify_register", show).apply()
+    fun getNavigationOrder(): String = prefs.getString("navigation_order", "call_first") ?: "call_first"
+    fun setNavigationOrder(order: String) = prefs.edit().putString("navigation_order", order).apply()
 
     fun isManuallyDisconnected() = prefs.getBoolean("manual_disconnect", false)
     fun setManuallyDisconnected(v: Boolean) = prefs.edit().putBoolean("manual_disconnect", v).apply()
