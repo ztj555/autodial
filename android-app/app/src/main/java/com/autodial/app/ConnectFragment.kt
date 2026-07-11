@@ -276,7 +276,13 @@ class ConnectFragment : Fragment() {
 
             // v7: 拨号模式预填
             dialModeCurrent.text = DialMode.fromKey(prefCtrl.getDialModeKey()).label
-            dialModeRow.setOnClickListener { showDialModeDialog() }
+            dialModeRow.setOnClickListener {
+                DialModeSheet(requireActivity()) { selected ->
+                    prefCtrl.setDialModeKey(selected.key)
+                    dialModeCurrent.text = selected.label
+                    (requireActivity() as? MainActivity)?.syncDialModeUI()
+                }.show()
+            }
 
             // 初始化自动连接开关状态
             updateAutoConnectUI(prefCtrl.isAutoConnectEnabled())
@@ -339,6 +345,12 @@ class ConnectFragment : Fragment() {
             lanChannelStatus = view.findViewById(R.id.lanChannelStatus)
             cloudChannelStatus = view.findViewById(R.id.cloudChannelStatus)
             updateCloudServerCurrentText()
+            view.findViewById<View>(R.id.cloudServerManageRow).setOnClickListener {
+                CloudServerSheet(requireActivity()) {
+                    updateCloudServerCurrentText()
+                    refreshCloudServerList()
+                }.show()
+            }
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
             cloudServerTestBtn.setOnClickListener { testAllServers() }
             cloudServerSyncBtn.setOnClickListener { syncFromPC() }
