@@ -326,7 +326,10 @@ class ConnectFragment : Fragment() {
             updateStrategyDesc()
 
             connectionStrategyRow.setOnClickListener {
-                showStrategyDialog()
+                ConnectionStrategySheet(requireActivity()) { selected ->
+                    prefCtrl.setConnectionStrategy(selected)
+                    updateStrategyDesc()
+                }.show()
             }
 
             // 使用说明书
@@ -1057,25 +1060,6 @@ class ConnectFragment : Fragment() {
     private fun updateStrategyDesc() {
         if (!isAdded) return
         connectionStrategyDesc.text = prefCtrl.getConnectionStrategy().label
-    }
-
-    private fun showStrategyDialog() {
-        if (!isAdded) return
-        val strategies = ConnectionStrategy.entries
-        val labels = strategies.map { it.label }.toTypedArray()
-        val current = prefCtrl.getConnectionStrategy()
-        val currentIndex = strategies.indexOf(current)
-
-        AlertDialog.Builder(requireActivity())
-            .setTitle("连接策略")
-            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
-                val selected = strategies[which]
-                prefCtrl.setConnectionStrategy(selected)
-                updateStrategyDesc()
-                dialog.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
     // ==================== 云服务器管理 ====================
