@@ -38,6 +38,7 @@ class ConnectFragment : Fragment() {
     private lateinit var pulseRing: ImageView
     private lateinit var statusText: TextView
     private lateinit var connectionMode: TextView
+    private lateinit var statusDashboard: LinearLayout
     private lateinit var connectionBanner: LinearLayout
     private lateinit var bannerText: TextView
     private lateinit var pinInput: EditText
@@ -169,6 +170,7 @@ class ConnectFragment : Fragment() {
             statusDot = view.findViewById(R.id.statusDot)
             pulseRing = view.findViewById(R.id.pulseRing)
             statusText = view.findViewById(R.id.statusText)
+            statusDashboard = view.findViewById(R.id.statusDashboard)
             connectionBanner = view.findViewById(R.id.connectionBanner)
             bannerText = view.findViewById(R.id.bannerText)
             pinInput = view.findViewById(R.id.pinInput)
