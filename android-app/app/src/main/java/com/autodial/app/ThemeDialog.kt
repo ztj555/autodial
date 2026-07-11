@@ -42,7 +42,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
         root.addView(TextView(activity).apply {
             text = "🎨 选择主题"
             textSize = 18f
-            setTextColor(Color.parseColor(colors.goldLight))
+            setTextColor(Color.parseColor(colors.primaryLight))
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
@@ -188,7 +188,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
             )
         }
 
-        val previewColors = listOf(colors.gold, colors.bg, colors.bg2, colors.text)
+        val previewColors = listOf(colors.primary, colors.bg, colors.bg2, colors.text)
         for (c in previewColors) {
             val swatch = View(ctx).apply {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
@@ -221,7 +221,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
         card.background = GradientDrawable().apply {
             cornerRadius = 8 * dp
             setColor(Color.parseColor(colors.bg2))
-            setStroke((2 * dp).toInt(), Color.parseColor(colors.gold))
+            setStroke((2 * dp).toInt(), Color.parseColor(colors.primary))
         }
     }
 
@@ -244,7 +244,7 @@ class ThemeDialog(private val activity: Activity) : BottomSheetDialog(activity) 
         btn.setTypeface(null, android.graphics.Typeface.BOLD)
         btn.background = GradientDrawable().apply {
             cornerRadius = 8 * dp
-            setColor(Color.parseColor(colors.gold))
+            setColor(Color.parseColor(colors.primary))
         }
     }
 

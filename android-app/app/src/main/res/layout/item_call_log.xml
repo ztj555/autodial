@@ -14,10 +14,16 @@
         android:background="#111318"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="16dp"
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp">
+
+        <!-- 彩色状态条：绿=接通 灰=未接 红=失败 -->
+        <View
+            android:id="@+id/itemStatusBar"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="12dp" />
 
         <!-- 左侧：号码行（号码+卡标签横排）+ 时间 -->
         <LinearLayout

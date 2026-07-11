@@ -1,6 +1,5 @@
 package com.autodial.app
 
-import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -19,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -359,20 +359,52 @@ class StatsFragment : Fragment() {
             return
         }
 
-        val sb = StringBuilder()
+        val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
         val timeFmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
-        for ((i, r) in filtered.withIndex()) {
-            val timeStr = if (r.timestamp > 0) timeFmt.format(Date(r.timestamp)) else r.created_at
-            sb.append("${i + 1}. ${r.name}  ${r.mobile}\n")
-            sb.append("   ⏱ $timeStr\n")
-            if (i < filtered.size - 1) sb.append("\n")
+
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val root = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (28 * dp).toInt())
+            setBackgroundColor(Color.parseColor(colors.bg))
         }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle("$title（${filtered.size}条）")
-            .setMessage(sb.toString().trimEnd())
-            .setPositiveButton("关闭", null)
-            .show()
+        root.addView(TextView(requireContext()).apply {
+            text = "$title（${filtered.size}条）"
+            textSize = 16f
+            setTextColor(Color.parseColor(colors.primaryLight))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, (12 * dp).toInt())
+        })
+
+        for ((i, r) in filtered.withIndex()) {
+            val timeStr = if (r.timestamp > 0) timeFmt.format(Date(r.timestamp)) else r.created_at
+            root.addView(TextView(requireContext()).apply {
+                text = "${i + 1}. ${r.name}  ${r.mobile}\n   $timeStr"
+                textSize = 14f
+                setTextColor(Color.parseColor(colors.text))
+                setPadding(0, 0, 0, (8 * dp).toInt())
+            })
+        }
+
+        root.addView(TextView(requireContext()).apply {
+            text = "关闭"
+            textSize = 14f
+            setTextColor(Color.parseColor(colors.text2))
+            gravity = Gravity.CENTER
+            setPadding(0, (12 * dp).toInt(), 0, 0)
+            setOnClickListener { dialog.dismiss() }
+        })
+
+        dialog.setContentView(root)
+        dialog.show()
+        dialog.window?.setLayout(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
     }
 
     // ===== 云端同步上门数据 =====

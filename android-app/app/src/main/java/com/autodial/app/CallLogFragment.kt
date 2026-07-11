@@ -1,7 +1,6 @@
 package com.autodial.app
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,7 +13,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
-import android.telecom.TelecomManager
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -86,7 +84,7 @@ class CallLogAdapter(
         holder.time.text = timeFormat.format(Date(record.time))
 
         // 通话类型：图标 + 文字标签
-        val accentColor = android.graphics.Color.parseColor(colors.goldLight)
+        val accentColor = android.graphics.Color.parseColor(colors.primaryLight)
         val (typeText, iconRes, tintColor) = when (record.type) {
             CallLog.Calls.OUTGOING_TYPE -> Triple("拨出", R.drawable.ic_ph_phone_outgoing, accentColor)
             CallLog.Calls.INCOMING_TYPE -> Triple("来电", R.drawable.ic_ph_phone_incoming, accentColor)
@@ -132,7 +130,16 @@ class CallLogAdapter(
 
         // SIM卡标识
         holder.simSlot.text = "卡${record.simSlot + 1}"
-        holder.simSlot.setTextColor(android.graphics.Color.parseColor(if (record.simSlot == 1) colors.goldLight else colors.text2))
+        holder.simSlot.setTextColor(android.graphics.Color.parseColor(if (record.simSlot == 1) colors.primaryLight else colors.text2))
+
+        // v3: 彩色状态条
+        val statusBar = holder.root.findViewById<View>(R.id.itemStatusBar)
+        val barColor = when {
+            record.duration > 0 -> android.graphics.Color.parseColor(colors.green)
+            record.type == CallLog.Calls.MISSED_TYPE -> android.graphics.Color.parseColor(colors.red)
+            else -> android.graphics.Color.parseColor(colors.bg3)
+        }
+        statusBar.setBackgroundColor(barColor)
 
         // 长按弹出操作菜单
         holder.root.setOnLongClickListener {
@@ -185,6 +192,22 @@ class CallLogFragment : Fragment() {
     private lateinit var lastCallHintBanner: View
     private lateinit var lastCallHintText: TextView
     private lateinit var emptyDialBtn: TextView
+
+    // v3 UI: 财运横幅 (inline badge)
+    private lateinit var fortuneLuck: TextView
+    private lateinit var fortuneQi: TextView
+
+    // v3 UI: 筛选芯片
+    private lateinit var filterAll: TextView
+    private lateinit var filterOk: TextView
+    private lateinit var filterMiss: TextView
+    private var currentFilter: String = "all"
+
+    // v3 UI: FAB 手动拨号
+    private lateinit var dialFab: TextView
+
+    // 完整记录列表（未筛选），用于筛选后恢复
+    private var allRecords: List<PhoneCallRecord> = emptyList()
 
     // 连接状态
     private lateinit var connectionStatusDot: ImageView
@@ -294,6 +317,33 @@ class CallLogFragment : Fragment() {
         todayLuckText = view.findViewById(R.id.todayLuckText)
         todayFortuneText = view.findViewById(R.id.todayFortuneText)
         emptyDialBtn = view.findViewById(R.id.emptyDialBtn)
+        fortuneLuck = view.findViewById(R.id.fortuneLuck)
+        fortuneQi = view.findViewById(R.id.fortuneQi)
+        filterAll = view.findViewById(R.id.filterAll)
+        filterOk = view.findViewById(R.id.filterOk)
+        filterMiss = view.findViewById(R.id.filterMiss)
+        dialFab = view.findViewById(R.id.dialFab)
+
+        // v3 UI: 筛选芯片点击
+        filterAll.setOnClickListener { setFilter("all") }
+        filterOk.setOnClickListener { setFilter("ok") }
+        filterMiss.setOnClickListener { setFilter("miss") }
+
+        // v3 UI: FAB 手动拨号
+        dialFab.setOnClickListener {
+            if (!isAdded) return@setOnClickListener
+            DialPadSheet.show(requireActivity()) { number ->
+                try {
+                    val intent = Intent(Intent.ACTION_CALL).apply {
+                        data = Uri.parse("tel:$number")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(requireContext(), "拨号失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
         // v6: 顶部小按钮 — 状态和连接页保持一致
         topReconnectBtn.setOnClickListener {
@@ -531,56 +581,7 @@ class CallLogFragment : Fragment() {
 
     private fun showCallRecordMenu(record: PhoneCallRecord) {
         if (!isAdded) return
-        val colors = ThemeManager.getColors(requireContext())
-        val num = record.number
-
-        // 完整号码（用于实际操作，不脱敏）
-        val displayNum = if (num.length > 7) {
-            num.substring(0, 3) + "****" + num.substring(num.length - 4)
-        } else num
-
-        val items = arrayOf("\uD83D\uDCDE 重拨  $displayNum", "\uD83D\uDCAC 发短信给  $displayNum")
-
-        val dialog = AlertDialog.Builder(requireContext())
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> redialNumber(num)
-                    1 -> sendSmsTo(num)
-                }
-            }
-            .create()
-
-        // 应用主题背景色
-        dialog.show()
-        try {
-            dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-            dialog.listView?.setBackgroundColor(android.graphics.Color.parseColor(colors.bg2))
-            dialog.listView?.dividerHeight = 0
-        } catch (_: Exception) {}
-    }
-
-    private fun redialNumber(number: String) {
-        try {
-            val intent = Intent(Intent.ACTION_CALL).apply {
-                data = Uri.parse("tel:$number")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(requireContext(), "拨号失败：${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun sendSmsTo(number: String) {
-        try {
-            val intent = Intent(Intent.ACTION_SENDTO).apply {
-                data = Uri.parse("smsto:$number")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(requireContext(), "打开短信失败：${e.message}", Toast.LENGTH_SHORT).show()
-        }
+        CallDetailSheet.show(requireActivity(), record)
     }
 
     // ==================== 通话记录加载 ====================
@@ -681,6 +682,10 @@ class CallLogFragment : Fragment() {
         val colors = ThemeManager.getColors(ctx)
         loadTodayLuckStats()
 
+        // 保存全部记录
+        allRecords = records
+
+        // 应用筛选后渲染
         if (records.isEmpty()) {
             recyclerView.visibility = View.GONE
             emptyView.visibility = View.VISIBLE
@@ -688,16 +693,18 @@ class CallLogFragment : Fragment() {
         } else {
             recyclerView.visibility = View.VISIBLE
             emptyView.visibility = View.GONE
+            val filtered = applyFilterToList(records)
             if (callLogAdapter == null) {
-                callLogAdapter = CallLogAdapter(records, colors) { record ->
+                callLogAdapter = CallLogAdapter(filtered, colors) { record ->
                     showCallRecordMenu(record)
                 }
                 recyclerView.adapter = callLogAdapter
                 recyclerView.adapter?.notifyDataSetChanged()
             } else {
-                callLogAdapter!!.updateData(records)
+                callLogAdapter!!.updateData(filtered)
             }
         }
+        updateFilterChipUI()
     }
 
     private fun buildFingerprint(records: List<PhoneCallRecord>): String {
@@ -712,6 +719,59 @@ class CallLogFragment : Fragment() {
         return sb.toString()
     }
 
+    // ==================== 筛选 ====================
+
+    private fun setFilter(filter: String) {
+        currentFilter = filter
+        updateFilterChipUI()
+        applyFilterAndRender()
+    }
+
+    private fun updateFilterChipUI() {
+        val colors = ThemeManager.getColors(requireContext())
+        val activeBg = android.graphics.Color.parseColor(colors.primary)
+        val activeText = android.graphics.Color.parseColor(colors.bg)
+        val inactiveBg = android.graphics.Color.parseColor(colors.bg2)
+        val inactiveText = android.graphics.Color.parseColor(colors.text2)
+
+        fun applyChip(chip: TextView, active: Boolean) {
+            if (active) {
+                chip.setBackgroundColor(activeBg); chip.setTextColor(activeText)
+            } else {
+                chip.setBackgroundColor(inactiveBg); chip.setTextColor(inactiveText)
+            }
+        }
+        applyChip(filterAll, currentFilter == "all")
+        applyChip(filterOk, currentFilter == "ok")
+        applyChip(filterMiss, currentFilter == "miss")
+    }
+
+    private fun applyFilterAndRender() {
+        if (!isAdded) return
+        val filtered = when (currentFilter) {
+            "ok" -> allRecords.filter { r -> r.duration > 0 && r.type != android.provider.CallLog.Calls.MISSED_TYPE }
+            "miss" -> allRecords.filter { r -> r.duration == 0L || r.type == android.provider.CallLog.Calls.MISSED_TYPE }
+            else -> allRecords
+        }
+        val colors = ThemeManager.getColors(requireContext())
+        if (filtered.isEmpty()) {
+            recyclerView.visibility = View.GONE
+            emptyView.visibility = View.VISIBLE
+        } else {
+            recyclerView.visibility = View.VISIBLE
+            emptyView.visibility = View.GONE
+            callLogAdapter?.updateData(filtered)
+        }
+    }
+
+    private fun applyFilterToList(records: List<PhoneCallRecord>): List<PhoneCallRecord> {
+        return when (currentFilter) {
+            "ok" -> records.filter { r -> r.duration > 0 && r.type != android.provider.CallLog.Calls.MISSED_TYPE }
+            "miss" -> records.filter { r -> r.duration == 0L || r.type == android.provider.CallLog.Calls.MISSED_TYPE }
+            else -> records
+        }
+    }
+
     // ==================== 今日财运/财气 ====================
 
     /** 从数据库查询今日拨号次数和通时分钟数 */
@@ -724,10 +784,12 @@ class CallLogFragment : Fragment() {
 
             if (dayStats.isNotEmpty()) {
                 val today = dayStats[0]
-                todayLuckText.text = todayCount.toString()
-                // totalDurationSec 是秒, 转成分钟
                 val minutes = (today.totalDurationSec + 30) / 60
+                todayLuckText.text = todayCount.toString()
                 todayFortuneText.text = "${minutes}分"
+                // v3: 同步更新 fortune strip
+                fortuneLuck.text = todayCount.toString()
+                fortuneQi.text = "${minutes}分"
             }
         } catch (_: Exception) {}
     }
@@ -743,7 +805,7 @@ class CallLogFragment : Fragment() {
         dialModeButtons.forEachIndexed { index, btn ->
             val isSelected = dialModeKeys[index] == currentMode
             if (isSelected) {
-                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.gold))
+                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.primary))
                 btn.setTextColor(android.graphics.Color.parseColor(colors.bg))
             } else {
                 btn.setBackgroundColor(android.graphics.Color.parseColor(colors.bg))
@@ -772,7 +834,7 @@ class CallLogFragment : Fragment() {
             this.text = text
             textSize = 15f
             setTextColor(Color.parseColor(colors.bg))
-            setBackgroundColor(Color.parseColor(colors.goldLight))
+            setBackgroundColor(Color.parseColor(colors.primaryLight))
             setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10))
             gravity = android.view.Gravity.CENTER
             alpha = 0.95f

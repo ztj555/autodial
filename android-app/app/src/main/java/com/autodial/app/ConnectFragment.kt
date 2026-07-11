@@ -459,7 +459,11 @@ class ConnectFragment : Fragment() {
                 updateConnectionUI(false, null)
             }
         } catch (_: Exception) {}
-        if (isAdded) updateBatteryOptUI()
+        if (isAdded) {
+            updateBatteryOptUI()
+            // v3: 刷新动画 UI（AnimationSheet 直接写 prefs，需手动刷新）
+            try { updateDialAnimationUI(prefCtrl.getDialAnimationMode()) } catch (_: Exception) {}
+        }
     }
 
     // v9: 独立 receiver 仅监听 ACTION_CLOUD_STATUS（pc_online/pc_offline）
@@ -631,7 +635,7 @@ class ConnectFragment : Fragment() {
         connecting = true
         updateBtnState("connecting")
         statusText.text = if (ip.isNotEmpty()) "正在连接 $ip ..." else "正在搜索并连接..."
-        statusText.setTextColor(Color.parseColor(colors.goldLight))
+        statusText.setTextColor(Color.parseColor(colors.primaryLight))
         statusDot.setImageResource(R.drawable.dot_gray)
 
         lifecycleScope.launch {
@@ -639,7 +643,7 @@ class ConnectFragment : Fragment() {
             if (!DialService.isConnected && isAdded) {
                 val colors2 = ThemeManager.getColors(requireContext())
                 statusText.text = "连接中，请稍候...（若长时间连不上，可能是电脑防火墙拦截）"
-                statusText.setTextColor(Color.parseColor(colors2.gold))
+                statusText.setTextColor(Color.parseColor(colors2.primary))
             }
         }
 
@@ -707,7 +711,7 @@ class ConnectFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         if (enabled) {
             autoConnectSwitch.text = "开"
-            autoConnectSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+            autoConnectSwitch.setBackgroundColor(Color.parseColor(colors.primary))
         } else {
             autoConnectSwitch.text = "关"
             autoConnectSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
@@ -719,7 +723,7 @@ class ConnectFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         if (enabled) {
             autoCopySwitch.text = "开"
-            autoCopySwitch.setBackgroundColor(Color.parseColor(colors.gold))
+            autoCopySwitch.setBackgroundColor(Color.parseColor(colors.primary))
             autoCopySwitch.setTextColor(Color.parseColor(colors.bg))
         } else {
             autoCopySwitch.text = "关"
@@ -733,7 +737,7 @@ class ConnectFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         if (enabled) {
             copyToastSwitch.text = "开"
-            copyToastSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+            copyToastSwitch.setBackgroundColor(Color.parseColor(colors.primary))
             copyToastSwitch.setTextColor(Color.parseColor(colors.bg))
         } else {
             copyToastSwitch.text = "关"
@@ -742,34 +746,10 @@ class ConnectFragment : Fragment() {
         }
     }
 
-    /** 弹窗列表选择动画效果 */
+    /** 弹窗列表选择动画效果 — 使用 AnimationSheet BottomSheet */
     private fun showAnimationListDialog() {
         if (!isAdded) return
-        val currentMode = prefCtrl.getDialAnimationMode()
-        val modes = listOf(
-            DialAnimationOverlay.MODE_OFF, DialAnimationOverlay.MODE_BOUNCE,
-            DialAnimationOverlay.MODE_FIREWORK, DialAnimationOverlay.MODE_COMBINE,
-            DialAnimationOverlay.MODE_PULSE, DialAnimationOverlay.MODE_SPARKLE,
-            DialAnimationOverlay.MODE_SLIDE_UP, DialAnimationOverlay.MODE_FADE_SCALE,
-            DialAnimationOverlay.MODE_SHAKE, DialAnimationOverlay.MODE_FLIP_IN,
-            DialAnimationOverlay.MODE_HEARTBEAT
-        )
-        val labels = modes.map { DialAnimationOverlay.MODE_LABELS[it] ?: "未知" }.toTypedArray()
-        val currentIdx = modes.indexOf(currentMode).coerceAtLeast(0)
-
-        AlertDialog.Builder(requireActivity())
-            .setTitle("拨号动画效果")
-            .setSingleChoiceItems(labels, currentIdx) { dialog, which ->
-                val selected = modes[which]
-                prefCtrl.setDialAnimationMode(selected)
-                updateDialAnimationUI(selected)
-                if (selected != DialAnimationOverlay.MODE_OFF) {
-                    DialAnimationOverlay.show(requireActivity())
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
+        AnimationSheet.show(requireActivity())
     }
 
     private fun updateDialAnimationUI(mode: Int) {
@@ -781,7 +761,7 @@ class ConnectFragment : Fragment() {
             dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.bg3))
             dialAnimationSwitch.setTextColor(Color.parseColor("#888888"))
         } else {
-            dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.gold))
+            dialAnimationSwitch.setBackgroundColor(Color.parseColor(colors.primary))
             dialAnimationSwitch.setTextColor(Color.parseColor(colors.bg))
         }
         dialAnimationDesc.text = when (mode) {
@@ -934,7 +914,7 @@ class ConnectFragment : Fragment() {
                     }
                     "disconnected" -> {
                         statusText.text = "连接已断开"
-                        statusText.setTextColor(Color.parseColor(colors.gold))
+                        statusText.setTextColor(Color.parseColor(colors.primary))
                     }
                     else -> {
                         statusText.text = "未连接电脑"
@@ -1071,7 +1051,7 @@ class ConnectFragment : Fragment() {
             val disp = cloudCtrl.stripCloudPrefix(server)
             val addrView = TextView(requireContext()).apply {
                 text = disp; textSize = 14f; isSingleLine = true
-                setTextColor(Color.parseColor(if (isCurrent) colors.gold else colors.text))
+                setTextColor(Color.parseColor(if (isCurrent) colors.primary else colors.text))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnLongClickListener {
                     val clip = requireActivity().getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -1095,7 +1075,7 @@ class ConnectFragment : Fragment() {
             row.addView(TextView(requireContext()).apply {
                 text = "连"; textSize = 13f; setPadding(8, 2, 8, 2)
                 setTextColor(Color.parseColor(colors.bg))
-                setBackgroundColor(Color.parseColor(colors.gold))
+                setBackgroundColor(Color.parseColor(colors.primary))
                 setOnClickListener {
                     if (!DialService.isConnected || !DialService.isLanConnected) {
                         // 当前没有局域网连接，尝试连接此云服务器
@@ -1370,8 +1350,8 @@ class ConnectFragment : Fragment() {
             for (i in 1 until row.childCount) {
                 val btn = row.getChildAt(i) as? TextView ?: continue
                 val sel = values[i - 1] == opacity
-                btn.setTextColor(Color.parseColor(if (sel) colors.bg else colors.gold))
-                btn.setBackgroundColor(Color.parseColor(if (sel) colors.gold else colors.bg3))
+                btn.setTextColor(Color.parseColor(if (sel) colors.bg else colors.primary))
+                btn.setBackgroundColor(Color.parseColor(if (sel) colors.primary else colors.bg3))
             }
         }
 
@@ -1435,7 +1415,7 @@ class ConnectFragment : Fragment() {
         // 分组标题
         val header = TextView(requireContext()).apply {
             text = "通知弹窗"
-            textSize = 13f; setTextColor(Color.parseColor(colors.goldLight))
+            textSize = 13f; setTextColor(Color.parseColor(colors.primaryLight))
             setPadding(0, 24, 0, 8)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
@@ -1474,8 +1454,8 @@ class ConnectFragment : Fragment() {
             for (i in 0 until opts.size) {
                 val b = row.getChildAt(i + 1) as? TextView ?: continue
                 val active = opts[i] == sel
-                b.setTextColor(Color.parseColor(if (active) colors.bg else colors.gold))
-                b.setBackgroundColor(Color.parseColor(if (active) colors.gold else colors.bg3))
+                b.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
+                b.setBackgroundColor(Color.parseColor(if (active) colors.primary else colors.bg3))
             }
         }
         for (i in opts.indices) {
@@ -1528,7 +1508,7 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         val theme = ThemeManager.getThemeById(ThemeManager.loadThemeId(requireContext()))
-        previewGold.setBackgroundColor(Color.parseColor(colors.gold))
+        previewGold.setBackgroundColor(Color.parseColor(colors.primary))
         previewBg.setBackgroundColor(Color.parseColor(colors.bg))
         previewBg2.setBackgroundColor(Color.parseColor(colors.bg2))
         previewText.setBackgroundColor(Color.parseColor(colors.text))

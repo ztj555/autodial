@@ -26,7 +26,7 @@
             android:text="录上门"
             android:drawableStart="@drawable/ic_ph_note_pencil"
             android:drawablePadding="6dp"
-            android:tag="goldLight"
+            android:tag="primaryLight"
             android:textColor="#F0C040"
             android:textSize="18sp"
             android:textStyle="bold" />
@@ -190,7 +190,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="24dp"
-                android:tag="goldBtn"
+                android:tag="primaryBtn"
                 android:background="#F0C040"
                 android:gravity="center"
                 android:text="完成登记"

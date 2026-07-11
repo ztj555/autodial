@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
         viewPager.currentItem = index
         val colors = ThemeManager.getColors(this)
         val inactiveColor = Color.parseColor(colors.text2)
-        val activeColor = Color.parseColor(colors.goldLight)
+        val activeColor = Color.parseColor(colors.primaryLight)
 
         tabConnectLabel.setTextColor(inactiveColor)
         tabCallLogLabel.setTextColor(inactiveColor)

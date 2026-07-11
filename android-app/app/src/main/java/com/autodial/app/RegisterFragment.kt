@@ -9,10 +9,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -294,22 +295,58 @@ class RegisterFragment : Fragment() {
         if (!isAdded) return
         if (advisorList.isEmpty()) {
             Toast.makeText(requireContext(), "正在加载顾问列表，请稍后再试...", Toast.LENGTH_SHORT).show()
-            // 触发重新加载
             executor.execute { fetchAdvisorListFromCrm() }
             return
         }
-        val names = advisorList.map { it.first }.toTypedArray<CharSequence>()
-        AlertDialog.Builder(requireContext())
-            .setTitle("选择接待顾问")
-            .setItems(names) { _, which ->
-                val selected = advisorList[which]
-                managerName = selected.first
-                etManagerName.setText(managerName)
-                val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
-                prefs.edit().putString("manager_name", managerName).apply()
-            }
-            .setNegativeButton("关闭", null)
-            .show()
+
+        val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val root = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (24 * dp).toInt())
+            setBackgroundColor(Color.parseColor(colors.bg))
+        }
+
+        root.addView(TextView(requireContext()).apply {
+            text = "选择接待顾问"
+            textSize = 18f
+            setTextColor(Color.parseColor(colors.primaryLight))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, (12 * dp).toInt())
+        })
+
+        for (advisor in advisorList) {
+            root.addView(TextView(requireContext()).apply {
+                text = advisor.first
+                textSize = 16f
+                setTextColor(Color.parseColor(colors.text))
+                setPadding(0, (14 * dp).toInt(), 0, (14 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                }
+                setOnClickListener {
+                    managerName = advisor.first
+                    etManagerName.setText(managerName)
+                    val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                    prefs.edit().putString("manager_name", managerName).apply()
+                    dialog.dismiss()
+                }
+            })
+        }
+
+        dialog.setContentView(root)
+        dialog.show()
+        dialog.window?.setLayout(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
     }
 
     /**
@@ -335,7 +372,7 @@ class RegisterFragment : Fragment() {
             btnSubmit.isEnabled = true
             btnSubmit.alpha = 1.0f
             btnSubmit.setTextColor(Color.parseColor(colors.bg))
-            btnSubmit.setBackgroundColor(Color.parseColor(colors.gold))
+            btnSubmit.setBackgroundColor(Color.parseColor(colors.primary))
         }
     }
 
@@ -550,7 +587,7 @@ class RegisterFragment : Fragment() {
                     btnSubmit.isEnabled = true
                     btnSubmit.alpha = 1.0f
                     btnSubmit.setTextColor(Color.parseColor(colors.bg))
-                    btnSubmit.setBackgroundColor(Color.parseColor(colors.gold))
+                    btnSubmit.setBackgroundColor(Color.parseColor(colors.primary))
                 }
             }, 2000)
         } else {
@@ -577,7 +614,7 @@ class RegisterFragment : Fragment() {
             btnSubmit.isEnabled = true
             btnSubmit.alpha = 1.0f
             btnSubmit.setTextColor(Color.parseColor(colors.bg))
-            btnSubmit.setBackgroundColor(Color.parseColor(colors.gold))
+            btnSubmit.setBackgroundColor(Color.parseColor(colors.primary))
         }
     }
 

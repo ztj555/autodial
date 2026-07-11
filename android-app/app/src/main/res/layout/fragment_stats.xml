@@ -23,7 +23,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="💰 我的财库"
-            android:tag="goldLight"
+            android:tag="primaryLight"
             android:textColor="#F0C040"
             android:textSize="18sp"
             android:textStyle="bold" />
@@ -302,7 +302,7 @@
                         android:text="上门统计"
                         android:drawableStart="@drawable/ic_ph_chart_bar"
                         android:drawablePadding="6dp"
-                        android:tag="goldLight"
+                        android:tag="primaryLight"
                         android:textColor="#F0C040"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -319,7 +319,7 @@
                         android:paddingEnd="12dp"
                         android:paddingTop="6dp"
                         android:paddingBottom="6dp"
-                        android:background="@drawable/bg_gold_btn"
+                        android:background="@drawable/bg_primary_btn"
                         android:clickable="true"
                         android:focusable="true" />
                 </LinearLayout>

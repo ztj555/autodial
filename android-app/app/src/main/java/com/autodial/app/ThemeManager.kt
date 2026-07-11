@@ -15,9 +15,9 @@ import android.widget.TextView
  */
 
 data class ThemeColors(
-    val gold: String,
-    val goldLight: String,
-    val goldDark: String,
+    val primary: String,
+    val primaryLight: String,
+    val primaryDark: String,
     val bg: String,
     val bg2: String,
     val bg3: String,
@@ -255,8 +255,8 @@ object ThemeManager {
         return ThemeInfo(id,name,nameEn,cat,kw,dm,cm.toMap())
     }
 
-    private fun c(mode:String,gold:String,goldLight:String,goldDark:String,bg:String,bg2:String,bg3:String,text:String,text2:String,green:String,red:String): Pair<String,ThemeColors> {
-        return mode to ThemeColors(gold,goldLight,goldDark,bg,bg2,bg3,text,text2,green,red)
+    private fun c(mode:String,primary:String,primaryLight:String,primaryDark:String,bg:String,bg2:String,bg3:String,text:String,text2:String,green:String,red:String): Pair<String,ThemeColors> {
+        return mode to ThemeColors(primary,primaryLight,primaryDark,bg,bg2,bg3,text,text2,green,red)
     }
 
     // ==================== 存取 ====================
@@ -340,14 +340,14 @@ object ThemeManager {
             }
             "text" -> if (view is TextView) { view.setTextColor(parseColor(colors.text)); tintDrawables(view, colors.text) }
             "text2" -> if (view is TextView) { view.setTextColor(parseColor(colors.text2)); tintDrawables(view, colors.text2) }
-            "gold" -> if (view is TextView) { view.setTextColor(parseColor(colors.gold)); tintDrawables(view, colors.gold) }
-                     else view.setBackgroundColor(parseColor(colors.gold))
-            "goldLight" -> if (view is TextView) { view.setTextColor(parseColor(colors.goldLight)); tintDrawables(view, colors.goldLight) }
-            "goldDark" -> view.setBackgroundColor(parseColor(colors.goldDark))
+            "primary" -> if (view is TextView) { view.setTextColor(parseColor(colors.primary)); tintDrawables(view, colors.primary) }
+                     else view.setBackgroundColor(parseColor(colors.primary))
+            "primaryLight" -> if (view is TextView) { view.setTextColor(parseColor(colors.primaryLight)); tintDrawables(view, colors.primaryLight) }
+            "primaryDark" -> view.setBackgroundColor(parseColor(colors.primaryDark))
             "green" -> if (view is TextView) { view.setTextColor(parseColor(colors.green)); tintDrawables(view, colors.green) }
             "red" -> if (view is TextView) { view.setTextColor(parseColor(colors.red)); tintDrawables(view, colors.red) }
-            "goldBtn" -> {
-                view.background = verticalGradient(colors.goldLight, colors.goldDark, 18f)
+            "primaryBtn" -> {
+                view.background = verticalGradient(colors.primaryLight, colors.primaryDark, 18f)
                 if (view is ViewGroup) {
                     for (i in 0 until view.childCount) {
                         val child = view.getChildAt(i)
@@ -356,17 +356,17 @@ object ThemeManager {
                 }
                 if (view is TextView) view.setTextColor(parseColor(colors.bg))
             }
-            "goldBtnText" -> if (view is TextView) {
-                view.setTextColor(parseColor(colors.gold))
+            "primaryBtnText" -> if (view is TextView) {
+                view.setTextColor(parseColor(colors.primary))
                 view.background = borderRadius(
-                    blendColors(colors.bg3, colors.bg2, 30), 14f, colors.gold, 48
+                    blendColors(colors.bg3, colors.bg2, 30), 14f, colors.primary, 48
                 )
             }
             "switchOn" -> {
-                val targetColor = parseColor(colors.gold)
+                val targetColor = parseColor(colors.primary)
                 val fromColor = (view.background as? ColorDrawable)?.color ?: targetColor
                 if (fromColor == targetColor) {
-                    view.background = roundedFill(colors.gold, 999f)
+                    view.background = roundedFill(colors.primary, 999f)
                 } else {
                     ValueAnimator.ofArgb(fromColor, targetColor).apply {
                         duration = 200
@@ -398,12 +398,12 @@ object ThemeManager {
             }
             "heroCard" -> {
                 view.background = verticalGradient(
-                    blendColors(colors.bg2, colors.goldDark, 8),
+                    blendColors(colors.bg2, colors.primaryDark, 8),
                     blendedBg2,
                     26f
                 ).apply {
                     if (showBorder) {
-                        setStroke((1f * density).toInt().coerceAtLeast(1), parseColor(blendColors(colors.gold, colors.bg2, 56)))
+                        setStroke((1f * density).toInt().coerceAtLeast(1), parseColor(blendColors(colors.primary, colors.bg2, 56)))
                     }
                 }
             }
@@ -415,8 +415,8 @@ object ThemeManager {
                 if (view is TextView) view.setTextColor(parseColor(colors.text))
             }
             "outlineBtn" -> {
-                view.background = borderRadius(blendedBg3, 14f, colors.gold, 56)
-                if (view is TextView) view.setTextColor(parseColor(colors.goldLight))
+                view.background = borderRadius(blendedBg3, 14f, colors.primary, 56)
+                if (view is TextView) view.setTextColor(parseColor(colors.primaryLight))
             }
             "successBanner" -> {
                 view.background = borderRadius(
@@ -425,7 +425,7 @@ object ThemeManager {
             }
             "infoBanner" -> {
                 view.background = borderRadius(
-                    blendColors(colors.goldDark, colors.bg2, 82), 18f, colors.gold, 62
+                    blendColors(colors.primaryDark, colors.bg2, 82), 18f, colors.primary, 62
                 )
             }
             "chip" -> {

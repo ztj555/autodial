@@ -179,7 +179,7 @@ object SimSelectOverlay {
         numberRow.addView(phoneIcon)
         val numberText = TextView(context).apply {
             text = number
-            setTextColor(Color.parseColor(colors.gold))
+            setTextColor(Color.parseColor(colors.primary))
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.05f
@@ -189,7 +189,7 @@ object SimSelectOverlay {
 
         // ─── 对比通话记录横幅 ───
         if (hasHistory) {
-            val simColor = if (lastSimSlot == 0) colors.gold else colors.green
+            val simColor = if (lastSimSlot == 0) colors.primary else colors.green
             // 横幅文字：醒目颜色，卡1/卡2 字体放大
 
             val banner = LinearLayout(context).apply {
@@ -251,7 +251,7 @@ object SimSelectOverlay {
 
         // ─── 卡1 按钮 ───
         val sim1Hint = if (hasHistory && lastSimSlot == 0) displayDate else null
-        card.addView(createSimButton(context, dp, colors, 0, "SIM 1", colors.gold, sim1Hint) {
+        card.addView(createSimButton(context, dp, colors, 0, "SIM 1", colors.primary, sim1Hint) {
             dialAndDismiss(context, number, 0)
         })
 
@@ -356,7 +356,7 @@ object SimSelectOverlay {
             if (hintDate != null) {
                 val hintLabel = TextView(context).apply {
                     text = "${hintDate}使用"
-                    setTextColor(Color.parseColor(colors.goldLight))
+                    setTextColor(Color.parseColor(colors.primaryLight))
                     textSize = 14f
                     typeface = Typeface.DEFAULT_BOLD
                     letterSpacing = 0.02f
@@ -390,7 +390,7 @@ object SimSelectOverlay {
         return GradientDrawable().apply {
             setColor(Color.parseColor(colors.bg))
             cornerRadius = 16 * dp
-            setStroke((1.5 * dp).toInt(), Color.parseColor(colors.goldDark))
+            setStroke((1.5 * dp).toInt(), Color.parseColor(colors.primaryDark))
         }
     }
 
