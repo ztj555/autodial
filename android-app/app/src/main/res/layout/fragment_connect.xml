@@ -15,6 +15,7 @@
 
         <!-- 标题栏 -->
         <LinearLayout
+            android:id="@+id/settingsTopBar"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:tag="topBar"
@@ -24,16 +25,24 @@
             android:paddingStart="4dp"
             android:paddingEnd="4dp">
 
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_v3_icon"
+                android:padding="7dp"
+                android:src="@drawable/ic_tab_settings"
+                android:tint="#2B6CC4" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
                 android:text="设置"
-                android:drawableStart="@drawable/ic_tab_settings"
-                android:drawablePadding="6dp"
-                android:tag="primaryLight"
-                android:textColor="#F0C040"
-                android:textSize="18sp"
+                android:tag="text"
+                android:textSize="20sp"
                 android:textStyle="bold" />
+
+            <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
         </LinearLayout>
 
         <LinearLayout
@@ -147,6 +156,7 @@
         <!-- ═══════════════ 配对码 ═══════════════ -->
         <!-- PIN / 配对码区（固定最小高度，防跳动） -->
         <LinearLayout
+            android:id="@+id/legacyPinContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="0dp"

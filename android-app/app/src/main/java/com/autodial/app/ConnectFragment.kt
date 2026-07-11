@@ -199,6 +199,8 @@ class ConnectFragment : Fragment() {
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
 
+            rebuildV3ConnectionHeader(view)
+
             // v7: 折叠面板绑定
             advancedHeader = view.findViewById(R.id.advancedSectionHeader)
             advancedContent = view.findViewById(R.id.advancedSectionContent)
@@ -576,6 +578,86 @@ class ConnectFragment : Fragment() {
 
     // ==================== 连接控制 ====================
 
+    private fun rebuildV3ConnectionHeader(root: View) {
+        val dp = resources.displayMetrics.density
+        val topBar = root.findViewById<LinearLayout>(R.id.settingsTopBar)
+        val legacyPin = root.findViewById<View>(R.id.legacyPinContainer)
+
+        (disconnectBtn.parent as? ViewGroup)?.removeView(disconnectBtn)
+        disconnectBtn.layoutParams = LinearLayout.LayoutParams(
+            (64 * dp).toInt(), (34 * dp).toInt()
+        )
+        disconnectBtn.visibility = View.VISIBLE
+        topBar.addView(disconnectBtn)
+        topBar.tag = null
+        topBar.background = null
+
+        (pinInput.parent as? ViewGroup)?.removeView(pinInput)
+        (connectBtnText.parent as? ViewGroup)?.removeView(connectBtnText)
+        (statusDot.parent?.parent as? ViewGroup)?.let { icon ->
+            (icon.parent as? ViewGroup)?.removeView(icon)
+        }
+        (statusText.parent as? ViewGroup)?.let { textGroup ->
+            (textGroup.parent as? ViewGroup)?.removeView(textGroup)
+        }
+
+        statusDashboard.removeAllViews()
+        statusDashboard.orientation = LinearLayout.VERTICAL
+        statusDashboard.gravity = android.view.Gravity.CENTER_VERTICAL
+        statusDashboard.minimumHeight = (150 * dp).toInt()
+        statusDashboard.setPadding((16*dp).toInt(),(14*dp).toInt(),(16*dp).toInt(),(12*dp).toInt())
+        statusDashboard.tag = "heroCard"
+
+        val statusRow = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val iconBox = android.widget.FrameLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams((44*dp).toInt(), (44*dp).toInt())
+        }
+        (pulseRing.parent as? ViewGroup)?.removeView(pulseRing)
+        (statusDot.parent as? ViewGroup)?.removeView(statusDot)
+        iconBox.addView(pulseRing, android.widget.FrameLayout.LayoutParams((44*dp).toInt(),(44*dp).toInt(), android.view.Gravity.CENTER))
+        iconBox.addView(statusDot, android.widget.FrameLayout.LayoutParams((28*dp).toInt(),(28*dp).toInt(), android.view.Gravity.CENTER))
+        statusRow.addView(iconBox)
+
+        val statusCopy = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart=(12*dp).toInt() }
+        }
+        (statusText.parent as? ViewGroup)?.removeView(statusText)
+        (connectionMode.parent as? ViewGroup)?.removeView(connectionMode)
+        statusCopy.addView(statusText)
+        statusCopy.addView(connectionMode)
+        statusRow.addView(statusCopy)
+        statusDashboard.addView(statusRow, LinearLayout.LayoutParams(-1,-2))
+
+        val inputRow = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(-1,(44*dp).toInt()).apply { topMargin=(12*dp).toInt() }
+        }
+        pinInput.layoutParams = LinearLayout.LayoutParams(0,(44*dp).toInt(),1f)
+        pinInput.gravity = android.view.Gravity.CENTER_VERTICAL
+        pinInput.textSize = 15f
+        pinInput.letterSpacing = 0f
+        pinInput.hint = "请输入系统手机号"
+        pinInput.tag = "inputField"
+        inputRow.addView(pinInput)
+        connectBtnText.layoutParams = LinearLayout.LayoutParams((78*dp).toInt(),(44*dp).toInt()).apply { marginStart=(8*dp).toInt() }
+        inputRow.addView(connectBtnText)
+        statusDashboard.addView(inputRow)
+
+        (discoveryHint.parent as? ViewGroup)?.removeView(discoveryHint)
+        discoveryHint.text = "你的系统手机号 · 与电脑端保持一致"
+        discoveryHint.textSize = 10f
+        discoveryHint.visibility = View.VISIBLE
+        statusDashboard.addView(discoveryHint, LinearLayout.LayoutParams(-2,-2).apply { topMargin=(8*dp).toInt() })
+
+        legacyPin.visibility = View.GONE
+        connectionBanner.visibility = View.GONE
+        root.findViewById<View>(R.id.foundPCInfo).visibility = View.GONE
+    }
+
     // ==================== v6: 按钮三态逻辑 ====================
 
     private var connecting = false
@@ -586,7 +668,7 @@ class ConnectFragment : Fragment() {
         try {
             when {
                 connecting -> handleCancelClick()
-                DialService.isConnected -> handleDisconnectClick()
+                DialService.isConnected -> handleReconnectClick()
                 else -> handleStartConnect()
             }
         } catch (e: Exception) {
@@ -631,7 +713,6 @@ class ConnectFragment : Fragment() {
 
     /** 手动断开：标记手动断开，暂停所有自动行为 */
     private fun handleDisconnectClick() {
-        if (!DialService.isConnected && !connecting) return  // 未连接时无操作
         if (connecting) {
             connecting = false
             pinInput.isEnabled = true
@@ -687,12 +768,12 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         when (state) {
             "connected" -> {
-                connectBtnText.text = "断开"
-                connectBtnText.setTextColor(Color.parseColor("#F03E3E"))
+                connectBtnText.text = "重连"
+                connectBtnText.setTextColor(Color.parseColor("#2B6CC4"))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setStroke(1, Color.parseColor("#F03E3E"))
-                    cornerRadius = 6f * resources.displayMetrics.density
+                    setStroke(1, Color.parseColor("#2B6CC4"))
+                    cornerRadius = 12f * resources.displayMetrics.density
                     setColor(Color.TRANSPARENT)
                 }
             }
@@ -861,7 +942,7 @@ class ConnectFragment : Fragment() {
         try {
             if (!isAdded) return
             val colors = ThemeManager.getColors(requireContext())
-            pinInput.isEnabled = !connected
+            pinInput.isEnabled = !connecting
 
             if (connected) {
                 connecting = false
@@ -890,11 +971,12 @@ class ConnectFragment : Fragment() {
                     connectionMode.text = "请在电脑上点击拨打"
                 }
                 connectionMode.visibility = View.VISIBLE
-                discoveryHint.visibility = View.GONE
+                discoveryHint.text = "你的系统手机号 · 与电脑端保持一致"
+                discoveryHint.visibility = View.VISIBLE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
                 connectBtnText.visibility = View.VISIBLE
-                disconnectBtn.visibility = View.GONE
+                disconnectBtn.visibility = View.VISIBLE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
                 stopPulseAnimation()
@@ -903,9 +985,11 @@ class ConnectFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor(if (manual) "#FF4D4F" else colors.text2))
                 connectionMode.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
+                discoveryHint.text = "你的系统手机号 · 与电脑端保持一致"
+                discoveryHint.visibility = View.VISIBLE
                 updateBtnState(if (reason == "disconnected" && !manual) "reconnect" else if (manual) "manual_disconnect" else "disconnected")
                 connectBtnText.visibility = View.VISIBLE
-                disconnectBtn.visibility = View.GONE
+                disconnectBtn.visibility = View.VISIBLE
 
                 when (reason) {
                     "pin_wrong" -> {
