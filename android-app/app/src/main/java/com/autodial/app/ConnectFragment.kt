@@ -588,6 +588,12 @@ class ConnectFragment : Fragment() {
         val topBar = root.findViewById<LinearLayout>(R.id.settingsTopBar)
         val legacyPin = root.findViewById<View>(R.id.legacyPinContainer)
 
+        // Keep the hero visible even when this method is called again after a theme refresh.
+        statusDashboard.visibility = View.VISIBLE
+        statusDashboard.layoutParams = statusDashboard.layoutParams.apply {
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+
         (disconnectBtn.parent as? ViewGroup)?.removeView(disconnectBtn)
         disconnectBtn.layoutParams = LinearLayout.LayoutParams(
             (64 * dp).toInt(), (34 * dp).toInt()
@@ -661,6 +667,7 @@ class ConnectFragment : Fragment() {
         legacyPin.visibility = View.GONE
         connectionBanner.visibility = View.GONE
         root.findViewById<View>(R.id.foundPCInfo).visibility = View.GONE
+        statusDashboard.visibility = View.VISIBLE
     }
 
     // ==================== v6: 按钮三态逻辑 ====================

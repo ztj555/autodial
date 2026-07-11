@@ -59,6 +59,8 @@
             android:id="@+id/statusDashboard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:minHeight="150dp"
+            android:visibility="visible"
             android:tag="bg2"
             android:background="#1A1D24"
             android:gravity="center_vertical"
