@@ -28,7 +28,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="通话记录"
+            android:text="通话"
             android:drawableStart="@drawable/ic_ph_clipboard_text"
             android:drawablePadding="6dp"
             android:tag="primaryLight"
@@ -86,7 +86,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="end"
-            android:layout_marginEnd="4dp">
+            android:layout_marginEnd="4dp"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -166,8 +167,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="0"
-            android:tag="primary"
-            android:textColor="#F0C040"
+            android:textColor="#E53935"
             android:textSize="16sp"
             android:textStyle="bold"
             android:fontFamily="monospace" />
@@ -193,7 +193,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="0分"
-            android:textColor="#A78BFA"
+            android:textColor="#7B2CBF"
             android:textSize="16sp"
             android:textStyle="bold"
             android:fontFamily="monospace" />

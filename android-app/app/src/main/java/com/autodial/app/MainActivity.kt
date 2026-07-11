@@ -209,6 +209,15 @@ class MainActivity : AppCompatActivity() {
         val inactiveColor = Color.parseColor(colors.text2)
         val activeColor = Color.parseColor(colors.primaryLight)
 
+        val tabs = listOf(tabCallLog, tabRegister, tabStats, tabConnect)
+        tabs.forEach { tab ->
+            tab.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                setColor(Color.TRANSPARENT)
+                cornerRadius = resources.displayMetrics.density * 17f
+            }
+        }
+
         tabConnectLabel.setTextColor(inactiveColor)
         tabCallLogLabel.setTextColor(inactiveColor)
         tabStatsLabel.setTextColor(inactiveColor)
@@ -221,24 +230,36 @@ class MainActivity : AppCompatActivity() {
 
         when (index) {
             0 -> {
+                setActiveTabBackground(tabCallLog, colors)
                 tabCallLogLabel.setTextColor(activeColor)
                 tabCallLogIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
                 (fragments.getOrNull(0) as? CallLogFragment)?.refreshIfNeeded()
                 (fragments.getOrNull(0) as? CallLogFragment)?.updateDialModeBarUI()
             }
             1 -> {
+                setActiveTabBackground(tabRegister, colors)
                 tabRegisterLabel.setTextColor(activeColor)
                 tabRegisterIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
             }
             2 -> {
+                setActiveTabBackground(tabStats, colors)
                 tabStatsLabel.setTextColor(activeColor)
                 tabStatsIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
                 (fragments.getOrNull(2) as? StatsFragment)?.refreshIfNeeded()
             }
             3 -> {
+                setActiveTabBackground(tabConnect, colors)
                 tabConnectLabel.setTextColor(activeColor)
                 tabConnectIcon.setColorFilter(activeColor, PorterDuff.Mode.SRC_IN)
             }
+        }
+    }
+
+    private fun setActiveTabBackground(tab: View, colors: ThemeColors) {
+        tab.background = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            setColor(Color.parseColor(colors.bg3))
+            cornerRadius = resources.displayMetrics.density * 17f
         }
     }
 

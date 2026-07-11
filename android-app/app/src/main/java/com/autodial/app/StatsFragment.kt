@@ -625,8 +625,8 @@ class StatsFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
         ThemeManager.applyToView(requireView(), colors)
 
-        // 卡片 5（本月财运/财气）value 跟随系统主题
-        todayLuck.setTextColor(Color.parseColor(colors.text))
-        totalLuck.setTextColor(Color.parseColor(colors.text))
+        // 保留“鸿运当头、紫气东来”的固定寓意色，不随主题覆盖。
+        todayCount.setTextColor(Color.parseColor("#E53935"))
+        todayDuration.setTextColor(Color.parseColor("#7B2CBF"))
     }
 }

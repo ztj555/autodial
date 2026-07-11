@@ -14,7 +14,7 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:tag="topBar"
-        android:background="#1A1D24"
+        android:background="@drawable/bg_v3_card"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="20dp"
@@ -50,7 +50,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="bg2"
-                android:background="#1A1D24"
+                android:background="@drawable/bg_v3_card"
                 android:orientation="vertical"
                 android:padding="20dp">
 
@@ -69,7 +69,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:tag="inputField"
-                    android:background="#22262F"
+                    android:background="@drawable/bg_v3_input"
                     android:hint="请填写客户称呼"
                     android:inputType="textPersonName"
                     android:maxLines="1"
@@ -98,7 +98,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="48dp"
                     android:tag="inputField"
-                    android:background="#22262F"
+                    android:background="@drawable/bg_v3_input"
                     android:hint="请填写客户手机号"
                     android:inputType="number"
                     android:maxLength="11"
@@ -114,7 +114,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="#22262F"
+                    android:background="@drawable/bg_v3_input"
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="16dp" />
 
