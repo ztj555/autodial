@@ -43,6 +43,15 @@
                 android:textStyle="bold" />
 
             <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/disconnectBtn"
+                android:layout_width="64dp"
+                android:layout_height="34dp"
+                android:gravity="center"
+                android:text="断开"
+                android:textColor="#FF4D4F"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -61,7 +70,7 @@
             android:layout_height="wrap_content"
             android:minHeight="150dp"
             android:visibility="visible"
-            android:tag="bg2"
+            android:tag="heroCard"
             android:background="#1A1D24"
             android:gravity="center_vertical"
             android:orientation="horizontal"
@@ -69,6 +78,12 @@
             android:paddingTop="14dp"
             android:paddingEnd="16dp"
             android:paddingBottom="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
             <FrameLayout
                 android:layout_width="28dp"
@@ -117,7 +132,7 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/connectBtnText"
+                android:id="@+id/legacyConnectBtnText"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:minWidth="64dp"
@@ -128,7 +143,53 @@
                 android:textColor="#111318"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:background="#C9A84C" />
+                android:background="#C9A84C"
+                android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/pinInput"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:tag="inputField"
+                    android:background="#1A1D24"
+                    android:hint="请输入系统手机号"
+                    android:textSize="15sp"
+                    android:gravity="center_vertical"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:inputType="number"
+                    android:maxLength="11"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:id="@+id/connectBtnText"
+                    android:layout_width="78dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:text="连接"
+                    android:textColor="#111318"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:background="#C9A84C" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/discoveryHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="你的系统手机号 · 与电脑端保持一致"
+                android:tag="text2"
+                android:textSize="10sp" />
         </LinearLayout>
 
         <!-- 连接成功横幅 -->
@@ -162,7 +223,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="0dp"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:visibility="gone">
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -180,7 +242,7 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/disconnectBtn"
+                android:id="@+id/legacyDisconnectBtn"
                 android:layout_width="wrap_content"
                 android:layout_height="32dp"
                 android:layout_gravity="end|bottom"
@@ -196,7 +258,7 @@
         </FrameLayout>
 
         <EditText
-            android:id="@+id/pinInput"
+            android:id="@+id/legacyPinInput"
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:layout_marginTop="4dp"
@@ -213,7 +275,7 @@
             android:singleLine="true" />
 
         <TextView
-            android:id="@+id/discoveryHint"
+            android:id="@+id/legacyDiscoveryHint"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
@@ -256,7 +318,7 @@
             android:layout_marginTop="2dp"
             android:layout_marginBottom="0dp"
             android:gravity="center"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             android:visibility="gone">
             <View android:layout_width="60dp" android:layout_height="1dp" android:background="#2A2A2A" />
             <View android:layout_width="6dp" android:layout_height="6dp" android:layout_marginStart="8dp" android:layout_marginEnd="8dp" android:background="#2A2A2A" android:rotation="45" />

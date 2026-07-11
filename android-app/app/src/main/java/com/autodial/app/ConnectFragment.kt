@@ -201,7 +201,11 @@ class ConnectFragment : Fragment() {
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
 
-            rebuildV3ConnectionHeader(view)
+            // The V3 hero is part of fragment_connect.xml. Keep business bindings on
+            // the original IDs; never detach and re-parent these views at runtime.
+            statusDashboard.visibility = View.VISIBLE
+            view.findViewById<View>(R.id.legacyPinContainer).visibility = View.GONE
+            connectionBanner.visibility = View.GONE
 
             // v7: 折叠面板绑定
             advancedHeader = view.findViewById(R.id.advancedSectionHeader)
