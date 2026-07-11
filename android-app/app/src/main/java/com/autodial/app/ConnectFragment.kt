@@ -575,7 +575,7 @@ class ConnectFragment : Fragment() {
         try {
             when {
                 connecting -> handleCancelClick()
-                DialService.isConnected -> handleReconnectClick()
+                DialService.isConnected -> handleDisconnectClick()
                 else -> handleStartConnect()
             }
         } catch (e: Exception) {
@@ -676,12 +676,22 @@ class ConnectFragment : Fragment() {
         if (!isAdded) return
         when (state) {
             "connected" -> {
-                connectBtnText.text = "重连"
-                connectBtnText.setTextColor(Color.parseColor("#00B5AD"))
+                connectBtnText.text = "断开"
+                connectBtnText.setTextColor(Color.parseColor("#F03E3E"))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setStroke(1, Color.parseColor("#00B5AD"))
+                    setStroke(1, Color.parseColor("#F03E3E"))
                     cornerRadius = 6f * resources.displayMetrics.density
+                    setColor(Color.TRANSPARENT)
+                }
+            }
+            "reconnect" -> {
+                connectBtnText.text = "重连"
+                connectBtnText.setTextColor(Color.parseColor("#2B6CC4"))
+                connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    setStroke(1, Color.parseColor("#2B6CC4"))
+                    cornerRadius = 8f * resources.displayMetrics.density
                     setColor(Color.TRANSPARENT)
                 }
             }
@@ -879,8 +889,8 @@ class ConnectFragment : Fragment() {
                 discoveryHint.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 updateBtnState("connected")
-                connectBtnText.visibility = View.GONE
-                disconnectBtn.visibility = View.VISIBLE
+                connectBtnText.visibility = View.VISIBLE
+                disconnectBtn.visibility = View.GONE
             } else {
                 statusDot.setImageResource(R.drawable.dot_gray)
                 stopPulseAnimation()
@@ -889,8 +899,8 @@ class ConnectFragment : Fragment() {
                 statusText.setTextColor(Color.parseColor(if (manual) "#FF4D4F" else colors.text2))
                 connectionMode.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
-                updateBtnState(if (manual) "manual_disconnect" else "disconnected")
-                connectBtnText.visibility = View.GONE
+                updateBtnState(if (reason == "disconnected" && !manual) "reconnect" else if (manual) "manual_disconnect" else "disconnected")
+                connectBtnText.visibility = View.VISIBLE
                 disconnectBtn.visibility = View.GONE
 
                 when (reason) {
