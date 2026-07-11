@@ -1000,8 +1000,7 @@ class ConnectFragment : Fragment() {
             cloudServerCurrentText.text = "未配置"
         } else {
             val first = list.first()
-            val tag = if (first.isNew) "🟢" else "🔵"
-            cloudServerCurrentText.text = "${list.size} 台 · $tag ${cloudCtrl.stripCloudPrefix(first.url)}"
+            cloudServerCurrentText.text = "已保存 ${list.size} 台 · ${cloudCtrl.stripCloudPrefix(first.url)}"
         }
     }
 
@@ -1053,15 +1052,15 @@ class ConnectFragment : Fragment() {
 
             // 连接状态指示灯
             row.addView(TextView(requireContext()).apply {
-                text = if (isCurrent) "\u25CF" else "\u25CB"
-                textSize = 12f; setPadding(0, 0, 6, 0)
+                text = "●"
+                textSize = 9f; setPadding(0, 0, 8, 0)
                 setTextColor(Color.parseColor(if (isCurrent) colors.green else colors.text2))
             })
 
             // 地址（可长按复制）
             val disp = cloudCtrl.stripCloudPrefix(server)
             val addrView = TextView(requireContext()).apply {
-                text = disp; textSize = 14f; isSingleLine = true
+                text = disp; textSize = 12f; isSingleLine = true
                 setTextColor(Color.parseColor(if (isCurrent) colors.primary else colors.text))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnLongClickListener {
@@ -1084,7 +1083,7 @@ class ConnectFragment : Fragment() {
 
             // 手动连接按钮
             row.addView(TextView(requireContext()).apply {
-                text = "连"; textSize = 13f; setPadding(8, 2, 8, 2)
+                text = "连接"; textSize = 10f; setPadding(9, 5, 9, 5)
                 setTextColor(Color.parseColor(colors.bg))
                 setBackgroundColor(Color.parseColor(colors.primary))
                 setOnClickListener {
@@ -1118,9 +1117,9 @@ class ConnectFragment : Fragment() {
 
             // 测试按钮
             row.addView(TextView(requireContext()).apply {
-                text = "测"; textSize = 13f; setPadding(6, 2, 6, 2)
-                setTextColor(Color.parseColor(colors.text))
-                setBackgroundColor(Color.parseColor(colors.bg2))
+                text = "测速"; textSize = 10f; setPadding(8, 5, 8, 5)
+                tag = "primaryBtnText"
+                ThemeManager.applyToView(this, colors)
                 setOnClickListener { testSingleServer(server, this) }
             })
             row.addView(TextView(requireContext()).apply { text = " "; textSize = 4f })
@@ -1138,7 +1137,7 @@ class ConnectFragment : Fragment() {
 
             // 删除
             row.addView(TextView(requireContext()).apply {
-                text = "删"; textSize = 13f; setPadding(6, 2, 2, 2)
+                text = "删除"; textSize = 10f; setPadding(8, 5, 2, 5)
                 setTextColor(Color.parseColor(colors.red))
                 setOnClickListener {
                     servers.removeAt(i)
@@ -1231,17 +1230,17 @@ class ConnectFragment : Fragment() {
             })
 
             row.addView(TextView(requireContext()).apply {
-                text = when (testOk) {
-                    true -> "\u2705"
-                    false -> "\u274C"
-                    null -> "\u23F3"
-                }
-                textSize = 11f; setPadding(0, 0, 6, 0)
+                text = "●"
+                textSize = 9f; setPadding(0, 0, 8, 0)
+                setTextColor(Color.parseColor(when (testOk) {
+                    true -> colors.green
+                    false -> colors.red
+                    null -> colors.text2
+                }))
             })
 
             row.addView(TextView(requireContext()).apply {
-                val tag = if (entry.isNew) "🟢 " else "🔵 "
-                text = tag + cloudCtrl.stripCloudPrefix(server); textSize = 12f; isSingleLine = true
+                text = cloudCtrl.stripCloudPrefix(server); textSize = 12f; isSingleLine = true
                 setTextColor(Color.parseColor(when {
                     testOk == true -> colors.green
                     testOk == false -> colors.red

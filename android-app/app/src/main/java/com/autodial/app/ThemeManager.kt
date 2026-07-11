@@ -410,6 +410,15 @@ object ThemeManager {
             "sectionHeader" -> {
                 view.background = borderRadius(blendedBg2, 20f, colors.text2, 78)
             }
+            "settingGroup" -> {
+                view.background = borderRadius(blendedBg2, 16f, colors.text2, 82)
+            }
+            "settingRow" -> {
+                view.setBackgroundColor(parseColor(blendedBg2))
+            }
+            "settingDivider" -> {
+                view.setBackgroundColor(parseColor(blendColors(colors.text2, colors.bg2, 84)))
+            }
             "inputField" -> {
                 view.background = borderRadius(blendedBg3, 18f, colors.text2, 58)
                 if (view is TextView) view.setTextColor(parseColor(colors.text))
