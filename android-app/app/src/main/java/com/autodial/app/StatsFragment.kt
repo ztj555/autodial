@@ -411,7 +411,7 @@ class StatsFragment : Fragment() {
 
     private fun syncVisitsFromCloud() {
         if (!isAdded) return
-        visitSyncBtn.text = "⏳ 同步中..."
+        visitSyncBtn.text = "同步中..."
         visitSyncBtn.isEnabled = false
 
         executor.execute {
@@ -504,7 +504,7 @@ class StatsFragment : Fragment() {
 
     private fun resetSyncBtn() {
         if (!isAdded) return
-        visitSyncBtn.text = "🔄 同步"
+        visitSyncBtn.text = "同步"
         visitSyncBtn.isEnabled = true
     }
 

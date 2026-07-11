@@ -239,7 +239,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0"
-                        android:textSize="36sp"
+                        android:textSize="25sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
 
@@ -272,7 +272,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:text="0"
-                        android:textSize="28sp"
+                        android:textSize="25sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
 
@@ -313,7 +313,9 @@
                         android:id="@+id/statsVisitSyncBtn"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🔄 同步"
+                        android:text="同步"
+                        android:drawableStart="@drawable/ic_ph_arrows_clockwise"
+                        android:drawablePadding="5dp"
                         android:textColor="#111318"
                         android:textSize="12sp"
                         android:textStyle="bold"
@@ -527,7 +529,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="20dp"
-                android:text="💡 成功通话+1财运，每分钟+1财气"
+                android:text="成功通话 +1 财运，每分钟 +1 财气"
                 android:tag="text2"
                 android:textColor="#605040"
                 android:textSize="11sp" />
