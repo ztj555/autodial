@@ -1156,7 +1156,7 @@
       Object.assign(srvRow.style, { display: 'flex', gap: '8px', marginBottom: '4px' });
       const srvInput = document.createElement('input');
       srvInput.type = 'text';
-      srvInput.placeholder = '例: 262ao85kz470.vicp.fun:55535';
+      srvInput.placeholder = '例: 101.34.65.254:35430';
       Object.assign(srvInput.style, {
         flex: '1', padding: '10px 12px', fontSize: '14px',
         background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',

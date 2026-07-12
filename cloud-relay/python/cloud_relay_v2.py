@@ -780,15 +780,18 @@ def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
         if body.get('code') == 1:
             log.info(f'CRM sync OK visit_id={visit_id} kid={kid}')
             # 标记为已同步
+            conn = None
             try:
                 conn = sqlite3.connect(DB_PATH)
                 c = conn.cursor()
                 c.execute('UPDATE visits SET crm_synced=1, updated_at=? WHERE id=?',
                           (datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), visit_id))
                 conn.commit()
-                conn.close()
             except:
                 pass
+            finally:
+                if conn:
+                    conn.close()
         else:
             log.warning(f'CRM sync FAIL visit_id={visit_id} kid={kid} msg={body.get("msg")}')
     except Exception as e:
@@ -982,6 +985,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING', 'pin 和 name 不能为空'))
         
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -991,10 +995,12 @@ async def health_check_handler(path, request_headers):
                 (pin, name, now_str)
             )
             conn.commit()
-            conn.close()
         except Exception as e:
             log.error(f'Advisor register error: {e}')
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
         
         log.info(f'ADVISOR_REGISTER pin={pin} name={name}')
         return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin, 'name': name}).encode('utf-8'))
@@ -1006,18 +1012,21 @@ async def health_check_handler(path, request_headers):
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
             return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('SELECT name FROM advisor_names WHERE pin = ?', (pin,))
             row = c.fetchone()
-            conn.close()
             if row:
                 return (200, JSON_HDR, json.dumps({'ok': True, 'name': row[0]}).encode('utf-8'))
             else:
                 return (200, JSON_HDR, _err_json('NOT_FOUND', '未找到该PIN对应的顾问姓名'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # ===== 管理员标记 =====
 
@@ -1027,15 +1036,18 @@ async def health_check_handler(path, request_headers):
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
             return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('SELECT 1 FROM admins WHERE pin = ?', (pin,))
             is_admin = c.fetchone() is not None
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True, 'is_admin': is_admin}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 管理员开关: GET /api/v1/advisor/set_admin?pin=xxx (设为管理)
     #          GET /api/v1/advisor/del_admin?pin=xxx (取消管理)
@@ -1045,6 +1057,7 @@ async def health_check_handler(path, request_headers):
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
             return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -1052,32 +1065,38 @@ async def health_check_handler(path, request_headers):
             c.execute('INSERT OR IGNORE INTO admins (pin, added_by, created_at) VALUES (?, ?, ?)',
                       (pin, 'dashboard', now_str))
             conn.commit()
-            conn.close()
             log.info(f'ADMIN_SET pin={pin}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     if path == '/api/v1/advisor/del_admin':
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
             return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('DELETE FROM admins WHERE pin = ?', (pin,))
             conn.commit()
-            conn.close()
             log.info(f'ADMIN_DEL pin={pin}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # ===== PIN 列表 + 分组管理 =====
 
     # 所有已注册 PIN（含姓名、管理员状态、分组）
     if path == '/api/v1/pins':
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
@@ -1086,10 +1105,12 @@ async def health_check_handler(path, request_headers):
                          (SELECT 1 FROM admins WHERE pin = a.pin) AS is_admin
                          FROM advisor_names a ORDER BY a.updated_at DESC''')
             rows = [dict(r) for r in c.fetchall()]
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True, 'pins': rows}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 设置 PIN 分组: GET /api/v1/pin/set_group?pin=xxx&group_id=N
     if path == '/api/v1/pin/set_group':
@@ -1098,28 +1119,34 @@ async def health_check_handler(path, request_headers):
         gid = qs.get('group_id', [''])[0].strip()
         if not pin:
             return (200, JSON_HDR, _err_json('MISSING', 'pin 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('UPDATE advisor_names SET group_id=? WHERE pin=?', (int(gid) if gid else None, pin))
             conn.commit()
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 分组列表: GET /api/v1/groups
     if path == '/api/v1/groups':
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute('SELECT * FROM pin_groups ORDER BY id')
             rows = [dict(r) for r in c.fetchall()]
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True, 'groups': rows}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 添加分组: GET /api/v1/group/add?name=xxx
     if path == '/api/v1/group/add':
@@ -1127,6 +1154,7 @@ async def health_check_handler(path, request_headers):
         name = qs.get('name', [''])[0].strip()
         if not name:
             return (200, JSON_HDR, _err_json('MISSING', '分组名不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -1134,10 +1162,12 @@ async def health_check_handler(path, request_headers):
             c.execute('INSERT INTO pin_groups (name, created_at) VALUES (?, ?)', (name, now_str))
             conn.commit()
             rid = c.lastrowid
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True, 'id': rid, 'name': name}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 删除分组: GET /api/v1/group/del?id=N
     if path == '/api/v1/group/del':
@@ -1145,16 +1175,19 @@ async def health_check_handler(path, request_headers):
         gid = qs.get('id', [''])[0]
         if not gid:
             return (200, JSON_HDR, _err_json('MISSING', 'id 不能为空'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('UPDATE advisor_names SET group_id=NULL WHERE group_id=?', (int(gid),))
             c.execute('DELETE FROM pin_groups WHERE id=?', (int(gid),))
             conn.commit()
-            conn.close()
             return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 根据分组查询 visits: GET /api/v1/visits?group=N
     # 修改现有 visits 查询，支持 group_id 参数
@@ -1179,6 +1212,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', '缺少必填字段: name, mobile, kefu_tel'))
 
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -1196,10 +1230,12 @@ async def health_check_handler(path, request_headers):
                 )
             conn.commit()
             row_id = c.lastrowid
-            conn.close()
         except Exception as e:
             log.error(f'INSERT visit error: {e}')
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
         # 客户端已直接提交 CRM，云端只做记录 + WS 推送，不再重复提交 CRM
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
@@ -1215,12 +1251,12 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0]
         group_id = qs.get('group', [''])[0]
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             if group_id:
-                # 按分组查询：先找出该分组的所有 PIN，再查 visits
                 c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (int(group_id),))
                 group_pins = [r['pin'] for r in c.fetchall()]
                 if group_pins:
@@ -1234,10 +1270,12 @@ async def health_check_handler(path, request_headers):
             else:
                 c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
             rows = [dict(r) for r in c.fetchall()]
-            conn.close()
             return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 删除: GET /api/v1/visit/delete?id=N
     if path == '/api/v1/visit/delete':
@@ -1245,18 +1283,21 @@ async def health_check_handler(path, request_headers):
         rid = qs.get('id', [''])[0]
         if not rid:
             return (200, JSON_HDR, _err_json('MISSING_ID', '缺少记录 id'))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('DELETE FROM visits WHERE id=?', (int(rid),))
             conn.commit()
             affected = c.rowcount
-            conn.close()
             return (200, JSON_HDR, json.dumps(
                 {'ok': affected > 0, 'code': 'DELETED' if affected > 0 else 'NOT_FOUND',
                  'id': int(rid)}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 更新: GET /api/v1/visit/update?id=N&name=...&mobile=...&visit_type=...
     if path == '/api/v1/visit/update':
@@ -1277,18 +1318,21 @@ async def health_check_handler(path, request_headers):
         fields.append('updated_at=?')
         values.append(now_str)
         values.append(int(rid))
+        conn = None
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute(f'UPDATE visits SET {", ".join(fields)} WHERE id=?', values)
             conn.commit()
             affected = c.rowcount
-            conn.close()
             return (200, JSON_HDR, json.dumps(
                 {'ok': affected > 0, 'code': 'UPDATED' if affected > 0 else 'NOT_FOUND',
                  'id': int(rid)}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # Web 管理界面
     if path == '/' or path == '/index.html':
@@ -1521,8 +1565,12 @@ def main():
     server_thread = threading.Thread(target=run_server_thread, daemon=True)
     server_thread.start()
 
-    # 主线程运行托盘（pystray 要求主线程）
-    run_tray()
+    # 主线程运行托盘（pystray 要求主线程）；无桌面环境时跳过
+    try:
+        run_tray()
+    except Exception:
+        log.info(f'Server running without system tray (headless), port={PORT}')
+        server_thread.join()
 
 if __name__ == '__main__':
     main()

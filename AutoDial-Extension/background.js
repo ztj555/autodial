@@ -31,7 +31,7 @@ refreshPcStatus(); // 启动时立刻探测一次
 
 // 地址标准化：纯 IP:PORT -> http://IP:PORT，已有协议不动
 function fixUrl(addr) {
-  if (!addr) return 'http://262ao85kz470.vicp.fun:55535';
+  if (!addr) return 'http://101.34.65.254:35430';
   if (/^https?:\/\//i.test(addr)) return addr;
   if (/^ws:\/\//i.test(addr)) return addr.replace(/^ws:/i, 'http:');
   if (/^wss:\/\//i.test(addr)) return addr.replace(/^wss:/i, 'https:');
@@ -45,7 +45,7 @@ async function getCloudApi() {
   if (stored.cloud_apis_fetched && stored.cloud_apis_fetched.length > 0) {
     return fixUrl(stored.cloud_apis_fetched[0]);
   }
-  return 'http://262ao85kz470.vicp.fun:55535';
+  return 'http://101.34.65.254:35430';
 }
 
 // 一键获取云服务器列表（从 Gist/Gitee）

@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 加载保存的服务器地址和 PIN（手动设置优先，其次自动获取）
   chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched', 'self_phone', 'pin', 'manager_name'], (s) => {
     serverInput.value = cleanAddr(s.cloud_api) ||
-                        (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '262ao85kz470.vicp.fun:55535');
+                        (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '101.34.65.254:35430');
     if (s.pin || s.self_phone) {
       pinInput.value = s.pin || s.self_phone || '';
       showStatus(s.pin || s.self_phone);
@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 显示当前云端地址（手动设置优先，其次自动获取）
     chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {
       const addr = cleanAddr(s.cloud_api) ||
-                   (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] + ' [自动]' : '262ao85kz470.vicp.fun:55535');
+                   (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] + ' [自动]' : '101.34.65.254:35430');
       document.getElementById('cloudAddr').textContent = addr;
       document.getElementById('cloudAddr').onclick = () => {
         document.getElementById('editServerBtn').click();
@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 异步检查云端 API 状态
     chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {
       const apiUrl = fullUrl(cleanAddr(s.cloud_api) || 
-                             (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '262ao85kz470.vicp.fun:55535'));
+                             (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : '101.34.65.254:35430'));
       fetch(`${apiUrl}/api/v1/status`, {
         headers: { 'X-AutoDial-PIN': pin || '' },
         signal: AbortSignal.timeout(8000)

@@ -1701,7 +1701,7 @@ setTimeout(function() { updateFbBtnText(); }, 2000);
 let _cloudServers = [];
 let _cloudEnabled = false;
 function cloudToggleChanged(){_cloudEnabled=document.getElementById('setCloudEnabled').checked;document.getElementById('cloudSection').style.opacity=_cloudEnabled?'1':'0.5';updateCloudConfig();}
-async function addCloudServer(){var a=prompt('输入云服务器地址（如 262ao85kz470.vicp.fun:55535）:','');if(!a)return;a=a.trim().replace(/^(https?|wss?):\/\//i,'');if(!a.includes(':'))a+=':35430';_cloudServers.push(a);renderCloudServerList();updateCloudConfig();}
+async function addCloudServer(){var a=prompt('输入云服务器地址（如 101.34.65.254:35430）:','');if(!a)return;a=a.trim().replace(/^(https?|wss?):\/\//i,'');if(!a.includes(':'))a+=':35430';_cloudServers.push(a);renderCloudServerList();updateCloudConfig();}
 function removeCloudServer(i){_cloudServers.splice(i,1);renderCloudServerList();updateCloudConfig();}
 async function testCloudServers(){if(!_cloudServers.length)return;var s=document.getElementById('cloudSummary');s.textContent='测试中...';try{var r=await window.go.main.App.TestCloudServers(_cloudServers);if(r&&r.length){var ok=r.filter(function(x){return x.ok}).length;s.textContent=ok+'/'+r.length+' 个可达';s.style.color=ok>0?'var(--green)':'var(--red)';}}catch(e){s.textContent='测试失败';}}
 async function fetchCloudServers(){try{var list=await window.go.main.App.FetchCloudServers();if(list&&list.length){_cloudServers=list.map(function(x){return x.replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();updateCloudConfig();document.getElementById('cloudSummary').textContent='获取到 '+list.length+' 个服务器';document.getElementById('cloudSummary').style.color='var(--green)';}}catch(e){document.getElementById('cloudSummary').textContent='获取失败';}}
