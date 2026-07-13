@@ -342,9 +342,9 @@
             android:paddingTop="12dp"
             android:paddingBottom="12dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:tag="sectionHeaderIcon" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tint="#6685A6" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tint="#6685A6" />
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="跨屏连接设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
-            <TextView android:id="@+id/advancedSectionSummary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自动 · 未连接" android:tag="text2" android:textSize="10sp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自动 · LAN 优先" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/advancedArrow"
@@ -360,7 +360,7 @@
             android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="24dp"
+            android:layout_marginStart="12dp"
             android:orientation="vertical"
             android:visibility="gone">
 

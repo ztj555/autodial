@@ -76,7 +76,6 @@ class ConnectFragment : Fragment() {
     private lateinit var advancedHeader: View
     private lateinit var advancedContent: View
     private lateinit var advancedArrow: TextView
-    private lateinit var advancedSummary: TextView
     private lateinit var otherHeader: View
     private lateinit var otherContent: View
     private lateinit var otherArrow: TextView
@@ -212,7 +211,6 @@ class ConnectFragment : Fragment() {
             advancedHeader = view.findViewById(R.id.advancedSectionHeader)
             advancedContent = view.findViewById(R.id.advancedSectionContent)
             advancedArrow = view.findViewById(R.id.advancedArrow)
-            advancedSummary = view.findViewById(R.id.advancedSectionSummary)
             otherHeader = view.findViewById(R.id.otherSectionHeader)
             otherContent = view.findViewById(R.id.otherSectionContent)
             otherArrow = view.findViewById(R.id.otherArrow)
@@ -686,7 +684,6 @@ class ConnectFragment : Fragment() {
                 DialService.isConnected -> handleReconnectClick()
                 else -> handleStartConnect()
             }
-            updateAdvancedSummary()
         } catch (e: Exception) {
             Toast.makeText(requireActivity(), "操作失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -1073,23 +1070,6 @@ class ConnectFragment : Fragment() {
     private fun updateStrategyDesc() {
         if (!isAdded) return
         connectionStrategyDesc.text = prefCtrl.getConnectionStrategy().label
-        updateAdvancedSummary()
-    }
-
-    private fun updateAdvancedSummary() {
-        if (!isAdded || !::advancedSummary.isInitialized || !::prefCtrl.isInitialized) return
-        val strategy = when (prefCtrl.getConnectionStrategy()) {
-            ConnectionStrategy.AUTO -> "自动"
-            ConnectionStrategy.LAN_ONLY -> "仅局域网"
-            ConnectionStrategy.CLOUD_ONLY -> "仅云中转"
-        }
-        val channel = when {
-            DialService.isLanConnected && DialService.isCloudConnected -> "LAN + 云端"
-            DialService.isLanConnected -> "LAN 已连接"
-            DialService.isCloudConnected -> "云端已连接"
-            else -> "未连接"
-        }
-        advancedSummary.text = "$strategy · $channel"
     }
 
     // ==================== 云服务器管理 ====================
@@ -1442,67 +1422,46 @@ class ConnectFragment : Fragment() {
         val parent = root.findViewById<ViewGroup>(R.id.themeSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
         val values = intArrayOf(0, 25, 50, 75, 100)
-        val dp = resources.displayMetrics.density
 
-        parent.addView(TextView(requireContext()).apply {
-            text = "外观设置"
-            textSize = 13f
-            setTextColor(Color.parseColor(colors.primaryLight))
-            setPadding(0, (20 * dp).toInt(), 0, (8 * dp).toInt())
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        })
-
-        val section = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 20, 0, 0)
         }
 
         val label = TextView(requireContext()).apply {
             text = "卡片透明度"
-            textSize = 14f
-            setTextColor(Color.parseColor(colors.text))
-            setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+            textSize = 14f; setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        section.addView(label)
-
-        val choices = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            weightSum = values.size.toFloat()
-        }
+        row.addView(label)
 
         fun refreshButtons() {
             val opacity = prefCtrl.getCardOpacity()
-            for (i in values.indices) {
-                val btn = choices.getChildAt(i) as? TextView ?: continue
-                val sel = values[i] == opacity
+            for (i in 1 until row.childCount) {
+                val btn = row.getChildAt(i) as? TextView ?: continue
+                val sel = values[i - 1] == opacity
                 btn.setTextColor(Color.parseColor(if (sel) colors.bg else colors.primary))
-                btn.background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor(if (sel) colors.primary else colors.bg3))
-                    cornerRadius = 10 * dp
-                }
+                btn.setBackgroundColor(Color.parseColor(if (sel) colors.primary else colors.bg3))
             }
         }
 
-        values.forEachIndexed { index, v ->
+        for (v in values) {
             val btn = TextView(requireContext()).apply {
                 text = if (v == 0) "关" else "$v%"
-                textSize = 11f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-                layoutParams = android.widget.LinearLayout.LayoutParams(0,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    if (index > 0) marginStart = (6 * dp).toInt()
-                }
+                textSize = 11f; setPadding(10, 5, 10, 5)
+                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
                 setOnClickListener {
                     prefCtrl.setCardOpacity(v)
                     ThemeManager.notifyRefresh()
                     refreshButtons()
                 }
             }
-            choices.addView(btn)
+            row.addView(btn)
         }
         refreshButtons()
-        section.addView(choices)
-        parent.addView(section)
+        parent.addView(row)
     }
 
     /** 卡片边框开关：开启=显示卡片边框，关闭=隐藏所有卡片边框 */
@@ -1513,7 +1472,7 @@ class ConnectFragment : Fragment() {
         val row = android.widget.LinearLayout(requireContext()).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 18, 0, 8)
+            setPadding(0, 16, 0, 0)
         }
 
         val label = TextView(requireContext()).apply {
@@ -1545,46 +1504,39 @@ class ConnectFragment : Fragment() {
     private fun addNavigationOrderRow(root: View) {
         val parent = root.findViewById<ViewGroup>(R.id.themeSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
-        val dp = resources.displayMetrics.density
-        val section = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(0, (10 * dp).toInt(), 0, (4 * dp).toInt())
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 16, 0, 0)
         }
-        section.addView(TextView(requireContext()).apply {
+        row.addView(TextView(requireContext()).apply {
             text = "底部导航顺序"
             textSize = 14f
             setTextColor(Color.parseColor(colors.text))
-            setPadding(0, 0, 0, (8 * dp).toInt())
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            )
         })
-
-        val choices = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            weightSum = 2f
-        }
 
         val options = listOf("call_first" to "通话优先", "settings_first" to "设置优先")
         fun refresh() {
             val current = prefCtrl.getNavigationOrder()
             for (i in options.indices) {
-                val button = choices.getChildAt(i) as? TextView ?: continue
+                val button = row.getChildAt(i + 1) as? TextView ?: continue
                 val active = options[i].first == current
                 button.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
                 button.background = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor(if (active) colors.primary else colors.bg3))
-                    cornerRadius = 10 * dp
+                    cornerRadius = 10 * resources.displayMetrics.density
                 }
             }
         }
-        options.forEachIndexed { index, (key, label) ->
-            choices.addView(TextView(requireContext()).apply {
+        options.forEach { (key, label) ->
+            row.addView(TextView(requireContext()).apply {
                 text = label
                 textSize = 11f
                 gravity = android.view.Gravity.CENTER
-                setPadding(0, (9 * dp).toInt(), 0, (9 * dp).toInt())
-                layoutParams = android.widget.LinearLayout.LayoutParams(0,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    if (index > 0) marginStart = (8 * dp).toInt()
-                }
+                setPadding(12, 7, 12, 7)
                 setOnClickListener {
                     prefCtrl.setNavigationOrder(key)
                     refresh()
@@ -1593,8 +1545,7 @@ class ConnectFragment : Fragment() {
             })
         }
         refresh()
-        section.addView(choices)
-        parent.addView(section)
+        parent.addView(row)
     }
 
     /** 弹窗通知分组 */
@@ -1606,7 +1557,7 @@ class ConnectFragment : Fragment() {
         val header = TextView(requireContext()).apply {
             text = "通知弹窗"
             textSize = 13f; setTextColor(Color.parseColor(colors.primaryLight))
-            setPadding(0, 24, 0, 10)
+            setPadding(0, 24, 0, 8)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         parent.addView(header)
@@ -1624,53 +1575,40 @@ class ConnectFragment : Fragment() {
         // 上次通话提示时长
         val opts = intArrayOf(5, 10, 30, 0)
         val labels = arrayOf("5秒", "10秒", "30秒", "一直")
-        val dp = resources.displayMetrics.density
-        val section = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(0, (12 * dp).toInt(), 0, (4 * dp).toInt())
+        val cur = prefCtrl.getLastCallHintDuration()
+
+        val row = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 12, 0, 0)
         }
         val label = TextView(requireContext()).apply {
             text = "上次通话提示"
-            textSize = 14f
-            setTextColor(Color.parseColor(colors.text))
-            setPadding(0, 0, 0, (8 * dp).toInt())
+            textSize = 14f; setTextColor(Color.parseColor(colors.text))
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        section.addView(label)
-
-        val choices = android.widget.LinearLayout(requireContext()).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            weightSum = opts.size.toFloat()
-        }
+        row.addView(label)
 
         fun refresh() {
             val sel = prefCtrl.getLastCallHintDuration()
             for (i in 0 until opts.size) {
-                val b = choices.getChildAt(i) as? TextView ?: continue
+                val b = row.getChildAt(i + 1) as? TextView ?: continue
                 val active = opts[i] == sel
                 b.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
-                b.background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor(if (active) colors.primary else colors.bg3))
-                    cornerRadius = 10 * dp
-                }
+                b.setBackgroundColor(Color.parseColor(if (active) colors.primary else colors.bg3))
             }
         }
         for (i in opts.indices) {
             val btn = TextView(requireContext()).apply {
-                text = labels[i]
-                textSize = 11f
-                gravity = android.view.Gravity.CENTER
-                setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
-                layoutParams = android.widget.LinearLayout.LayoutParams(0,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    if (i > 0) marginStart = (6 * dp).toInt()
-                }
+                text = labels[i]; textSize = 11f; setPadding(10, 5, 10, 5)
+                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
                 setOnClickListener { prefCtrl.setLastCallHintDuration(opts[i]); refresh() }
             }
-            choices.addView(btn)
+            row.addView(btn)
         }
         refresh()
-        section.addView(choices)
-        parent.addView(section)
+        parent.addView(row)
     }
 
     private fun addNotifyToggle(parent: ViewGroup, colors: ThemeColors, title: String,
@@ -1909,7 +1847,6 @@ class ConnectFragment : Fragment() {
             lanChannelStatus.setTextColor(Color.parseColor(if (lanOk || pcOk) colors.green else "#605040"))
             cloudChannelStatus.text = if (cloudOk) "已连接" else "未连接"
             cloudChannelStatus.setTextColor(Color.parseColor(if (cloudOk) colors.green else "#605040"))
-            updateAdvancedSummary()
         } catch (_: Exception) {}
     }
 }
