@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -409,6 +410,13 @@ object ThemeManager {
             }
             "sectionHeader" -> {
                 view.background = borderRadius(blendedBg2, 20f, colors.text2, 78)
+            }
+            "sectionHeaderIcon" -> if (view is ImageView) {
+                val lightMode = isLightMode(ctx)
+                val iconBg = if (lightMode) colors.text else blendedBg3
+                val iconTint = if (lightMode) colors.bg2 else colors.primaryLight
+                view.background = roundedFill(iconBg, 10f)
+                view.setColorFilter(parseColor(iconTint))
             }
             "settingGroup" -> {
                 view.background = borderRadius(blendedBg2, 16f, colors.text2, 82)
