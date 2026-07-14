@@ -360,7 +360,7 @@
             android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="24dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -680,7 +680,7 @@
             android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="24dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -1103,12 +1103,10 @@
 
         <LinearLayout
             android:id="@+id/themeSectionContent"
-            android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="24dp"
             android:orientation="vertical"
-            android:paddingBottom="12dp"
             android:visibility="gone">
 
             <!-- 主题 -->
@@ -1117,7 +1115,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:tag="settingRow"
+                android:tag="bg2"
                 android:background="#1A1D24"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -1217,6 +1215,7 @@
             android:id="@+id/usageGuideContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
             android:tag="bg2"
             android:background="#1A1D24"
             android:orientation="vertical"
