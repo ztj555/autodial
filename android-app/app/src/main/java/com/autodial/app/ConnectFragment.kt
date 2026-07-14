@@ -1433,6 +1433,7 @@ class ConnectFragment : Fragment() {
     private fun addCardOpacityRow(root: View) {
         val parent = root.findViewById<ViewGroup>(R.id.appearanceSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
         val values = intArrayOf(0, 25, 50, 75, 100)
 
         val row = android.widget.LinearLayout(requireContext()).apply {
@@ -1442,7 +1443,9 @@ class ConnectFragment : Fragment() {
             )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 20, 0, 0)
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            setBackgroundColor(Color.parseColor("#1A1D24"))
+            tag = "settingRow"
         }
 
         val label = TextView(requireContext()).apply {
@@ -1466,8 +1469,8 @@ class ConnectFragment : Fragment() {
         for (v in values) {
             val btn = TextView(requireContext()).apply {
                 text = if (v == 0) "关" else "$v%"
-                textSize = 11f; setPadding(10, 5, 10, 5)
-                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
+                textSize = 11f; setPadding((10 * dp).toInt(), (5 * dp).toInt(), (10 * dp).toInt(), (5 * dp).toInt())
+                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = (6 * dp).toInt()
                 setOnClickListener {
                     prefCtrl.setCardOpacity(v)
                     ThemeManager.notifyRefresh()
@@ -1478,12 +1481,14 @@ class ConnectFragment : Fragment() {
         }
         refreshButtons()
         parent.addView(row)
+        addSettingDivider(parent)
     }
 
     /** 卡片边框开关：开启=显示卡片边框，关闭=隐藏所有卡片边框 */
     private fun addCardBorderRow(root: View) {
         val parent = root.findViewById<ViewGroup>(R.id.appearanceSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
 
         val row = android.widget.LinearLayout(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
@@ -1492,7 +1497,9 @@ class ConnectFragment : Fragment() {
             )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 16, 0, 0)
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            setBackgroundColor(Color.parseColor("#1A1D24"))
+            tag = "settingRow"
         }
 
         val label = TextView(requireContext()).apply {
@@ -1505,8 +1512,8 @@ class ConnectFragment : Fragment() {
 
         val toggle = TextView(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
-                (42 * resources.displayMetrics.density).toInt(),
-                (24 * resources.displayMetrics.density).toInt()
+                (42 * dp).toInt(),
+                (24 * dp).toInt()
             )
             renderSwitch(this, prefCtrl.getCardBorder(), colors)
             setOnClickListener {
@@ -1518,12 +1525,26 @@ class ConnectFragment : Fragment() {
         }
         row.addView(toggle)
         parent.addView(row)
+
+        addSettingDivider(parent)
+    }
+
+    private fun addSettingDivider(parent: ViewGroup) {
+        val dp = resources.displayMetrics.density
+        parent.addView(View(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT, (1 * dp).toInt()
+            )
+            setBackgroundColor(Color.parseColor("#252525"))
+            tag = "settingDivider"
+        })
     }
 
     /** 底部导航顺序：保留页面索引，仅调整 Tab 的展示顺序。 */
     private fun addNavigationOrderRow(root: View) {
         val parent = root.findViewById<ViewGroup>(R.id.appearanceSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
         val row = android.widget.LinearLayout(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1531,7 +1552,9 @@ class ConnectFragment : Fragment() {
             )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 16, 0, 0)
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            setBackgroundColor(Color.parseColor("#1A1D24"))
+            tag = "settingRow"
         }
         row.addView(TextView(requireContext()).apply {
             text = "底部导航顺序"
@@ -1551,7 +1574,7 @@ class ConnectFragment : Fragment() {
                 button.setTextColor(Color.parseColor(if (active) colors.bg else colors.primary))
                 button.background = android.graphics.drawable.GradientDrawable().apply {
                     setColor(Color.parseColor(if (active) colors.primary else colors.bg3))
-                    cornerRadius = 10 * resources.displayMetrics.density
+                    cornerRadius = 10 * dp
                 }
             }
         }
@@ -1560,7 +1583,7 @@ class ConnectFragment : Fragment() {
                 text = label
                 textSize = 11f
                 gravity = android.view.Gravity.CENTER
-                setPadding(12, 7, 12, 7)
+                setPadding((12 * dp).toInt(), (7 * dp).toInt(), (12 * dp).toInt(), (7 * dp).toInt())
                 setOnClickListener {
                     prefCtrl.setNavigationOrder(key)
                     refresh()
@@ -1570,6 +1593,7 @@ class ConnectFragment : Fragment() {
         }
         refresh()
         parent.addView(row)
+        addSettingDivider(parent)
     }
 
     /** 通知与提示分组 */
@@ -1577,20 +1601,20 @@ class ConnectFragment : Fragment() {
         val parent = root.findViewById<ViewGroup>(R.id.notifySectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
 
-        // 连接状态通知（短：开关）
+        // 连接状态通知
         addNotifyToggle(parent, colors, "连接状态通知",
             { prefCtrl.getNotifyConnState() },
-            { prefCtrl.setNotifyConnState(it) })
+            { prefCtrl.setNotifyConnState(it) }, true)
 
         // 登记结果通知
         addNotifyToggle(parent, colors, "登记结果通知",
             { prefCtrl.getNotifyRegister() },
-            { prefCtrl.setNotifyRegister(it) })
+            { prefCtrl.setNotifyRegister(it) }, true)
 
-        // 上次通话提示时长
+        // 上次通话提示时长（最后一行，不加分隔线）
         val opts = intArrayOf(5, 10, 30, 0)
         val labels = arrayOf("5秒", "10秒", "30秒", "一直")
-        val cur = prefCtrl.getLastCallHintDuration()
+        val dp = resources.displayMetrics.density
 
         val row = android.widget.LinearLayout(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
@@ -1599,7 +1623,9 @@ class ConnectFragment : Fragment() {
             )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 12, 0, 0)
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            setBackgroundColor(Color.parseColor("#1A1D24"))
+            tag = "settingRow"
         }
         val label = TextView(requireContext()).apply {
             text = "上次通话提示"
@@ -1620,8 +1646,9 @@ class ConnectFragment : Fragment() {
         }
         for (i in opts.indices) {
             val btn = TextView(requireContext()).apply {
-                text = labels[i]; textSize = 11f; setPadding(10, 5, 10, 5)
-                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = 6
+                text = labels[i]; textSize = 11f
+                setPadding((10 * dp).toInt(), (5 * dp).toInt(), (10 * dp).toInt(), (5 * dp).toInt())
+                (layoutParams as? android.widget.LinearLayout.LayoutParams)?.marginStart = (6 * dp).toInt()
                 setOnClickListener { prefCtrl.setLastCallHintDuration(opts[i]); refresh() }
             }
             row.addView(btn)
@@ -1631,7 +1658,8 @@ class ConnectFragment : Fragment() {
     }
 
     private fun addNotifyToggle(parent: ViewGroup, colors: ThemeColors, title: String,
-                                 get: () -> Boolean, set: (Boolean) -> Unit) {
+                                 get: () -> Boolean, set: (Boolean) -> Unit, withDivider: Boolean) {
+        val dp = resources.displayMetrics.density
         val row = android.widget.LinearLayout(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1639,7 +1667,9 @@ class ConnectFragment : Fragment() {
             )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(0, 16, 0, 0)
+            setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
+            setBackgroundColor(Color.parseColor("#1A1D24"))
+            tag = "settingRow"
         }
         val label = TextView(requireContext()).apply {
             text = title; textSize = 14f; setTextColor(Color.parseColor(colors.text))
@@ -1649,8 +1679,8 @@ class ConnectFragment : Fragment() {
         row.addView(label)
         val toggle = TextView(requireContext()).apply {
             layoutParams = android.widget.LinearLayout.LayoutParams(
-                (42 * resources.displayMetrics.density).toInt(),
-                (24 * resources.displayMetrics.density).toInt()
+                (42 * dp).toInt(),
+                (24 * dp).toInt()
             )
             renderSwitch(this, get(), colors)
             setOnClickListener {
@@ -1660,6 +1690,7 @@ class ConnectFragment : Fragment() {
         }
         row.addView(toggle)
         parent.addView(row)
+        if (withDivider) addSettingDivider(parent)
     }
 
     private fun applyTheme() {
@@ -1677,6 +1708,15 @@ class ConnectFragment : Fragment() {
         previewBg.setBackgroundColor(Color.parseColor(colors.bg))
         previewBg2.setBackgroundColor(Color.parseColor(colors.bg2))
         previewText.setBackgroundColor(Color.parseColor(colors.text))
+        // 更新主题行的副标题
+        val subtitle = view?.findViewById<TextView>(R.id.themeSubtitle)
+        if (subtitle != null) {
+            val brightness = when (ThemeManager.loadBrightness(requireContext())) {
+                0 -> "暗色"; 1 -> "暗"; 2 -> "标准"; 3 -> "亮"; 4 -> "亮白"; 5 -> "亮+"; 6 -> "亮++"
+                else -> "标准"
+            }
+            subtitle.text = "${theme.name} · $brightness"
+        }
     }
 
     private fun showThemeDialog() {
