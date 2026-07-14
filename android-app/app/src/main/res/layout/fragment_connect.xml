@@ -360,7 +360,7 @@
             android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="24dp"
+            android:paddingStart="40dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -680,7 +680,7 @@
             android:tag="settingGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="24dp"
+            android:paddingStart="40dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -1105,7 +1105,7 @@
             android:id="@+id/themeSectionContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="24dp"
+            android:paddingStart="40dp"
             android:orientation="vertical"
             android:visibility="gone">
 
@@ -1215,7 +1215,7 @@
             android:id="@+id/usageGuideContent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingStart="24dp"
+            android:paddingStart="40dp"
             android:paddingEnd="16dp"
             android:paddingBottom="16dp"
             android:tag="bg2"
