@@ -1,0 +1,38 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 构建输出
+pc-app-Electron/output/
+pc-app-Electron/dist/
+cloud-relay/python/build/
+cloud-relay/python/dist/
+cloud-relay/python/__pycache__/
+*.pyc
+
+# Electron 缓存
+%LOCALAPPDATA%/electron/Cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 敏感文件（含密钥/Token）
+*操作手册*
+*密钥*
+*密钥信息*
+*测试报告*
+*测试场景*
+
+# 日志 & 备份
+*.log
+*.backup

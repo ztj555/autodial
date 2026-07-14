@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoDial 云中转 - 管理界面</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #333; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }
+        .header h1 { font-size: 24px; margin-bottom: 5px; }
+        .header p { opacity: 0.9; font-size: 14px; }
+        .nav { background: white; padding: 10px; display: flex; gap: 10px; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
+        .nav-btn { padding: 8px 16px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; font-size: 14px; }
+        .nav-btn.active { background: #667eea; color: white; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { font-size: 18px; margin-bottom: 15px; color: #333; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; }
+        .stat-card h3 { font-size: 14px; opacity: 0.9; margin-bottom: 10px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f5f5f5; font-weight: 600; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .badge-pc { background: #e3f2fd; color: #1976d2; }
+        .badge-phone { background: #f3e5f5; color: #7b1fa2; }
+        .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .refresh-btn { background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; float: right; }
+        .refresh-btn:hover { background: #45a049; }
+        .log-container { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; font-family: monospace; max-height: 500px; overflow-y: auto; font-size: 13px; }
+        .log-line { margin-bottom: 5px; }
+        .setting-item { margin-bottom: 15px; }
+        .setting-item label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .setting-item input { padding: 8px; width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 4px; }
+        .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .save-btn:hover { background: #45a049; }
+        .empty-state { text-align: center; padding: 40px; color: #999; }
+        /* 上门记录样式 */
+        .visit-filters { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
+        .visit-filters .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .visit-filters .filter-group label { font-size: 13px; font-weight: 600; color: #555; }
+        .visit-filters .filter-group input, .visit-filters .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .visit-filters .filter-group input[type="date"] { min-width: 150px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 8px; padding: 30px; min-width: 450px; max-width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+        .modal h3 { margin-bottom: 20px; font-size: 18px; }
+        .modal .form-group { margin-bottom: 15px; }
+        .modal .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; color: #555; }
+        .modal .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .modal .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-cancel { background: #e0e0e0; color: #333; }
+        .btn-cancel:hover { background: #ccc; }
+        .badge-plugin { background: #e8f5e9; color: #2e7d32; }
+        .badge-phone { background: #fff3e0; color: #e65100; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 AutoDial 云中转服务器</h1>
+        <p>版本 2.0.0 | 端口 <span id="port">-</span> | 运行时间: <span id="uptime">-</span></p>
+    </div>
+
+    <div class="nav">
+        <button class="nav-btn active" onclick="showPage('dashboard')">📊 仪表盘</button>
+        <button class="nav-btn" onclick="showPage('clients')">👥 客户端管理</button>
+        <button class="nav-btn" onclick="showPage('stats')">📈 流量统计</button>
+        <button class="nav-btn" onclick="showPage('logs')">📋 日志记录</button>
+        <button class="nav-btn" onclick="showPage('settings')">⚙️ 设置</button>
+        <button class="nav-btn" onclick="showPage('visits')">🏠 上门记录</button>
+        <button class="nav-btn" onclick="showPage('pins')">👤 PIN管理</button>
+        <button class="refresh-btn" onclick="refreshAll()">🔄 刷新数据</button>
+    </div>
+
+    <div class="container">
+        <!-- 仪表盘页面 -->
+        <div id="page-dashboard" class="page active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>当前连接数</h3>
+                    <div class="value" id="stat-connections">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>PIN 组数</h3>
+                    <div class="value" id="stat-groups">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>总消息数</h3>
+                    <div class="value" id="stat-messages">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>总流量</h3>
+                    <div class="value" id="stat-bytes">0 MB</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📋 最近连接的客户端</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>设备名称</th>
+                            <th>角色</th>
+                            <th>PIN 码</th>
+                            <th>IP 地址</th>
+                            <th>连接时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-clients">
+                        <tr><td colspan="5" style="text-align: center; color: #999;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 客户端管理页面 -->
+        <div id="page-clients" class="page">
+            <div class="card">
+                <h2>👥 所有客户端 (<span id="client-count">0</span>)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>设备名称</th>
+                            <th>角色</th>
+                            <th>PIN 码</th>
+                            <th>IP 地址</th>
+                            <th>连接时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-list">
+                        <tr><td colspan="6" style="text-align: center; color: #999;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 流量统计页面 -->
+        <div id="page-stats" class="page">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>总消息数</h3>
+                    <div class="value" id="stats-total-messages">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>上传流量</h3>
+                    <div class="value" id="stats-bytes-sent">0 MB</div>
+                </div>
+                <div class="stat-card">
+                    <h3>下载流量</h3>
+                    <div class="value" id="stats-bytes-received">0 MB</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>📈 按天统计（最近7天）</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>消息数</th>
+                            <th>流量</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daily-stats">
+                        <tr><td colspan="3" style="text-align: center; color: #999;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>📊 按 PIN 统计</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>PIN 码</th>
+                            <th>消息数</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pin-stats">
+                        <tr><td colspan="2" style="text-align: center; color: #999;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 日志记录页面 -->
+        <div id="page-logs" class="page">
+            <div class="card">
+                <h2>📋 系统日志（最近100条）</h2>
+                <button class="refresh-btn" onclick="loadLogs()" style="margin-bottom: 15px;">🔄 刷新日志</button>
+                <div class="log-container" id="log-container">
+                    <div class="empty-state">加载中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设置页面 -->
+        <div id="page-settings" class="page">
+            <div class="card">
+                <h2>⚙️ 服务器设置</h2>
+                <div class="setting-item">
+                    <label>服务器端口（需重启生效）</label>
+                    <input type="number" id="setting-port" value="35430" min="1024" max="65535">
+                </div>
+                <div class="setting-item">
+                    <label>日志级别</label>
+                    <select id="setting-log-level" style="padding: 8px; width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                </div>
+                <button class="save-btn" onclick="saveSettings()">💾 保存设置</button>
+                <div id="settings-msg" style="margin-top: 10px;"></div>
+            </div>
+        </div>
+
+        <!-- 上门记录页面 -->
+        <div id="page-visits" class="page">
+            <div class="card">
+                <h2>🏠 上门记录管理</h2>
+                <div class="visit-filters">
+                    <div class="filter-group">
+                        <label>业务员筛选</label>
+                        <select id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()">
+                            <option value="">不限（全部）</option>
+                            <option value="__group__">按分组筛选...</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>分组筛选</label>
+                        <select id="visit-filter-group" style="min-width:140px;display:none;" onchange="loadVisits()">
+                            <option value="">不限分组</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>开始日期</label>
+                        <input type="date" id="visit-filter-date-from" onchange="loadVisits()">
+                    </div>
+                    <div class="filter-group">
+                        <label>结束日期</label>
+                        <input type="date" id="visit-filter-date-to" onchange="loadVisits()">
+                    </div>
+                    <div class="filter-group">
+                        <label>来源筛选</label>
+                        <select id="visit-filter-source" onchange="loadVisits()">
+                            <option value="">全部</option>
+                            <option value="plugin">插件</option>
+                            <option value="phone">手机</option>
+                            <option value="unsynced">⚠ 未同步</option>
+                        </select>
+                    </div>
+                    <button class="refresh-btn" onclick="loadVisits()" style="margin-top: auto;">🔄 刷新</button>
+                    <button class="refresh-btn" onclick="exportCSV()" style="margin-top: auto; background: #4CAF50;">📥 导出CSV</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>客户姓名</th>
+                            <th>客户手机号</th>
+                            <th>接待顾问</th>
+                            <th>事由</th>
+                            <th>来源</th>
+                            <th>CRM同步</th>
+                            <th>登记时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="visits-list">
+                        <tr><td colspan="9" style="text-align: center; color: #999;">请先输入 PIN 码查询</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h2>📊 上门趋势（最近14天）</h2>
+                <div style="height: 200px; position: relative;">
+                    <canvas id="visit-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- PIN管理页面 -->
+        <div id="page-pins" class="page">
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
+                    <h2>👤 PIN 管理</h2>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <span>分组:</span>
+                        <select id="pin-group-filter" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;" onchange="loadPins()">
+                            <option value="">全部</option>
+                        </select>
+                        <input type="text" id="new-group-name" placeholder="新建分组" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;width:100px;">
+                        <button class="btn" style="background:#667eea;color:white;font-size:12px;" onclick="addGroup()">＋新建</button>
+                        <button class="btn btn-danger" style="font-size:12px;" onclick="delGroup()">🗑删分组</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>PIN (手机号)</th>
+                            <th>姓名</th>
+                            <th>分组</th>
+                            <th>管理员</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pins-list">
+                        <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div class="modal-overlay" id="visit-edit-modal">
+        <div class="modal">
+            <h3>✏️ 编辑上门记录</h3>
+            <input type="hidden" id="visit-edit-id">
+            <div class="form-group">
+                <label>客户姓名</label>
+                <input type="text" id="visit-edit-name" placeholder="客户姓名">
+            </div>
+            <div class="form-group">
+                <label>客户手机号</label>
+                <input type="text" id="visit-edit-mobile" placeholder="客户手机号">
+            </div>
+            <div class="form-group">
+                <label>接待顾问</label>
+                <input type="text" id="visit-edit-kefu_tel" placeholder="接待顾问姓名">
+            </div>
+            <div class="form-group">
+                <label>事由</label>
+                <input type="text" id="visit-edit-type" placeholder="事由（如：贷款咨询）">
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveVisitEdit()">💾 保存</button>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        const VISIT_API_BASE = window.location.origin;
+
+        function showPage(pageId) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            // 显示选中的页面
+            document.getElementById('page-' + pageId).classList.add('active');
+            document.querySelector(`.nav-btn[onclick="showPage('${pageId}')"]`).classList.add('active');
+            // 加载页面数据
+            if (pageId === 'dashboard') loadDashboard();
+            if (pageId === 'clients') loadClients();
+            if (pageId === 'stats') loadStats();
+            if (pageId === 'logs') loadLogs();
+            if (pageId === 'visits') { loadVisits(); loadPinDropdown(); }
+            if (pageId === 'pins') loadPins();
+        }
+
+        async function apiCall(endpoint) {
+            const res = await fetch(API_BASE + endpoint);
+            return await res.json();
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            return `${h}小时 ${m}分钟 ${s}秒`;
+        }
+
+        async function loadDashboard() {
+            const data = await apiCall('/api/status');
+            document.getElementById('port').textContent = data.port;
+            document.getElementById('uptime').textContent = formatUptime(data.uptime_seconds);
+            document.getElementById('stat-connections').textContent = data.total_connections;
+            document.getElementById('stat-groups').textContent = data.total_groups;
+            document.getElementById('stat-messages').textContent = data.total_messages;
+            document.getElementById('stat-bytes').textContent = formatBytes(data.total_bytes_sent + data.total_bytes_received);
+            // 最近客户端
+            const tbody = document.getElementById('recent-clients');
+            if (data.clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
+            } else {
+                tbody.innerHTML = data.clients.slice(0, 10).map(c => `
+                    <tr>
+                        <td>${c.device_name}</td>
+                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
+                        <td>${c.pin}</td>
+                        <td>${c.ip}</td>
+                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function loadClients() {
+            const data = await apiCall('/api/clients');
+            document.getElementById('client-count').textContent = data.clients.length;
+            const tbody = document.getElementById('clients-list');
+            if (data.clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
+            } else {
+                tbody.innerHTML = data.clients.map(c => `
+                    <tr>
+                        <td>${c.device_name}</td>
+                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
+                        <td>${c.pin}</td>
+                        <td>${c.ip}</td>
+                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
+                        <td><button class="btn btn-danger" onclick="kickClient('${c.pin}', '${c.role}', '${c.device_name}')">踢出</button></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function kickClient(pin, role, deviceName) {
+            if (!confirm(`确定要踢出设备 "${deviceName}" 吗？`)) return;
+            alert('踢出功能暂未实现，请在后续版本中使用。');
+        }
+
+        async function loadStats() {
+            const data = await apiCall('/api/stats');
+            document.getElementById('stats-total-messages').textContent = data.total_messages;
+            document.getElementById('stats-bytes-sent').textContent = formatBytes(data.total_bytes_sent);
+            document.getElementById('stats-bytes-received').textContent = formatBytes(data.total_bytes_received);
+            // 按天统计
+            const tbody1 = document.getElementById('daily-stats');
+            if (data.daily.length === 0) {
+                tbody1.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">暂无数据</td></tr>';
+            } else {
+                tbody1.innerHTML = data.daily.map(d => `
+                    <tr>
+                        <td>${d.date}</td>
+                        <td>${d.messages}</td>
+                        <td>${formatBytes(d.bytes)}</td>
+                    </tr>
+                `).join('');
+            }
+            // 按 PIN 统计
+            const tbody2 = document.getElementById('pin-stats');
+            const pins = Object.entries(data.by_pin);
+            if (pins.length === 0) {
+                tbody2.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #999;">暂无数据</td></tr>';
+            } else {
+                tbody2.innerHTML = pins.map(([pin, count]) => `
+                    <tr>
+                        <td>${pin}</td>
+                        <td>${count}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function loadLogs() {
+            const data = await apiCall('/api/logs');
+            const container = document.getElementById('log-container');
+            if (data.logs.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无日志记录</div>';
+            } else {
+                container.innerHTML = data.logs.map(line => `<div class="log-line">${line}</div>`).join('');
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function saveSettings() {
+            const port = document.getElementById('setting-port').value;
+            const logLevel = document.getElementById('setting-log-level').value;
+            document.getElementById('settings-msg').innerHTML = '<span style="color: orange;">⚠️ 设置已保存（部分功能需重启生效）</span>';
+            setTimeout(() => {
+                document.getElementById('settings-msg').innerHTML = '';
+            }, 3000);
+        }
+
+        function refreshAll() {
+            const activePage = document.querySelector('.page.active');
+            if (activePage) {
+                const pageId = activePage.id.replace('page-', '');
+                showPage(pageId);
+            }
+        }
+
+        // 页面加载时自动加载仪表盘
+        loadDashboard();
+        // 每30秒自动刷新当前页面
+        setInterval(refreshAll, 30000);
+
+        // ========== 上门记录管理 ==========
+
+        async function loadVisits() {
+            const pinFilter = document.getElementById('visit-filter-pin').value;
+            const groupFilter = document.getElementById('visit-filter-group').value;
+            const tbody = document.getElementById('visits-list');
+
+            let url = VISIT_API_BASE + '/api/v1/visits?';
+            if (groupFilter) {
+                url += 'group=' + encodeURIComponent(groupFilter);
+            } else if (pinFilter && pinFilter !== '__group__') {
+                url += 'pin=' + encodeURIComponent(pinFilter);
+            }
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!Array.isArray(data)) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">查询失败</td></tr>';
+                    return;
+                }
+                // 日期和来源筛选
+                let filtered = data;
+                const dFrom = document.getElementById('visit-filter-date-from').value;
+                const dTo = document.getElementById('visit-filter-date-to').value;
+                const src = document.getElementById('visit-filter-source').value;
+                if (dFrom) filtered = filtered.filter(r => r.created_at >= dFrom);
+                if (dTo) filtered = filtered.filter(r => r.created_at <= dTo + 'T23:59:59');
+                if (src === 'unsynced') filtered = filtered.filter(r => !r.crm_synced);
+                else if (src) filtered = filtered.filter(r => r.source === src);
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">暂无记录</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = filtered.map(r => `
+                    <tr style="${r.crm_synced ? '' : 'background: rgba(244,67,54,0.08);'}">
+                        <td>${r.id}</td><td>${escHtml(r.name)}</td><td>${escHtml(r.mobile)}</td>
+                        <td>${escHtml(r.kefu_tel)}</td><td>${escHtml(r.visit_type)}</td>
+                        <td><span class="badge badge-${r.source==='phone'?'phone':'plugin'}">${r.source==='phone'?'手机':'插件'}</span></td>
+                        <td>${r.crm_synced?'<span style="color:#2ECC71;">✅ 已同步</span>':'<span style="color:#E74C3C;" title="未同步到CRM">⚠ 未同步</span>'}</td>
+                        <td>${r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-'}</td>
+                        <td><button class="btn btn-primary" style="margin-right:4px;" onclick="openEditModal(${r.id},'${escAttr(r.name)}','${escAttr(r.mobile)}','${escAttr(r.kefu_tel)}','${escAttr(r.visit_type)}')">编辑</button>
+                        <button class="btn btn-danger" onclick="deleteVisit(${r.id})">删除</button></td>
+                    </tr>`).join('');
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#f44336;">请求失败</td></tr>'; }
+        }
+
+        async function loadPinDropdown() {
+            const selPin = document.getElementById('visit-filter-pin');
+            const selGrp = document.getElementById('visit-filter-group');
+            try {
+                const r = await fetch(VISIT_API_BASE + '/api/v1/pins');
+                const d = await r.json();
+                if (!d.ok) return;
+                // 保留前两个选项
+                selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
+                d.pins.forEach(p => { selPin.innerHTML += `<option value="${p.pin}">${escHtml(p.name)} (${p.pin})</option>`; });
+
+                // 加载分组下拉
+                const gr = await fetch(VISIT_API_BASE + '/api/v1/groups');
+                const gd = await gr.json();
+                selGrp.innerHTML = '<option value="">不限分组</option>';
+                if (gd.groups) gd.groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
+            } catch(e) {}
+        }
+
+        function onPinFilterChange() {
+            const v = document.getElementById('visit-filter-pin').value;
+            document.getElementById('visit-filter-group').style.display = (v === '__group__') ? '' : 'none';
+            loadVisits();
+        }
+
+        // ===== PIN 管理 =====
+        async function loadPins() {
+            const tbody = document.getElementById('pins-list');
+            try {
+                const [pr, gr] = await Promise.all([
+                    fetch(VISIT_API_BASE + '/api/v1/pins').then(r => r.json()),
+                    fetch(VISIT_API_BASE + '/api/v1/groups').then(r => r.json())
+                ]);
+                if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">无数据</td></tr>'; return; }
+
+                // 更新分组下拉
+                const sel = document.getElementById('pin-group-filter');
+                sel.innerHTML = '<option value="">全部</option>';
+                const groups = gr.groups || [];
+                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
+                // 同步更新筛选下拉
+                const selGrp = document.getElementById('visit-filter-group');
+                if (selGrp) {
+                    selGrp.innerHTML = '<option value="">不限分组</option>';
+                    groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
+                }
+
+                const groupFilter = sel.value;
+                let pins = pr.pins;
+                if (groupFilter) pins = pins.filter(p => p.group_id == groupFilter);
+                if (pins.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无PIN</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = pins.map(p => {
+                    const g = groups.find(g => g.id == p.group_id);
+                    return `<tr>
+                        <td>${p.pin}</td><td><strong>${escHtml(p.name)}</strong></td>
+                        <td><select onchange="setPinGroup('${p.pin}',this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
+                            <option value="">--</option>
+                            ${groups.map(g => `<option value="${g.id}" ${g.id==p.group_id?'selected':''}>${escHtml(g.name)}</option>`).join('')}
+                        </select></td>
+                        <td><button class="btn" style="background:${p.is_admin?'#f44336':'#667eea'};color:white;font-size:11px;" onclick="togglePinAdmin('${p.pin}')">${p.is_admin?'👑取消':'设为管理'}</button></td>
+                        <td style="font-size:11px;color:#999;">${p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-'}</td>
+                        <td></td>
+                    </tr>`;
+                }).join('');
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#f44336;">加载失败</td></tr>'; }
+        }
+
+        async function togglePinAdmin(pin) {
+            const ck = await fetch(VISIT_API_BASE + '/api/v1/advisor/is_admin?pin=' + encodeURIComponent(pin)).then(r => r.json());
+            const ep = ck.is_admin ? 'del_admin' : 'set_admin';
+            await fetch(VISIT_API_BASE + '/api/v1/advisor/' + ep + '?pin=' + encodeURIComponent(pin));
+            loadPins();
+        }
+
+        async function setPinGroup(pin, gid) {
+            await fetch(VISIT_API_BASE + '/api/v1/pin/set_group?pin=' + encodeURIComponent(pin) + '&group_id=' + encodeURIComponent(gid));
+        }
+
+        async function addGroup() {
+            const name = document.getElementById('new-group-name').value.trim();
+            if (!name) { alert('请输入分组名'); return; }
+            await fetch(VISIT_API_BASE + '/api/v1/group/add?name=' + encodeURIComponent(name));
+            document.getElementById('new-group-name').value = '';
+            loadPins();
+        }
+
+        async function delGroup() {
+            const gid = document.getElementById('pin-group-filter').value;
+            if (!gid) { alert('请先选择要删除的分组'); return; }
+            if (!confirm('删除分组不会删除PIN数据，仅取消关联。确定？')) return;
+            await fetch(VISIT_API_BASE + '/api/v1/group/del?id=' + encodeURIComponent(gid));
+            loadPins();
+        }
+
+        function escHtml(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escAttr(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function openEditModal(id, name, mobile, kefu_tel, visit_type) {
+            document.getElementById('visit-edit-id').value = id;
+            document.getElementById('visit-edit-name').value = name;
+            document.getElementById('visit-edit-mobile').value = mobile;
+            document.getElementById('visit-edit-kefu_tel').value = kefu_tel;
+            document.getElementById('visit-edit-type').value = visit_type;
+            document.getElementById('visit-edit-modal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('visit-edit-modal').classList.remove('active');
+        }
+
+        async function saveVisitEdit() {
+            const id = parseInt(document.getElementById('visit-edit-id').value);
+            const name = document.getElementById('visit-edit-name').value.trim();
+            const mobile = document.getElementById('visit-edit-mobile').value.trim();
+            const kefu_tel = document.getElementById('visit-edit-kefu_tel').value.trim();
+            const visit_type = document.getElementById('visit-edit-type').value.trim();
+
+            if (!name && !mobile && !kefu_tel && !visit_type) {
+                alert('请至少填写一个字段');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({ id: id, name, mobile, kefu_tel, visit_type });
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit/update?' + params.toString());
+                const data = await res.json();
+                if (data.ok) {
+                    closeEditModal();
+                    loadVisits();
+                } else {
+                    alert('更新失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                console.error('saveVisitEdit error:', e);
+                alert('请求失败，请检查网络');
+            }
+        }
+
+        async function deleteVisit(id) {
+            if (!confirm('确定要删除这条上门记录吗？此操作不可撤销。')) return;
+
+            try {
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visit/delete?id=' + encodeURIComponent(id));
+                const data = await res.json();
+                if (data.ok) {
+                    loadVisits();
+                } else {
+                    alert('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (e) {
+                console.error('deleteVisit error:', e);
+                alert('请求失败，请检查网络');
+            }
+        }
+
+        // ===== CSV 导出 =====
+        function exportCSV() {
+            const tbody = document.getElementById('visits-list');
+            const rows = tbody.querySelectorAll('tr');
+            if (rows.length === 0 || rows[0].querySelectorAll('td').length < 8) {
+                alert('没有可导出的数据');
+                return;
+            }
+            let csv = '\uFEFFID,客户姓名,手机号,接待顾问,事由,来源,CRM同步,登记时间\n';
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 8) return;
+                const vals = [];
+                for (let i = 0; i < Math.min(cells.length, 8); i++) {
+                    let v = cells[i].textContent.replace(/,/g, '，').replace(/\n/g, ' ').trim();
+                    vals.push('"' + v + '"');
+                }
+                csv += vals.join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'visits_' + new Date().toISOString().slice(0, 10) + '.csv';
+            a.click();
+        }
+
+        // ===== 趋势图 =====
+        let chartInstance = null;
+
+        async function loadChart() {
+            if (document.getElementById('page-visits').classList.contains('active')) {
+                await renderChart();
+            }
+        }
+
+        async function renderChart() {
+            try {
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visits?');
+                const data = await res.json();
+                if (!Array.isArray(data)) return;
+
+                const ctx = document.getElementById('visit-chart').getContext('2d');
+                // 按天分组统计
+                const days = {};
+                for (let i = 13; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const key = d.toISOString().slice(0, 10);
+                    days[key] = 0;
+                }
+                data.forEach(r => {
+                    if (!r.created_at) return;
+                    const key = r.created_at.slice(0, 10);
+                    if (days[key] !== undefined) days[key]++;
+                });
+
+                const labels = Object.keys(days).map(d => d.slice(5));
+                const values = Object.values(days);
+
+                if (chartInstance) chartInstance.destroy();
+                chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '上门数',
+                            data: values,
+                            backgroundColor: '#667eea',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+
+        // 切换到上门记录页时渲染图表
+        const origShowPage = showPage;
+        showPage = function(id) {
+            origShowPage(id);
+            if (id === 'visits') setTimeout(renderChart, 200);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="bg"
+    android:background="#111318">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="2dp"
+    android:paddingTop="0dp"
+    android:paddingEnd="2dp"
+    android:paddingBottom="0dp">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:tag="topBar"
+        android:background="#1A1D24"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="通话"
+            android:drawableStart="@drawable/ic_ph_clipboard_text"
+            android:drawablePadding="6dp"
+            android:tag="primaryLight"
+            android:textColor="#F0C040"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <!-- 连接状态 + 小按钮（紧跟标题左侧） -->
+        <LinearLayout
+            android:id="@+id/connectionStatusBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:layout_marginStart="10dp">
+
+            <ImageView
+                android:id="@+id/connectionStatusDot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:src="@drawable/dot_gray"
+                android:layout_marginEnd="4dp" />
+
+            <TextView
+                android:id="@+id/connectionStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="未连接电脑"
+                android:tag="text"
+                android:textSize="13sp"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:id="@+id/topReconnectBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="44dp"
+                android:gravity="center"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:text="连接"
+                android:textSize="11sp"
+                android:tag="outlineBtn" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- 财运双排 -->
+        <LinearLayout
+            android:id="@+id/luckStatsBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="end"
+            android:layout_marginEnd="4dp"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="今日财运 "
+                    android:tag="text"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/todayLuckText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textColor="#FF4D4F"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="今日财气: "
+                    android:tag="text"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/todayFortuneText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0分"
+                    android:textColor="#7B2CBF"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 财运横幅（inline badge） -->
+    <LinearLayout
+        android:id="@+id/fortuneStrip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:tag="bg2"
+        android:background="#1A1D24"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="今日财运"
+            android:tag="text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/fortuneLuck"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="0"
+            android:textColor="#E53935"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="·"
+            android:tag="text2"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="今日财气"
+            android:tag="text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/fortuneQi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="0分"
+            android:textColor="#7B2CBF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+    </LinearLayout>
+
+    <!-- 拨号卡选择栏 -->
+    <LinearLayout
+        android:id="@+id/dialModeBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:tag="bg2"
+        android:background="#1A1D24"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/dialModePopup"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="弹窗"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeRoundSelect"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="轮选"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeOpposite"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="相反"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeSim1"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="卡1"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeSim2"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="卡2"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeAlternate"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="循环"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/dialModeSystem"
+            android:layout_width="0dp"
+            android:layout_height="32dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="系统"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 提示文字 -->
+    <TextView
+        android:id="@+id/callLogPermissionHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:tag="infoBanner"
+        android:background="#2A1A1A"
+        android:gravity="center"
+        android:padding="10dp"
+        android:text="需要通话记录权限才能显示"
+        android:drawableStart="@drawable/ic_ph_phone_x"
+        android:drawablePadding="6dp"
+        android:textColor="#E74C3C"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- 上次通话提示横幅 -->
+    <LinearLayout
+        android:id="@+id/lastCallHintBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:tag="infoBanner"
+        android:background="#1A2030"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_ph_phone_outgoing"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/lastCallHintText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="上次：卡1  04-25"
+            android:tag="primaryLight"
+            android:textColor="#C9A84C"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 筛选芯片 -->
+    <LinearLayout
+        android:id="@+id/filterChips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <TextView
+            android:id="@+id/filterAll"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minWidth="52dp"
+            android:gravity="center"
+            android:tag="primaryBtn"
+            android:text="全部"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/filterOk"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minWidth="52dp"
+            android:gravity="center"
+            android:tag="chip"
+            android:text="已接通"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/filterMiss"
+            android:layout_width="wrap_content"
+            android:layout_height="28dp"
+            android:minWidth="52dp"
+            android:gravity="center"
+            android:tag="chip"
+            android:text="未接"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp" />
+    </LinearLayout>
+
+    <!-- 通话记录列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/callLogRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="6dp"
+        android:clipToPadding="false"
+        android:paddingBottom="12dp" />
+
+    <!-- 空状态（丰富版） -->
+    <LinearLayout
+        android:id="@+id/callLogEmpty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingBottom="48dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <View
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:background="@drawable/empty_state_bg" />
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_phone_small"
+                android:alpha="0.6" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="暂无通话记录"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#1A1A1A" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="开始您的第一次拨号吧"
+            android:textSize="14sp"
+            android:textColor="#888888" />
+
+        <TextView
+            android:id="@+id/emptyDialBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:tag="primaryBtn"
+            android:text="立即拨号"
+            android:gravity="center"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:layout_marginTop="24dp"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout><!-- end inner LinearLayout -->
+
+    <!-- FAB 手动拨号按钮 -->
+    <TextView
+        android:id="@+id/dialFab"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        android:gravity="center"
+        android:tag="primaryBtn"
+        android:text=""
+        android:drawableStart="@drawable/ic_phone_small"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:elevation="6dp" />
+
+</FrameLayout>
