@@ -1424,6 +1424,10 @@ class ConnectFragment : Fragment() {
         val values = intArrayOf(0, 25, 50, 75, 100)
 
         val row = android.widget.LinearLayout(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, 20, 0, 0)
@@ -1470,6 +1474,10 @@ class ConnectFragment : Fragment() {
         val colors = ThemeManager.getColors(requireContext())
 
         val row = android.widget.LinearLayout(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, 16, 0, 0)
@@ -1505,6 +1513,10 @@ class ConnectFragment : Fragment() {
         val parent = root.findViewById<ViewGroup>(R.id.themeSectionAnchor) ?: return
         val colors = ThemeManager.getColors(requireContext())
         val row = android.widget.LinearLayout(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, 16, 0, 0)
@@ -1578,6 +1590,10 @@ class ConnectFragment : Fragment() {
         val cur = prefCtrl.getLastCallHintDuration()
 
         val row = android.widget.LinearLayout(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, 12, 0, 0)
@@ -1614,6 +1630,10 @@ class ConnectFragment : Fragment() {
     private fun addNotifyToggle(parent: ViewGroup, colors: ThemeColors, title: String,
                                  get: () -> Boolean, set: (Boolean) -> Unit) {
         val row = android.widget.LinearLayout(requireContext()).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, 10, 0, 0)
