@@ -1710,13 +1710,14 @@ class ConnectFragment : Fragment() {
         previewText.setBackgroundColor(Color.parseColor(colors.text))
         // 更新主题行的副标题
         val subtitle = view?.findViewById<TextView>(R.id.themeSubtitle)
+        val modeKey = ThemeManager.loadMode(requireContext())
+        val modeName = ThemeManager.MODES.firstOrNull { it.key == modeKey }?.name ?: modeKey
         if (subtitle != null) {
-            val brightness = when (ThemeManager.loadBrightness(requireContext())) {
-                0 -> "暗色"; 1 -> "暗"; 2 -> "标准"; 3 -> "亮"; 4 -> "亮白"; 5 -> "亮+"; 6 -> "亮++"
-                else -> "标准"
-            }
-            subtitle.text = "${theme.name} · $brightness"
+            subtitle.text = "${theme.name} · $modeName"
         }
+        // 同步更新外观卡片头部副标题
+        val headerSub = view?.findViewById<TextView>(R.id.appearanceSectionSubtitle)
+        headerSub?.text = "${theme.name} · $modeName"
     }
 
     private fun showThemeDialog() {

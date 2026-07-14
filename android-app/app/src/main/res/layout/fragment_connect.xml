@@ -1090,7 +1090,7 @@
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_palette" />
             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="外观" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="天空蓝 · 亮白" android:tag="text2" android:textSize="10sp" />
+            <TextView android:id="@+id/appearanceSectionSubtitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/appearanceSectionArrow"
