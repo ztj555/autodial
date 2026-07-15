@@ -378,6 +378,14 @@ class ConnectFragment : Fragment() {
             cloudServerCurrentText = view.findViewById(R.id.cloudServerCurrentText)
             lanChannelStatus = view.findViewById(R.id.lanChannelStatus)
             cloudChannelStatus = view.findViewById(R.id.cloudChannelStatus)
+            // 缩小局域网/云中转的 drawableStart 图标，与头部图标一致 (~16dp)
+            val iconSize = (16 * resources.displayMetrics.density).toInt()
+            view.findViewById<TextView>(R.id.lanChannelLabel)?.let {
+                it.compoundDrawablesRelative[0]?.setBounds(0, 0, iconSize, iconSize)
+            }
+            view.findViewById<TextView>(R.id.cloudChannelLabel)?.let {
+                it.compoundDrawablesRelative[0]?.setBounds(0, 0, iconSize, iconSize)
+            }
             updateCloudServerCurrentText()
             view.findViewById<View>(R.id.cloudServerManageRow).setOnClickListener {
                 CloudServerSheet(requireActivity()) {

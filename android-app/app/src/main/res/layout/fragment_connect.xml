@@ -403,6 +403,7 @@
                 android:background="#1A1D24">
 
                 <TextView
+                    android:id="@+id/lanChannelLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="局域网"
@@ -435,6 +436,7 @@
                 android:layout_marginTop="4dp">
 
                 <TextView
+                    android:id="@+id/cloudChannelLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="云中转"
