@@ -86,6 +86,21 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/strategyBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="自动"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:tag="text2"
+                android:visibility="gone" />
+
             <FrameLayout
                 android:layout_width="44dp"
                 android:layout_height="44dp">

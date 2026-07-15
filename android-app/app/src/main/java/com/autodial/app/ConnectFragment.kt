@@ -37,6 +37,7 @@ class ConnectFragment : Fragment() {
     private lateinit var statusDot: ImageView
     private lateinit var pulseRing: ImageView
     private lateinit var statusText: TextView
+    private lateinit var strategyBadge: TextView
     private lateinit var connectionMode: TextView
     private lateinit var statusDashboard: LinearLayout
     private lateinit var connectionBanner: LinearLayout
@@ -171,6 +172,7 @@ class ConnectFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         try {
             statusDot = view.findViewById(R.id.statusDot)
+            strategyBadge = view.findViewById(R.id.strategyBadge)
             pulseRing = view.findViewById(R.id.pulseRing)
             statusText = view.findViewById(R.id.statusText)
             statusDashboard = view.findViewById(R.id.statusDashboard)
@@ -1010,7 +1012,7 @@ class ConnectFragment : Fragment() {
                     statusText.setTextColor(Color.parseColor(colors.green))
                     connectionMode.text = "🌐 浏览器在线"
                 } else {
-                    statusDot.setImageResource(R.drawable.dot_orange)
+                    statusDot.setImageResource(R.drawable.dot_green)
                     stopPulseAnimation()
                     statusText.text = "云端已连接，等待拨号"
                     statusText.setTextColor(Color.parseColor(colors.green))
@@ -1067,6 +1069,7 @@ class ConnectFragment : Fragment() {
                     }
                 }
             }
+            updateStrategyBadge()
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1103,6 +1106,39 @@ class ConnectFragment : Fragment() {
     private fun updateStrategyDesc() {
         if (!isAdded) return
         connectionStrategyDesc.text = prefCtrl.getConnectionStrategy().label
+        updateStrategyBadge()
+    }
+
+    private fun updateStrategyBadge() {
+        if (!isAdded || !::strategyBadge.isInitialized) return
+        val colors = ThemeManager.getColors(requireContext())
+        val strategy = prefCtrl.getConnectionStrategy()
+        val dp = resources.displayMetrics.density
+        when (strategy) {
+            ConnectionStrategy.AUTO -> {
+                strategyBadge.text = "自动"
+                strategyBadge.setTextColor(Color.parseColor(colors.green))
+                strategyBadge.visibility = View.GONE
+            }
+            ConnectionStrategy.LAN_ONLY -> {
+                strategyBadge.text = "仅LAN"
+                strategyBadge.setTextColor(Color.parseColor(colors.primaryLight))
+                strategyBadge.visibility = View.VISIBLE
+                strategyBadge.background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(colors.bg3))
+                    cornerRadius = 4 * dp
+                }
+            }
+            ConnectionStrategy.CLOUD_ONLY -> {
+                strategyBadge.text = "仅云端"
+                strategyBadge.setTextColor(Color.parseColor(colors.primaryLight))
+                strategyBadge.visibility = View.VISIBLE
+                strategyBadge.background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(colors.bg3))
+                    cornerRadius = 4 * dp
+                }
+            }
+        }
     }
 
     // ==================== 云服务器管理 ====================
