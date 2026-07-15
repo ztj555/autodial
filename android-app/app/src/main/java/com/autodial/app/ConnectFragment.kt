@@ -1013,7 +1013,7 @@ class ConnectFragment : Fragment() {
                     statusDot.setImageResource(R.drawable.dot_orange)
                     stopPulseAnimation()
                     statusText.text = "云端已连接，等待拨号"
-                    statusText.setTextColor(Color.parseColor("#FF9800"))
+                    statusText.setTextColor(Color.parseColor(colors.green))
                     connectionMode.text = "请在电脑上点击拨打"
                 }
                 connectionMode.visibility = View.VISIBLE
