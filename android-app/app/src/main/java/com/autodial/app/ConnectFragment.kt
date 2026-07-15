@@ -783,7 +783,7 @@ class ConnectFragment : Fragment() {
             delay(3000)
             if (!DialService.isConnected && isAdded) {
                 val colors2 = ThemeManager.getColors(requireContext())
-                statusText.text = "连接中，请稍候...（若长时间连不上，可能是电脑防火墙拦截）"
+                statusText.text = "连接中，请稍候...\n超时？检查防火墙或连接策略"
                 statusText.setTextColor(Color.parseColor(colors2.primary))
             }
         }
@@ -1058,14 +1058,9 @@ class ConnectFragment : Fragment() {
                         NotifyHelper.connToast(requireActivity(), "无法连接到电脑，请检查：\n1. 电脑端是否已打开\n2. 手机和电脑是否在同一WiFi\n3. 电脑防火墙是否放行了端口", Toast.LENGTH_LONG)
                         discoveryHint.text = "⚠️ 连接失败，请检查电脑端是否已打开且在同一网络"
                         discoveryHint.visibility = View.VISIBLE
-                    }
-                    "disconnected" -> {
-                        statusText.text = "连接已断开"
-                        statusText.setTextColor(Color.parseColor(colors.primary))
-                    }
-                    else -> {
-                        statusText.text = "未连接电脑"
-                        statusText.setTextColor(Color.parseColor(colors.text2))
+                        connectionMode.text = "检查防火墙 · WiFi · 连接策略"
+                        connectionMode.visibility = View.VISIBLE
+                        connectionMode.setTextColor(Color.parseColor(colors.text2))
                     }
                 }
             }
