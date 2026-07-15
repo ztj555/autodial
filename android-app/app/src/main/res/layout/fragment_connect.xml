@@ -69,6 +69,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="150dp"
+            android:layout_marginBottom="50dp"
             android:visibility="visible"
             android:tag="heroCard"
             android:background="#1A1D24"
@@ -343,7 +344,33 @@
             android:paddingBottom="12dp">
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tint="#6685A6" />
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="跨屏连接设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="跨屏连接设置"
+                    android:tag="text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/advancedFoldArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="▶"
+                    android:tag="text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自动 · LAN 优先" android:tag="text2" android:textSize="10sp" />
 
             <TextView
@@ -663,7 +690,33 @@
             android:paddingBottom="14dp">
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_phone_outgoing" android:tint="#6685A6" />
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="APP 拨号设置" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="APP 拨号设置"
+                    android:tag="text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/otherFoldArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="▶"
+                    android:tag="text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="智能轮选 · 动画开启" android:tag="text2" android:textSize="10sp" />
 
             <TextView
@@ -1089,7 +1142,33 @@
             android:paddingBottom="14dp">
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_palette" />
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="外观" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="外观"
+                    android:tag="text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/appearanceFoldArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="▶"
+                    android:tag="text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView android:id="@+id/appearanceSectionSubtitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:tag="text2" android:textSize="10sp" />
 
             <TextView
@@ -1214,7 +1293,32 @@
             android:paddingBottom="14dp">
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_bell" android:tint="#6685A6" />
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="通知与提示" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="通知与提示"
+                    android:tag="text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/notifyFoldArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="▶"
+                    android:tag="text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/notifySectionArrow"
@@ -1259,7 +1363,33 @@
             android:paddingBottom="14dp">
 
             <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_book_open_text" android:tint="#6685A6" />
-            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="10dp" android:text="使用说明" android:tag="text" android:textSize="14sp" android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="使用说明"
+                    android:tag="text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/usageFoldArrow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:text="▶"
+                    android:tag="text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="查看操作指南" android:tag="text2" android:textSize="10sp" />
 
             <TextView

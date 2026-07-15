@@ -76,13 +76,16 @@ class ConnectFragment : Fragment() {
     private lateinit var advancedHeader: View
     private lateinit var advancedContent: View
     private lateinit var advancedArrow: TextView
+    private lateinit var advancedFoldArrow: TextView
     private lateinit var otherHeader: View
     private lateinit var otherContent: View
     private lateinit var otherArrow: TextView
+    private lateinit var otherFoldArrow: TextView
     // v8: 使用说明折叠 + 励志语
     private lateinit var usageGuideHeader: View
     private lateinit var usageGuideContent: View
     private lateinit var usageGuideArrow: TextView
+    private lateinit var usageFoldArrow: TextView
     private lateinit var motivationalText: TextView
     // v7: 拨号模式
     private lateinit var dialModeRow: View
@@ -211,13 +214,16 @@ class ConnectFragment : Fragment() {
             advancedHeader = view.findViewById(R.id.advancedSectionHeader)
             advancedContent = view.findViewById(R.id.advancedSectionContent)
             advancedArrow = view.findViewById(R.id.advancedArrow)
+            advancedFoldArrow = view.findViewById(R.id.advancedFoldArrow)
             otherHeader = view.findViewById(R.id.otherSectionHeader)
             otherContent = view.findViewById(R.id.otherSectionContent)
             otherArrow = view.findViewById(R.id.otherArrow)
+            otherFoldArrow = view.findViewById(R.id.otherFoldArrow)
             // v8: 使用说明折叠 + 励志语
             usageGuideHeader = view.findViewById(R.id.usageGuideHeader)
             usageGuideContent = view.findViewById(R.id.usageGuideContent)
             usageGuideArrow = view.findViewById(R.id.usageGuideArrow)
+            usageFoldArrow = view.findViewById(R.id.usageFoldArrow)
             motivationalText = view.findViewById(R.id.motivationalText)
             dialModeRow = view.findViewById(R.id.dialModeRow)
             dialModeCurrent = view.findViewById(R.id.dialModeCurrent)
@@ -227,11 +233,13 @@ class ConnectFragment : Fragment() {
                 val show = advancedContent.visibility != View.VISIBLE
                 advancedContent.visibility = if (show) View.VISIBLE else View.GONE
                 advancedArrow.text = if (show) "⌄" else "›"
+                advancedFoldArrow.text = if (show) "▼" else "▶"
             }
             otherHeader.setOnClickListener {
                 val show = otherContent.visibility != View.VISIBLE
                 otherContent.visibility = if (show) View.VISIBLE else View.GONE
                 otherArrow.text = if (show) "⌄" else "›"
+                otherFoldArrow.text = if (show) "▼" else "▶"
             }
             // v8: 使用说明折叠（默认折叠）
             usageGuideContent.visibility = View.GONE
@@ -240,10 +248,12 @@ class ConnectFragment : Fragment() {
                 val show = usageGuideContent.visibility != View.VISIBLE
                 usageGuideContent.visibility = if (show) View.VISIBLE else View.GONE
                 usageGuideArrow.text = if (show) "⌄" else "›"
+                usageFoldArrow.text = if (show) "▼" else "▶"
             }
             // 外观折叠（默认折叠）
             val appearanceHeader = view.findViewById<View>(R.id.appearanceSectionHeader)
             val appearanceArrow = view.findViewById<TextView>(R.id.appearanceSectionArrow)
+            val appearanceFoldArrow = view.findViewById<TextView>(R.id.appearanceFoldArrow)
             val appearanceContent = view.findViewById<View>(R.id.appearanceSectionContent)
             appearanceContent.visibility = View.GONE
             appearanceArrow.text = "›"
@@ -251,10 +261,12 @@ class ConnectFragment : Fragment() {
                 val show = appearanceContent.visibility != View.VISIBLE
                 appearanceContent.visibility = if (show) View.VISIBLE else View.GONE
                 appearanceArrow.text = if (show) "⌄" else "›"
+                appearanceFoldArrow.text = if (show) "▼" else "▶"
             }
             // 通知与提示折叠（默认折叠）
             val notifyHeader = view.findViewById<View>(R.id.notifySectionHeader)
             val notifyArrow = view.findViewById<TextView>(R.id.notifySectionArrow)
+            val notifyFoldArrow = view.findViewById<TextView>(R.id.notifyFoldArrow)
             val notifyContent = view.findViewById<View>(R.id.notifySectionContent)
             notifyContent.visibility = View.GONE
             notifyArrow.text = "›"
@@ -262,6 +274,7 @@ class ConnectFragment : Fragment() {
                 val show = notifyContent.visibility != View.VISIBLE
                 notifyContent.visibility = if (show) View.VISIBLE else View.GONE
                 notifyArrow.text = if (show) "⌄" else "›"
+                notifyFoldArrow.text = if (show) "▼" else "▶"
             }
             // v8: 每日励志语
             motivationalText.text = getDailyMotivationalQuote()
