@@ -4,7 +4,8 @@
     android:layout_height="match_parent"
     android:tag="bg"
     android:background="#111318"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:id="@+id/connectScrollContent"
