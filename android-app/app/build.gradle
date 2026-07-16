@@ -18,9 +18,9 @@ android {
     signingConfigs {
         def ksFile = System.getenv("KEYSTORE_FILE")
         def ksPath = (ksFile != null && file(ksFile).exists()) ? ksFile : 'autodial-release.p12'
-        def ksStorePass = System.getenv("KEYSTORE_PASSWORD") ?: 'autodial2024'
+        def ksStorePass = System.getenv("KEYSTORE_PASSWORD") ?: 'RongXin2026!'
         def ksKeyAlias = System.getenv("KEY_ALIAS") ?: 'autodial'
-        def ksKeyPass = System.getenv("KEY_PASSWORD") ?: 'autodial2024'
+        def ksKeyPass = System.getenv("KEY_PASSWORD") ?: 'RongXin2026!'
         release {
             storeFile file(ksPath)
             storePassword ksStorePass
