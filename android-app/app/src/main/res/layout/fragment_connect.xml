@@ -387,7 +387,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="自动 · LAN 优先" android:tag="text2" android:textSize="10sp" />
+            <TextView android:id="@+id/advancedSectionSubtitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/advancedArrow"
@@ -735,7 +735,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="智能轮选 · 动画开启" android:tag="text2" android:textSize="10sp" />
+            <TextView android:id="@+id/otherSectionSubtitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="" android:tag="text2" android:textSize="10sp" />
 
             <TextView
                 android:id="@+id/otherArrow"
@@ -1171,7 +1171,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="外观"
+                    android:text="主题与外观"
                     android:tag="text"
                     android:textSize="14sp"
                     android:textStyle="bold" />

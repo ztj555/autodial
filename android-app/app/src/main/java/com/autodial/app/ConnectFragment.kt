@@ -310,10 +310,13 @@ class ConnectFragment : Fragment() {
 
             // v7: 拨号模式预填
             dialModeCurrent.text = DialMode.fromKey(prefCtrl.getDialModeKey()).label
+            updateOtherSectionSubtitle()
             dialModeRow.setOnClickListener {
                 DialModeSheet(requireActivity()) { selected ->
                     prefCtrl.setDialModeKey(selected.key)
                     dialModeCurrent.text = selected.label
+                updateOtherSectionSubtitle()
+                    updateOtherSectionSubtitle()
                     (requireActivity() as? MainActivity)?.syncDialModeUI()
                 }.show()
             }
@@ -922,6 +925,14 @@ class ConnectFragment : Fragment() {
             DialAnimationOverlay.MODE_HEARTBEAT -> "心跳脉冲 - 缩放心跳"
             else -> "拨通电话时显示动画"
         }
+        updateOtherSectionSubtitle()
+    }
+
+    private fun updateOtherSectionSubtitle() {
+        if (!isAdded) return
+        val mode = DialMode.fromKey(prefCtrl.getDialModeKey()).label
+        val animOn = prefCtrl.getDialAnimationMode() != DialAnimationOverlay.MODE_OFF
+        view?.findViewById<TextView>(R.id.otherSectionSubtitle)?.text = "$mode · 动画${if (animOn) "开启" else "关闭"}"
     }
 
     /** 每次启动时如未设置电池优化，弹窗引导直到设置好为止 */
@@ -1100,7 +1111,9 @@ class ConnectFragment : Fragment() {
 
     private fun updateStrategyDesc() {
         if (!isAdded) return
-        connectionStrategyDesc.text = prefCtrl.getConnectionStrategy().label
+        val strategy = prefCtrl.getConnectionStrategy()
+        connectionStrategyDesc.text = strategy.label
+        view?.findViewById<TextView>(R.id.advancedSectionSubtitle)?.text = strategy.label
         updateStrategyBadge()
     }
 
@@ -1894,6 +1907,7 @@ class ConnectFragment : Fragment() {
                 val selected = modes[which]
                 prefCtrl.setDialModeKey(selected.key)
                 dialModeCurrent.text = selected.label
+                updateOtherSectionSubtitle()
                 // 同步到CallLogFragment顶栏
                 try {
                     (requireActivity() as? MainActivity)?.syncDialModeUI()
