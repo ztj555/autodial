@@ -64,19 +64,24 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     
-    - name: Find APK files
-      run: |
-        echo "=== All APK files ==="
-        find android-app -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-        echo "=== Build outputs ==="
-        ls -laR android-app/app/build/outputs/apk/ 2>/dev/null || echo "No outputs"
-      shell: bash
+    - name: Build Debug APK
+      working-directory: ./android-app
+      run: ./gradlew assembleDebug --stacktrace
     
-    - name: Upload APK Artifact
+    - name: Upload Release APK
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release
+        path: android-app/app/build/outputs/apk/release/*.apk
+        retention-days: 30
+        if-no-files-found: warn
+    
+    - name: Upload Debug APK
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: android-app/app/build/outputs/apk/**/*.apk
+        path: android-app/app/build/outputs/apk/debug/*.apk
         retention-days: 30
         if-no-files-found: warn
