@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">A跨屏拨号</string>
-    <string name="channel_name">A跨屏拨号通知</string>
+    <string name="app_name">Auto融鑫汇</string>
+    <string name="channel_name">Auto融鑫汇通知</string>
     <string name="channel_desc">保持连接和拨号通知</string>
-    <string name="accessibility_service_description">A跨屏拨号辅助服务，用于在部分手机上自动选择SIM卡拨号。仅在收到拨号请求时短暂激活。</string>
+    <string name="accessibility_service_description">Auto融鑫汇辅助服务，用于在部分手机上自动选择SIM卡拨号。仅在收到拨号请求时短暂激活。</string>
 </resources>

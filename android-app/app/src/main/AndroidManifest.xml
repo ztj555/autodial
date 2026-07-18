@@ -74,6 +74,8 @@
                 android:resource="@xml/file_provider_paths" />
         </provider>
 
+        <!-- 无障碍服务：华为暂关闭，小米需开启 -->
+        <!--
         <service
             android:name=".DialAccessibilityService"
             android:exported="true"
@@ -85,6 +87,7 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+        -->
 
     </application>
 </manifest>
