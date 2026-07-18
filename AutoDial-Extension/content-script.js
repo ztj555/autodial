@@ -1231,6 +1231,7 @@
               if (!line || line.startsWith('#') || /^\[.+\]$/.test(line)) continue;
               line = line.replace(/新云端|老云端/g, '').replace(/^(https?|wss?):\/\//i, '').trim();
               if (!line) continue;
+              line = line.split(' ')[0]; // 去掉行末别名
               if (!line.includes(':')) line += ':35430';
               servers.push(line);
             }

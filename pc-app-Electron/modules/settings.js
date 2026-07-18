@@ -112,6 +112,8 @@ function fetchCloudServers(appSettings, app) {
             if (/^\[.+\]$/.test(line)) continue;
             line = line.replace(/新云端|老云端/g, '').trim();
             if (!line) continue;
+            // 去掉行末别名（格式: "IP:PORT 别名"）
+            line = line.split(' ')[0];
             line = line.replace(/^(https?|wss?):\/\//i, '');
             if (!line.includes(':')) line += ':35430';
             servers.push(line);

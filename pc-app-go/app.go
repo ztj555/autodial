@@ -313,6 +313,10 @@ func (a *App) FetchCloudServers() []string {
 				line = strings.ReplaceAll(line, "[new]", "")
 				line = strings.ReplaceAll(line, "[old]", "")
 				line = strings.TrimSpace(line)
+				// 去掉行末别名（格式: "IP:PORT 别名"）
+				if idx := strings.Index(line, " "); idx > 0 {
+					line = line[:idx]
+				}
 				if line != "" {
 					if !strings.Contains(line, ":") {
 						line = line + ":35430"

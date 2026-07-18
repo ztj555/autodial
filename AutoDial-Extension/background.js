@@ -72,6 +72,8 @@ async function fetchCloudList() {
         // 清理后缀标签
         line = line.replace(/新云端|老云端/g, '').trim();
         if (!line) continue;
+        // 去掉行末别名（格式: "IP:PORT 别名"）
+        line = line.split(' ')[0];
         // 去掉协议前缀（保持纯 IP:PORT）
         line = line.replace(/^(https?|wss?):\/\//i, '');
         // 没有端口默认 35430
