@@ -359,7 +359,7 @@ class CallLogFragment : Fragment() {
                 DialService.isConnected -> {
                     // 重连
                     val pin = prefs.getString("pin", "") ?: ""
-                    if (pin.length == 4) {
+                    if (pin.length >= 4) {
                         requireActivity().startService(Intent(requireActivity(), DialService::class.java).apply {
                             action = "CONNECT"; putExtra("pin", pin)
                         })
@@ -540,7 +540,7 @@ class CallLogFragment : Fragment() {
             connectionStatusText.text = "已连接"
         } else {
             connectionStatusDot.setImageResource(R.drawable.dot_gray)
-            connectionStatusText.text = "未连接电脑"
+            connectionStatusText.text = "未连接"
         }
         updateBtnStateUI()
     }
