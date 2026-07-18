@@ -388,6 +388,37 @@
             android:textSize="12sp"
             android:paddingStart="12dp"
             android:paddingEnd="12dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/todayConnectedCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:tag="text"
+            android:text="接通 0"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:text="·"
+            android:tag="text2"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/todayConnectRate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:tag="text2"
+            android:text="接通率 0%"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <!-- 通话记录列表 -->

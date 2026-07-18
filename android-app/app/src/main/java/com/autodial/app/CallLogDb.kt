@@ -550,6 +550,24 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
         return cursor?.use { it.count } ?: 0
     }
 
+    /** 获取今日接通次数（呼出且通话时长>0） */
+    fun getTodayConnectedCount(context: Context): Int {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) return 0
+        val cursor = context.contentResolver.query(
+            android.provider.CallLog.Calls.CONTENT_URI,
+            arrayOf(android.provider.CallLog.Calls._ID),
+            "${android.provider.CallLog.Calls.DATE} >= ? AND ${android.provider.CallLog.Calls.TYPE} = ? AND ${android.provider.CallLog.Calls.DURATION} > 0",
+            arrayOf(cal.timeInMillis.toString(), android.provider.CallLog.Calls.OUTGOING_TYPE.toString()),
+            null
+        )
+        return cursor?.use { it.count } ?: 0
+    }
+
     /** 指定时间以来的通话次数（系统通话记录） */
     fun getDialCountSince(context: Context, sinceMs: Long): Int {
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG)

@@ -206,6 +206,10 @@ class CallLogFragment : Fragment() {
     // v3 UI: FAB 手动拨号
     private lateinit var dialFab: TextView
 
+    // v3 UI: 今日接通统计
+    private lateinit var todayConnectedCount: TextView
+    private lateinit var todayConnectRate: TextView
+
     // 完整记录列表（未筛选），用于筛选后恢复
     private var allRecords: List<PhoneCallRecord> = emptyList()
 
@@ -323,6 +327,8 @@ class CallLogFragment : Fragment() {
         filterOk = view.findViewById(R.id.filterOk)
         filterMiss = view.findViewById(R.id.filterMiss)
         dialFab = view.findViewById(R.id.dialFab)
+        todayConnectedCount = view.findViewById(R.id.todayConnectedCount)
+        todayConnectRate = view.findViewById(R.id.todayConnectRate)
 
         // v3 UI: 筛选芯片点击
         filterAll.setOnClickListener { setFilter("all") }
@@ -791,6 +797,12 @@ class CallLogFragment : Fragment() {
                 fortuneLuck.text = todayCount.toString()
                 fortuneQi.text = "${minutes}分"
             }
+
+            // 今日接通统计
+            val connectedCount = callLogDb.getTodayConnectedCount(requireContext())
+            val rate = if (todayCount > 0) (connectedCount * 100 / todayCount) else 0
+            todayConnectedCount.text = "接通 $connectedCount"
+            todayConnectRate.text = "接通率 $rate%"
         } catch (_: Exception) {}
     }
 
