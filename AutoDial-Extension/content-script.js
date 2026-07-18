@@ -232,7 +232,7 @@
       sendResponse({ ok: false, error: msg });
       return;
     }
-    // 2) 检查是否为管理员
+    // 2) 获取 PIN（已去掉主管限制，任何人都可同步）
     var pin = window.__adMyPhone || '';
     chrome.runtime.sendMessage({ type: 'getPin' }, function(resp) {
       if (resp && resp.pin) pin = resp.pin;
@@ -242,14 +242,7 @@
         sendResponse({ ok: false, error: msg });
         return;
       }
-      chrome.runtime.sendMessage({ type: 'checkIsAdmin', pin: pin }, function(adminResp) {
-        if (!adminResp || !adminResp.is_admin) {
-          var msg = '当前账号不是主管，请让主管来同步';
-          toastFn('✗ ' + msg);
-          sendResponse({ ok: false, error: msg });
-          return;
-        }
-        // 3) 抓取表格数据
+      // 3) 抓取表格数据
         var visits = [];
         var rows = document.querySelectorAll('form[name="fdsf"] table tr');
         for (var r = 1; r < rows.length; r++) {
@@ -293,7 +286,6 @@
             sendResponse({ ok: false, error: syncResp ? syncResp.error : '未知错误' });
           }
         });
-      });
     });
   }
 

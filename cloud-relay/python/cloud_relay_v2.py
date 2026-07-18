@@ -1216,6 +1216,15 @@ async def health_check_handler(path, request_headers):
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
+            # 去重：同一手机号今日已有记录则跳过
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            c.execute(
+                'SELECT id FROM visits WHERE mobile = ? AND created_at LIKE ? LIMIT 1',
+                (mobile, today_str + '%')
+            )
+            if c.fetchone():
+                conn.close()
+                return (200, JSON_HDR, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate_mobile_today'}).encode('utf-8'))
             c.execute(
                 'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, created_at, updated_at) '
                 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',

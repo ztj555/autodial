@@ -231,13 +231,13 @@ class StatsFragment : Fragment() {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val todayStats = stats.find { it.date == todayStr }
             val todaySec = todayStats?.totalDurationSec ?: 0
-            todayDuration.text = "${formatMinutes(todaySec)}分"
+            todayDuration.text = formatMinutes(todaySec)
 
             // 一周累计（C:通话次数, D:通话分钟）
             val weeklyCount = stats.sumOf { it.count }
             val weeklySec = stats.sumOf { it.totalDurationSec }
             totalCount.text = "${weeklyCount}次"
-            totalDuration.text = "${formatMinutes(weeklySec)}分"
+            totalDuration.text = formatMinutes(weeklySec)
 
             // 一周接通
             val weekStart = Calendar.getInstance().apply {
@@ -271,7 +271,7 @@ class StatsFragment : Fragment() {
         val monthSec = db.getDialDurationSince(requireContext(), monthStart)
         val monthCount = db.getDialCountSince(requireContext(), monthStart)
         todayLuck.text = "${monthCount}次"
-        totalLuck.text = "${formatMinutes(monthSec)}分"
+        totalLuck.text = formatMinutes(monthSec)
 
         // 本月接通
         val monthConnected = db.getConnectedCountSince(requireContext(), monthStart)
@@ -415,7 +415,7 @@ class StatsFragment : Fragment() {
 
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (28 * dp).toInt())
+            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (16 * dp).toInt())
             setBackgroundColor(Color.parseColor(colors.bg))
         }
 
@@ -427,15 +427,26 @@ class StatsFragment : Fragment() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
 
+        // 可滚动数据区
+        val scrollView = android.widget.ScrollView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+        }
+        val scrollContent = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
         for ((i, r) in filtered.withIndex()) {
             val timeStr = if (r.timestamp > 0) timeFmt.format(Date(r.timestamp)) else r.created_at
-            root.addView(TextView(requireContext()).apply {
+            scrollContent.addView(TextView(requireContext()).apply {
                 text = "${i + 1}. ${r.name}  ${r.mobile}\n   $timeStr"
                 textSize = 14f
                 setTextColor(Color.parseColor(colors.text))
                 setPadding(0, 0, 0, (8 * dp).toInt())
             })
         }
+
+        scrollView.addView(scrollContent)
+        root.addView(scrollView)
 
         root.addView(TextView(requireContext()).apply {
             text = "关闭"
@@ -450,7 +461,7 @@ class StatsFragment : Fragment() {
         dialog.show()
         dialog.window?.setLayout(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
+            (resources.displayMetrics.heightPixels * 0.6).toInt().coerceAtMost((600 * dp).toInt())
         )
     }
 
@@ -678,7 +689,7 @@ class StatsFragment : Fragment() {
 
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (24 * dp).toInt())
+            setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (16 * dp).toInt())
             setBackgroundColor(Color.parseColor(colors.bg))
         }
 
@@ -688,15 +699,41 @@ class StatsFragment : Fragment() {
             textSize = 18f
             setTextColor(Color.parseColor(colors.primaryLight))
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, 0, 0, (12 * dp).toInt())
+            setPadding(0, 0, 0, (10 * dp).toInt())
         })
 
-        // 每日卡片行（单行，列宽自适应全屏）
-        for (s in dailyStats) {
+        // 列名小标题
+        root.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding((12 * dp).toInt(), 0, (12 * dp).toInt(), (6 * dp).toInt())
+            val hdrs = arrayOf("日期", "呼出", "接通", "接通率", "通时")
+            val hdrWeights = floatArrayOf(1.5f, 1f, 1f, 1f, 1.2f)
+            for (i in hdrs.indices) {
+                addView(TextView(requireContext()).apply {
+                    text = hdrs[i]
+                    textSize = 11f
+                    setTextColor(Color.parseColor(colors.text2))
+                    gravity = i == 0 ? Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, hdrWeights[i])
+                })
+            }
+        })
+
+        // 可滚动数据区
+        val scrollView = android.widget.ScrollView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            setPadding(0, 0, 0, 0)
+        }
+        val scrollContent = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        // 每日卡片行（单行，列宽自适应全屏，近→远）
+        for (s in dailyStats.reversed()) {
             val rate = if (s.count > 0) s.connectedCount * 100 / s.count else 0
             val timeStr = "${formatMinutes(s.totalDurationSec)}分"
 
-            root.addView(LinearLayout(requireContext()).apply {
+            scrollContent.addView(LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
@@ -750,21 +787,26 @@ class StatsFragment : Fragment() {
             })
         }
 
+        scrollView.addView(scrollContent)
+        root.addView(scrollView)
+
         // 关闭按钮
         root.addView(TextView(requireContext()).apply {
             text = "关闭"
             textSize = 14f
             setTextColor(Color.parseColor(colors.text2))
             gravity = Gravity.CENTER
-            setPadding(0, (16 * dp).toInt(), 0, 0)
+            setPadding(0, (12 * dp).toInt(), 0, 0)
             setOnClickListener { dialog.dismiss() }
         })
 
         dialog.setContentView(root)
         dialog.show()
+        // 限制弹窗最大高度为屏幕 60%，超出的内容在 ScrollView 内滚动
+        val screenHeight = resources.displayMetrics.heightPixels
         dialog.window?.setLayout(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
+            (screenHeight * 0.6).toInt().coerceAtMost((600 * dp).toInt())
         )
     }
 
