@@ -56,7 +56,8 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
     data class DayStats(
         val date: String,
         val count: Int,
-        val totalDurationSec: Long = 0  // 通时（秒）
+        val totalDurationSec: Long = 0,  // 通时（秒）
+        val connectedCount: Int = 0      // 接通数（呼出且duration>0）
     )
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -474,6 +475,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
         // 从系统 CallLog 查询呼出已接通的通话，按天聚合 duration
         val countMap = LinkedHashMap<String, Int>()
         val durationMap = LinkedHashMap<String, Long>()
+        val connectedMap = LinkedHashMap<String, Int>()
 
         try {
             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG)
@@ -507,6 +509,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
                     val date = dateFormat.format(Date(time))
                     countMap[date] = (countMap[date] ?: 0) + 1
                     durationMap[date] = (durationMap[date] ?: 0) + duration
+                    if (duration > 0) connectedMap[date] = (connectedMap[date] ?: 0) + 1
                 }
             }
         } catch (e: Exception) {
@@ -518,7 +521,8 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
                 add(Calendar.DAY_OF_MONTH, -(days - 1 - i))
             }
             val date = dateFormat.format(cal.time)
-            list.add(DayStats(date, countMap[date] ?: 0, durationMap[date] ?: 0))
+            list.add(DayStats(date, countMap[date] ?: 0, durationMap[date] ?: 0,
+                connectedMap[date] ?: 0))
         }
         return list
     }
@@ -563,6 +567,20 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             arrayOf(android.provider.CallLog.Calls._ID),
             "${android.provider.CallLog.Calls.DATE} >= ? AND ${android.provider.CallLog.Calls.TYPE} = ? AND ${android.provider.CallLog.Calls.DURATION} > 0",
             arrayOf(cal.timeInMillis.toString(), android.provider.CallLog.Calls.OUTGOING_TYPE.toString()),
+            null
+        )
+        return cursor?.use { it.count } ?: 0
+    }
+
+    /** 指定时间以来的接通次数（呼出且通话时长>0） */
+    fun getConnectedCountSince(context: Context, sinceMs: Long): Int {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) return 0
+        val cursor = context.contentResolver.query(
+            android.provider.CallLog.Calls.CONTENT_URI,
+            arrayOf(android.provider.CallLog.Calls._ID),
+            "${android.provider.CallLog.Calls.DATE} >= ? AND ${android.provider.CallLog.Calls.TYPE} = ? AND ${android.provider.CallLog.Calls.DURATION} > 0",
+            arrayOf(sinceMs.toString(), android.provider.CallLog.Calls.OUTGOING_TYPE.toString()),
             null
         )
         return cursor?.use { it.count } ?: 0

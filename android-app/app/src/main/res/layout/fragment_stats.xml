@@ -72,19 +72,20 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="0"
+                        android:text="0次"
                         android:textColor="#FF4444"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
 
                     <TextView
+                        android:id="@+id/statsTodayConnect"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="次"
+                        android:layout_marginTop="4dp"
                         android:tag="text2"
-                        android:textColor="#888888"
-                        android:textSize="12sp" />
+                        android:text="接通 0 · 0%"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -110,19 +111,11 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="0.0"
+                        android:text="0.0分"
                         android:textColor="#8E44AD"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="分钟"
-                        android:tag="text2"
-                        android:textColor="#888888"
-                        android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -144,30 +137,34 @@
                     android:padding="13dp">
 
                     <TextView
+                        android:id="@+id/statsWeekCallLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周拨号(财运)"
                         android:tag="text"
-                        android:textSize="14sp" />
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
                         android:id="@+id/statsTotalCount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="0"
+                        android:text="0次"
                         android:tag="text"
                         android:textSize="24sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
 
                     <TextView
+                        android:id="@+id/statsWeekConnect"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="次"
+                        android:layout_marginTop="4dp"
                         android:tag="text2"
-                        android:textColor="#888888"
-                        android:textSize="12sp" />
+                        android:text="接通 0 · 0%"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -182,30 +179,25 @@
                     android:padding="13dp">
 
                     <TextView
+                        android:id="@+id/statsWeekDurationLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="一周通时(财气)"
                         android:tag="text"
-                        android:textSize="14sp" />
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
                         android:id="@+id/statsTotalDuration"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="0.0"
+                        android:text="0.0分"
                         android:tag="text"
                         android:textSize="24sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="分钟"
-                        android:tag="text2"
-                        android:textColor="#888888"
-                        android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -227,27 +219,39 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/statsMonthCallLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="本月财运"
                         android:tag="text"
-                        android:textSize="14sp" />
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
                         android:id="@+id/statsTodayLuck"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="0"
+                        android:text="0次"
                         android:textSize="25sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/statsMonthConnect"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:tag="text2"
+                        android:text="接通 0 · 0%"
+                        android:textSize="11sp" />
 
                 </LinearLayout>
 
                 <View
                     android:layout_width="1dp"
-                    android:layout_height="60dp"
+                    android:layout_height="72dp"
                     android:background="#22262F"
                     android:layout_marginStart="12dp"
                     android:layout_marginEnd="12dp" />
@@ -260,11 +264,14 @@
                     android:orientation="vertical">
 
                     <TextView
+                        android:id="@+id/statsMonthDurationLabel"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="本月财气"
                         android:tag="text"
-                        android:textSize="14sp" />
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
 
                     <TextView
                         android:id="@+id/statsTotalLuck"

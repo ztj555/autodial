@@ -36,6 +36,9 @@ class StatsFragment : Fragment() {
     private lateinit var totalDuration: TextView
     private lateinit var todayLuck: TextView
     private lateinit var totalLuck: TextView
+    private lateinit var todayConnect: TextView
+    private lateinit var weekConnect: TextView
+    private lateinit var monthConnect: TextView
     private lateinit var chartContainer: LinearLayout
     private lateinit var dateLabels: LinearLayout
 
@@ -94,6 +97,9 @@ class StatsFragment : Fragment() {
         totalDuration = view.findViewById(R.id.statsTotalDuration)
         todayLuck = view.findViewById(R.id.statsTodayLuck)
         totalLuck = view.findViewById(R.id.statsTotalLuck)
+        todayConnect = view.findViewById(R.id.statsTodayConnect)
+        weekConnect = view.findViewById(R.id.statsWeekConnect)
+        monthConnect = view.findViewById(R.id.statsMonthConnect)
         chartContainer = view.findViewById(R.id.statsChartContainer)
         dateLabels = view.findViewById(R.id.statsDateLabels)
         visitToday = view.findViewById(R.id.statsVisitToday)
@@ -103,6 +109,27 @@ class StatsFragment : Fragment() {
         visitLastMonth = view.findViewById(R.id.statsVisitLastMonth)
         visit30Days = view.findViewById(R.id.statsVisit30Days)
         visitSyncBtn = view.findViewById(R.id.statsVisitSyncBtn)
+
+        // 点击标题弹每日明细
+        val weekCallLabel = view.findViewById<TextView>(R.id.statsWeekCallLabel)
+        val weekDurLabel = view.findViewById<TextView>(R.id.statsWeekDurationLabel)
+        val monthCallLabel = view.findViewById<TextView>(R.id.statsMonthCallLabel)
+        val monthDurLabel = view.findViewById<TextView>(R.id.statsMonthDurationLabel)
+
+        val weekClick = {
+            val db = CallLogDb.getInstance(requireContext())
+            showDialDetail("一周详情", db.getDailyDurationStats(requireContext(), 7))
+        }
+        weekCallLabel.setOnClickListener { weekClick() }
+        weekDurLabel.setOnClickListener { weekClick() }
+
+        val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        val monthClick = {
+            val db = CallLogDb.getInstance(requireContext())
+            showDialDetail("本月详情", db.getDailyDurationStats(requireContext(), todayDay))
+        }
+        monthCallLabel.setOnClickListener { monthClick() }
+        monthDurLabel.setOnClickListener { monthClick() }
 
         // 同步按钮
         visitSyncBtn.setOnClickListener { syncVisitsFromCloud() }
@@ -190,7 +217,12 @@ class StatsFragment : Fragment() {
         try {
             // 今日数据
             val today = db.getTodayCount(requireContext())
-            todayCount.text = today.toString()
+            todayCount.text = "${today}次"
+
+            // 今日接通
+            val todayConnected = db.getTodayConnectedCount(requireContext())
+            val todayRate = if (today > 0) todayConnected * 100 / today else 0
+            todayConnect.text = "接通 $todayConnected · $todayRate%"
 
             // 近7天统计（含通时）
             val stats = db.getDailyDurationStats(requireContext(), 7)
@@ -199,13 +231,23 @@ class StatsFragment : Fragment() {
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
             val todayStats = stats.find { it.date == todayStr }
             val todaySec = todayStats?.totalDurationSec ?: 0
-            todayDuration.text = formatMinutes(todaySec)
+            todayDuration.text = "${formatMinutes(todaySec)}分"
 
             // 一周累计（C:通话次数, D:通话分钟）
             val weeklyCount = stats.sumOf { it.count }
             val weeklySec = stats.sumOf { it.totalDurationSec }
-            totalCount.text = weeklyCount.toString()
-            totalDuration.text = formatMinutes(weeklySec)
+            totalCount.text = "${weeklyCount}次"
+            totalDuration.text = "${formatMinutes(weeklySec)}分"
+
+            // 一周接通
+            val weekStart = Calendar.getInstance().apply {
+                set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            val weekConnected = db.getConnectedCountSince(requireContext(), weekStart)
+            val weekRate = if (weeklyCount > 0) weekConnected * 100 / weeklyCount else 0
+            weekConnect.text = "接通 $weekConnected · $weekRate%"
 
             // 本月财运/财气
             loadMonthlyStats(db)
@@ -228,8 +270,13 @@ class StatsFragment : Fragment() {
         val monthStart = cal.timeInMillis
         val monthSec = db.getDialDurationSince(requireContext(), monthStart)
         val monthCount = db.getDialCountSince(requireContext(), monthStart)
-        todayLuck.text = monthCount.toString()
-        totalLuck.text = formatMinutes(monthSec)
+        todayLuck.text = "${monthCount}次"
+        totalLuck.text = "${formatMinutes(monthSec)}分"
+
+        // 本月接通
+        val monthConnected = db.getConnectedCountSince(requireContext(), monthStart)
+        val monthRate = if (monthCount > 0) monthConnected * 100 / monthCount else 0
+        monthConnect.text = "接通 $monthConnected · $monthRate%"
     }
 
     private fun loadVisitStats() {
@@ -618,6 +665,109 @@ class StatsFragment : Fragment() {
             }
             dateLabels.addView(dateLabel)
         }
+    }
+
+    /** 弹窗展示每日拨号明细（呼出/接通/接通率/通时） */
+    private fun showDialDetail(title: String, dailyStats: List<CallLogDb.DayStats>) {
+        if (!isAdded) return
+        val colors = ThemeManager.getColors(requireContext())
+        val dp = resources.displayMetrics.density
+        val dayOfWeek = arrayOf("日", "一", "二", "三", "四", "五", "六")
+
+        val dialog = BottomSheetDialog(requireContext())
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val scroll = android.widget.ScrollView(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -1)
+        }
+
+        val root = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (24 * dp).toInt())
+            setBackgroundColor(Color.parseColor(colors.bg))
+        }
+
+        // 标题
+        root.addView(TextView(requireContext()).apply {
+            text = title
+            textSize = 16f
+            setTextColor(Color.parseColor(colors.primaryLight))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, (12 * dp).toInt())
+        })
+
+        // 表头
+        root.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, (8 * dp).toInt())
+            val hdrTexts = arrayOf("日期", "呼出", "接通", "接通率", "通时")
+            val hdrWeights = floatArrayOf(2f, 1f, 1f, 1.2f, 1f)
+            for (i in hdrTexts.indices) {
+                addView(TextView(requireContext()).apply {
+                    text = hdrTexts[i]
+                    textSize = 12f
+                    setTextColor(Color.parseColor(colors.text2))
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, hdrWeights[i])
+                })
+            }
+        })
+
+        // 分隔线
+        root.addView(View(requireContext()).apply {
+            setBackgroundColor(Color.parseColor(colors.bg3))
+            layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply {
+                bottomMargin = (8 * dp).toInt()
+            }
+        })
+
+        // 数据行
+        for (s in dailyStats) {
+            val rate = if (s.count > 0) s.connectedCount * 100 / s.count else 0
+            val parts = arrayOf(
+                s.date.substring(5),  // MM-dd
+                s.count.toString(),
+                s.connectedCount.toString(),
+                "$rate%",
+                "${formatMinutes(s.totalDurationSec)}分"
+            )
+            root.addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, (6 * dp).toInt(), 0, (6 * dp).toInt())
+                val weights = floatArrayOf(2f, 1f, 1f, 1.2f, 1f)
+                for (i in parts.indices) {
+                    addView(TextView(requireContext()).apply {
+                        text = parts[i]
+                        textSize = 13f
+                        setTextColor(Color.parseColor(colors.text))
+                        gravity = Gravity.CENTER
+                        layoutParams = LinearLayout.LayoutParams(0, -2, weights[i])
+                    })
+                }
+            })
+        }
+
+        scroll.addView(root)
+        root.addView(View(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, (8 * dp).toInt())
+        })
+
+        // 关闭按钮
+        root.addView(TextView(requireContext()).apply {
+            text = "关闭"
+            textSize = 14f
+            setTextColor(Color.parseColor(colors.text2))
+            gravity = Gravity.CENTER
+            setPadding(0, (8 * dp).toInt(), 0, 0)
+            setOnClickListener { dialog.dismiss() }
+        })
+
+        dialog.setContentView(scroll)
+        dialog.show()
+        dialog.window?.setLayout(
+            (300 * dp).toInt(),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun applyTheme() {
