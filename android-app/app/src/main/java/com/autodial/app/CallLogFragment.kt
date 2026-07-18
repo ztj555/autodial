@@ -102,7 +102,7 @@ class CallLogAdapter(
         when (record.type) {
             CallLog.Calls.OUTGOING_TYPE -> {
                 if (record.duration > 0) {
-                    holder.callStatus.text = formatDuration(record.duration)
+                    holder.callStatus.text = "呼出" + formatDuration(record.duration)
                     holder.callStatus.setTextColor(textColor)
                 } else {
                     holder.callStatus.text = "未接通"
@@ -111,7 +111,7 @@ class CallLogAdapter(
             }
             CallLog.Calls.INCOMING_TYPE -> {
                 if (record.duration > 0) {
-                    holder.callStatus.text = formatDuration(record.duration)
+                    holder.callStatus.text = "呼入" + formatDuration(record.duration)
                     holder.callStatus.setTextColor(textColor)
                 } else {
                     holder.callStatus.text = "未接听"
@@ -130,7 +130,7 @@ class CallLogAdapter(
 
         // SIM卡标识
         holder.simSlot.text = "卡${record.simSlot + 1}"
-        holder.simSlot.setTextColor(android.graphics.Color.parseColor(if (record.simSlot == 1) colors.primaryLight else colors.text2))
+        holder.simSlot.setTextColor(android.graphics.Color.parseColor(if (record.simSlot == 1) colors.primaryLight else colors.text))
 
         // v3: 彩色状态条
         val statusBar = holder.root.findViewById<View>(R.id.itemStatusBar)
