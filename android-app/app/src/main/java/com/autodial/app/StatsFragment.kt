@@ -713,7 +713,7 @@ class StatsFragment : Fragment() {
                     text = hdrs[i]
                     textSize = 11f
                     setTextColor(Color.parseColor(colors.text2))
-                    gravity = i == 0 ? Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+                    gravity = if (i == 0) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
                     layoutParams = LinearLayout.LayoutParams(0, -2, hdrWeights[i])
                 })
             }
