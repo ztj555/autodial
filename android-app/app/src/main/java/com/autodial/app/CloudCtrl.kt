@@ -33,7 +33,6 @@ class CloudCtrl(private val context: Context) {
     data class ServerEntry(val url: String, val type: String, val alias: String = "") {
         val isOld get() = type != "new"
         val isNew get() = type == "new"
-        val displayName get() = if (alias.isNotEmpty()) alias else stripCloudPrefix(url)
     }
 
     // ==================== 服务器列表 CRUD ====================

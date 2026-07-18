@@ -51,15 +51,15 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                 setPadding((12*dp).toInt(), (10*dp).toInt(), (12*dp).toInt(), (10*dp).toInt())
                 layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (8*dp).toInt() }
                 background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(Color.parseColor(if (isCurrent && cloudConnected) blend(colors.bg2, colors.green, 15) else colors.bg2))
+                    setColor(Color.parseColor(if (isCurrent && cloudConnected) blend(this@CloudServerSheet.colors.bg2, this@CloudServerSheet.colors.green, 15) else this@CloudServerSheet.colors.bg2))
                     cornerRadius = 12 * dp
-                    if (isCurrent) setStroke((2*dp).toInt(), Color.parseColor(if (cloudConnected) colors.green else colors.primary))
+                    if (isCurrent) setStroke((2*dp).toInt(), Color.parseColor(if (cloudConnected) this@CloudServerSheet.colors.green else this@CloudServerSheet.colors.primary))
                 }
                 
                 // Line 1: Title
                 addView(TextView(activity).apply {
                     text = display; textSize = 13f; setTypeface(null, 1)
-                    setTextColor(Color.parseColor(colors.text))
+                    setTextColor(Color.parseColor(this@CloudServerSheet.colors.text))
                 })
                 
                 // Line 2: Status + [别名]
@@ -68,16 +68,16 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                     gravity = Gravity.CENTER_VERTICAL
                     addView(TextView(activity).apply {
                         text = if (isCurrent) "当前服务器" else "未使用"
-                        textSize = 11f; setTextColor(Color.parseColor(colors.text2))
+                        textSize = 11f; setTextColor(Color.parseColor(this@CloudServerSheet.colors.text2))
                         layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
                         setPadding(0, (4*dp).toInt(), 0, (4*dp).toInt())
                     })
                     addView(TextView(activity).apply {
                         text = "别名"; textSize = 11f
-                        setTextColor(Color.parseColor(colors.primary))
+                        setTextColor(Color.parseColor(this@CloudServerSheet.colors.primary))
                         setPadding((8*dp).toInt(), (3*dp).toInt(), (8*dp).toInt(), (3*dp).toInt())
                         background = android.graphics.drawable.GradientDrawable().apply {
-                            setColor(Color.parseColor(colors.bg)); cornerRadius = 6 * dp
+                            setColor(Color.parseColor(this@CloudServerSheet.colors.bg2)); cornerRadius = 6 * dp
                         }
                         setOnClickListener { showAliasEdit(entry.url, entry.alias) }
                     })
@@ -88,7 +88,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                     orientation = LinearLayout.HORIZONTAL
                     if (isCurrent) {
                         val connLabel = if (cloudConnected) "🟢 已连接" else "🟡 未连接"
-                        val connColor = if (cloudConnected) colors.green else colors.primaryLight
+                        val connColor = if (cloudConnected) this@CloudServerSheet.colors.green else this@CloudServerSheet.colors.primaryLight
                         addView(action(connLabel, connColor) { /* no-op, status display */ })
                     } else {
                         addView(action("设为当前") {
