@@ -38,11 +38,16 @@ class CloudCtrl(private val context: Context) {
     // ==================== 服务器列表 CRUD ====================
 
     fun getServerList(): List<ServerEntry> {
-        return loadServerEntries().ifEmpty {
+        val list = loadServerEntries().ifEmpty {
             val default = listOf(ServerEntry("101.34.65.254:35430", "new"))
             saveServerEntries(default)
             default
         }
+        // 如果 cloud_server 未设置，默认选第一个
+        if (prefs.getString("cloud_server", "")?.isEmpty() != false && list.isNotEmpty()) {
+            prefs.edit().putString("cloud_server", list.first().url).apply()
+        }
+        return list
     }
 
     /** 根据输入长度排序：4位→old排前面，11位→new排前面 */
