@@ -127,10 +127,14 @@ class MainActivity : AppCompatActivity() {
 
         startService(DialService.newIntent(this))
 
-        requestPermissions()
 
         applyTheme()
         switchTab(0)
+
+        // 延迟到界面渲染后请求权限，避免华为等机型吞掉权限对话框
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            requestPermissions()
+        }, 800)
     }
 
     // ==================== background dial support ====================
@@ -305,13 +309,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "\u5f39\u7a97\u9009\u5361\u9700\u8981\u60ac\u6d6e\u7a97\u6743\u9650\uff0c\u8bf7\u5141\u8bb8", Toast.LENGTH_LONG).show()
+            // 华为等机型可能拦截 Settings 跳转，弹窗引导手动开启
             try {
                 startActivity(Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:$packageName")
                 ))
             } catch (_: Exception) {}
+            // 弹窗说明：防止华为直接吞掉跳转
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                if (!Settings.canDrawOverlays(this)) {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("需要悬浮窗权限")
+                        .setMessage("请在 设置 → 应用 → Auto融鑫汇 → 显示在其他应用上层 中手动开启。\n\n此权限用于电话拨出时弹出选卡窗口。")
+                        .setPositiveButton("去设置") { _, _ ->
+                            try {
+                                startActivity(Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:$packageName")
+                                ))
+                            } catch (_: Exception) {}
+                        }
+                        .setNegativeButton("稍后", null)
+                        .show()
+                }
+            }, 1500)
         }
     }
 
