@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:tag="bg"
-    android:background="#111318"
+    android:background="#888888"
     android:fillViewport="true"
     android:scrollbars="none">
 
@@ -20,7 +20,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:tag="topBar"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="4dp"
@@ -76,7 +76,7 @@
             android:layout_marginBottom="50dp"
             android:visibility="visible"
             android:tag="heroCard"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="vertical"
             android:paddingStart="16dp"
@@ -160,10 +160,10 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:text="连接"
-                android:textColor="#111318"
+                android:textColor="#888888"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:background="#C9A84C"
+                android:background="#888888"
                 android:visibility="gone" />
             </LinearLayout>
 
@@ -179,7 +179,7 @@
                     android:layout_height="44dp"
                     android:layout_weight="1"
                     android:tag="inputField"
-                    android:background="#1A1D24"
+                    android:background="#888888"
                     android:hint="请输入系统手机号"
                     android:textSize="15sp"
                     android:gravity="center_vertical"
@@ -196,10 +196,10 @@
                     android:layout_marginStart="8dp"
                     android:gravity="center"
                     android:text="连接"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="13sp"
                     android:textStyle="bold"
-                    android:background="#C9A84C" />
+                    android:background="#888888" />
             </LinearLayout>
 
             <TextView
@@ -283,7 +283,7 @@
             android:layout_height="44dp"
             android:layout_marginTop="4dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:hint="请填入11位手机号"
             android:textSize="18sp"
             android:letterSpacing="0.12"
@@ -354,7 +354,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
@@ -419,7 +419,7 @@
                 android:orientation="horizontal"
                 android:padding="10dp"
                 android:tag="settingRow"
-                android:background="#1A1D24">
+                android:background="#888888">
 
                 <TextView
                     android:id="@+id/lanChannelLabel"
@@ -451,7 +451,7 @@
                 android:orientation="horizontal"
                 android:padding="10dp"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:layout_marginTop="4dp">
 
                 <TextView
@@ -481,7 +481,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -531,7 +531,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -567,10 +567,10 @@
                     android:layout_width="48dp"
                     android:layout_height="26dp"
                     android:tag="switchOn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:text="开"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -583,7 +583,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -622,7 +622,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="bg2"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:orientation="vertical"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
@@ -634,7 +634,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="bg2"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="end"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -651,7 +651,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="+ 添加"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="13sp" />
 
                 <TextView
@@ -664,7 +664,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="测速"
-                    android:textColor="#C9A84C"
+                    android:textColor="#888888"
                     android:textSize="13sp" />
 
                 <TextView
@@ -677,7 +677,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="PC同步"
-                    android:textColor="#C9A84C"
+                    android:textColor="#888888"
                     android:textSize="13sp" />
 
                 <TextView
@@ -690,7 +690,7 @@
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
                     android:text="网络获取"
-                    android:textColor="#C9A84C"
+                    android:textColor="#888888"
                     android:textSize="13sp" />
             </LinearLayout>
         </LinearLayout>
@@ -702,7 +702,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
@@ -764,7 +764,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -801,12 +801,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="26dp"
                     android:tag="primaryBtn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
                     android:text="去设置"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
@@ -833,7 +833,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -885,7 +885,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -921,10 +921,10 @@
                     android:layout_width="48dp"
                     android:layout_height="26dp"
                     android:tag="switchOn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:text="开"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -937,7 +937,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -973,10 +973,10 @@
                     android:layout_width="48dp"
                     android:layout_height="26dp"
                     android:tag="switchOn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:text="开"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="13sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -989,7 +989,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -1045,7 +1045,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -1072,7 +1072,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="财运+1"
-                        android:textColor="#C9A84C"
+                        android:textColor="#888888"
                         android:textSize="12sp"
             android:letterSpacing="0.02" />
                 </LinearLayout>
@@ -1081,12 +1081,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="26dp"
                     android:tag="primaryBtn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
                     android:text="编辑"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -1099,7 +1099,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -1135,12 +1135,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="26dp"
                     android:tag="primaryBtn"
-                    android:background="#C9A84C"
+                    android:background="#888888"
                     android:gravity="center"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
                     android:text="导出"
-                    android:textColor="#111318"
+                    android:textColor="#888888"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -1154,7 +1154,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
@@ -1222,7 +1222,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:tag="settingRow"
-                android:background="#1A1D24"
+                android:background="#888888"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
@@ -1265,25 +1265,25 @@
                     android:id="@+id/previewGold"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
-                    android:background="#C9A84C" />
+                    android:background="#888888" />
                 <View
                     android:id="@+id/previewBg"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:layout_marginStart="2dp"
-                    android:background="#111318" />
+                    android:background="#888888" />
                 <View
                     android:id="@+id/previewBg2"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:layout_marginStart="2dp"
-                    android:background="#1A1D24" />
+                    android:background="#888888" />
                 <View
                     android:id="@+id/previewText"
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:layout_marginStart="2dp"
-                    android:background="#E8DCC8" />
+                    android:background="#888888" />
             </LinearLayout>
 
             <TextView
@@ -1305,7 +1305,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
@@ -1375,7 +1375,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="16dp"
@@ -1418,7 +1418,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="›"
-                android:textColor="#C9A84C"
+                android:textColor="#888888"
                 android:textSize="14sp" />
         </LinearLayout>
 
@@ -1430,7 +1430,7 @@
             android:paddingEnd="16dp"
             android:paddingBottom="16dp"
             android:tag="bg2"
-            android:background="#1A1D24"
+            android:background="#888888"
             android:orientation="vertical">
 
             <View android:layout_width="match_parent" android:layout_height="1dp" android:tag="settingDivider" android:background="#252525" android:layout_marginBottom="10dp" />
@@ -1439,7 +1439,7 @@
                 android:id="@+id/usageGuideText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#A09070"
+                android:textColor="#888888"
                 android:textSize="12sp"
                 android:lineSpacingExtra="4dp" />
         </LinearLayout>
@@ -1465,7 +1465,7 @@
             android:layout_marginBottom="20dp"
             android:text=""
             android:textSize="11sp"
-            android:textColor="#605040"
+            android:textColor="#888888"
             android:gravity="center"
             android:maxLines="2"
             android:ellipsize="end" />

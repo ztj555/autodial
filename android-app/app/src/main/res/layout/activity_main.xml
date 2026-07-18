@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:tag="bg"
-    android:background="#111318"
+    android:background="#888888"
     android:paddingStart="14dp"
     android:paddingTop="8dp"
     android:paddingEnd="14dp"
@@ -53,7 +53,7 @@
                 android:layout_marginTop="4dp"
                 android:text="通话"
                 android:tag="text2"
-                android:textColor="#A09070"
+                android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -81,7 +81,7 @@
                 android:layout_marginTop="4dp"
                 android:text="录上门"
                 android:tag="text2"
-                android:textColor="#A09070"
+                android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -109,7 +109,7 @@
                 android:layout_marginTop="4dp"
                 android:text="财库"
                 android:tag="text2"
-                android:textColor="#A09070"
+                android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -137,7 +137,7 @@
                 android:layout_marginTop="4dp"
                 android:text="设置"
                 android:tag="text2"
-                android:textColor="#A09070"
+                android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -148,6 +148,6 @@
         android:layout_width="match_parent"
         android:layout_height="2dp"
         android:tag="divider"
-        android:background="#111318" />
+        android:background="#888888" />
 
 </LinearLayout>

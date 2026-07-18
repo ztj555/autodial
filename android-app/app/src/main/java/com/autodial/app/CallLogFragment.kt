@@ -137,7 +137,7 @@ class CallLogAdapter(
         val barColor = when {
             record.duration > 0 -> android.graphics.Color.parseColor(colors.green)
             record.type == CallLog.Calls.MISSED_TYPE -> android.graphics.Color.parseColor(colors.red)
-            else -> android.graphics.Color.parseColor(colors.bg3)
+            else -> android.graphics.Color.parseColor(colors.text)
         }
         statusBar.setBackgroundColor(barColor)
 
