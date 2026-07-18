@@ -32,12 +32,18 @@ class DialPadSheet(private val activity: Activity) : BottomSheetDialog(activity)
             setBackgroundColor(Color.parseColor(colors.bg))
         }
 
-        // 输入框
+        // 输入框 + 删除按钮 横排
+        val inputRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
         val input = EditText(activity).apply {
             hint = "输入电话号码"
             textSize = 22f
             inputType = android.text.InputType.TYPE_CLASS_PHONE
-            gravity = Gravity.CENTER
+            showSoftInputOnFocus = false
+            gravity = Gravity.CENTER_VERTICAL
             setTextColor(Color.parseColor(colors.text))
             setHintTextColor(Color.parseColor(colors.text2))
             setBackgroundColor(Color.parseColor(colors.bg2))
@@ -48,7 +54,31 @@ class DialPadSheet(private val activity: Activity) : BottomSheetDialog(activity)
                 cornerRadius = 14 * dp
             }
         }
-        root.addView(input)
+        inputRow.addView(input, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ))
+
+        val deleteBtn = TextView(activity).apply {
+            text = "⌫"
+            textSize = 20f
+            setTextColor(Color.parseColor(colors.text2))
+            gravity = Gravity.CENTER
+            setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = (8 * dp).toInt()
+            }
+            setOnClickListener {
+                val text = input.text
+                if (text.isNotEmpty()) {
+                    text.delete(text.length - 1, text.length)
+                }
+            }
+        }
+        inputRow.addView(deleteBtn)
+        root.addView(inputRow)
 
         // 数字键盘
         val keys = listOf(
@@ -90,21 +120,6 @@ class DialPadSheet(private val activity: Activity) : BottomSheetDialog(activity)
                 }
             })
         }
-
-        // 删除按钮
-        root.addView(TextView(activity).apply {
-            text = "⌫ 删除"
-            textSize = 13f
-            setTextColor(Color.parseColor(colors.text2))
-            gravity = Gravity.CENTER
-            setPadding(0, (12 * dp).toInt(), 0, 0)
-            setOnClickListener {
-                val text = input.text
-                if (text.isNotEmpty()) {
-                    text.delete(text.length - 1, text.length)
-                }
-            }
-        })
 
         // 拨号按钮
         root.addView(TextView(activity).apply {

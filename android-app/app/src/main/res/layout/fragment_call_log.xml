@@ -495,8 +495,8 @@
     <!-- FAB 手动拨号按钮 -->
     <TextView
         android:id="@+id/dialFab"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="12dp"
         android:layout_marginBottom="12dp"
