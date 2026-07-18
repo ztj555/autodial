@@ -47,10 +47,13 @@
 
             <TextView
                 android:id="@+id/disconnectBtn"
-                android:layout_width="64dp"
+                android:layout_width="wrap_content"
                 android:layout_height="34dp"
+                android:layout_marginEnd="20dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
                 android:gravity="center"
-                android:text="断开"
+                android:text="断开连接"
                 android:textColor="#FF4D4F"
                 android:textSize="12sp" />
         </LinearLayout>
