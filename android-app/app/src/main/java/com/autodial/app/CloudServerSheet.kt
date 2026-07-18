@@ -36,21 +36,113 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
         })
         setContentView(root); render()
     }
-    private fun action(label:String, click:()->Unit)=TextView(activity).apply {
-        text=label; textSize=12f; gravity=Gravity.CENTER; setTextColor(Color.parseColor(this@CloudServerSheet.colors.primary)); setPadding((12*dp).toInt(),(10*dp).toInt(),(12*dp).toInt(),(10*dp).toInt()); layoutParams=LinearLayout.LayoutParams(0,-2,1f).apply{marginStart=(4*dp).toInt();marginEnd=(4*dp).toInt()}; background=android.graphics.drawable.GradientDrawable().apply{setColor(Color.parseColor(this@CloudServerSheet.colors.bg2));cornerRadius=12*dp;setStroke((1*dp).toInt(),Color.parseColor(this@CloudServerSheet.colors.primary))}; setOnClickListener{click()}
-    }
     private fun render(results:Map<String,Boolean> = emptyMap()) {
-        list.removeAllViews(); val current=activity.getSharedPreferences("autodial",0).getString("cloud_server","")
+        list.removeAllViews()
+        val current = activity.getSharedPreferences("autodial",0).getString("cloud_server","")
+        val cloudConnected = DialService.isCloudConnected
         ctrl.getServerList().forEach { entry ->
+            val isCurrent = entry.url == current
+            val display = if (entry.alias.isNotEmpty()) "⭐ ${entry.alias} · ${ctrl.stripCloudPrefix(entry.url)}"
+                else if (isCurrent) "⭐ ${ctrl.stripCloudPrefix(entry.url)}"
+                else "${ctrl.stripCloudPrefix(entry.url)}"
+            
             list.addView(LinearLayout(activity).apply {
-                orientation=LinearLayout.VERTICAL; setPadding((12*dp).toInt(),(10*dp).toInt(),(12*dp).toInt(),(10*dp).toInt()); layoutParams=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=(8*dp).toInt()}; background=android.graphics.drawable.GradientDrawable().apply{setColor(Color.parseColor(this@CloudServerSheet.colors.bg2));cornerRadius=12*dp;if(entry.url==current)setStroke((2*dp).toInt(),Color.parseColor(this@CloudServerSheet.colors.primary))}
-                addView(TextView(activity).apply{text=ctrl.stripCloudPrefix(entry.url);textSize=13f;setTypeface(null,1);setTextColor(Color.parseColor(colors.text))})
-                addView(TextView(activity).apply{text=when(results[entry.url]){true->"在线";false->"连接失败";null->if(entry.url==current)"当前服务器" else if(entry.isNew)"新云端" else "老云端"};textSize=10f;setTextColor(Color.parseColor(when(results[entry.url]){true->colors.green;false->colors.red;null->colors.text2}));setPadding(0,(4*dp).toInt(),0,(6*dp).toInt())})
-                addView(LinearLayout(activity).apply{orientation=LinearLayout.HORIZONTAL;addView(action("设为当前"){activity.getSharedPreferences("autodial",0).edit().putString("cloud_server",entry.url).apply();onChanged();render()});addView(action("测速"){scope.launch{render(mapOf(entry.url to ctrl.testServer(entry.url)))}});addView(action("删除"){ctrl.removeServer(entry.url);onChanged();render()})})
+                orientation = LinearLayout.VERTICAL
+                setPadding((12*dp).toInt(), (10*dp).toInt(), (12*dp).toInt(), (10*dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = (8*dp).toInt() }
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(if (isCurrent && cloudConnected) blend(colors.bg2, colors.green, 15) else colors.bg2))
+                    cornerRadius = 12 * dp
+                    if (isCurrent) setStroke((2*dp).toInt(), Color.parseColor(if (cloudConnected) colors.green else colors.primary))
+                }
+                
+                // Line 1: Title
+                addView(TextView(activity).apply {
+                    text = display; textSize = 13f; setTypeface(null, 1)
+                    setTextColor(Color.parseColor(colors.text))
+                })
+                
+                // Line 2: Status + [别名]
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(TextView(activity).apply {
+                        text = if (isCurrent) "当前服务器" else "未使用"
+                        textSize = 11f; setTextColor(Color.parseColor(colors.text2))
+                        layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                        setPadding(0, (4*dp).toInt(), 0, (4*dp).toInt())
+                    })
+                    addView(TextView(activity).apply {
+                        text = "别名"; textSize = 11f
+                        setTextColor(Color.parseColor(colors.primary))
+                        setPadding((8*dp).toInt(), (3*dp).toInt(), (8*dp).toInt(), (3*dp).toInt())
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            setColor(Color.parseColor(colors.bg)); cornerRadius = 6 * dp
+                        }
+                        setOnClickListener { showAliasEdit(entry.url, entry.alias) }
+                    })
+                })
+                
+                // Line 3: Action buttons
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    if (isCurrent) {
+                        val connLabel = if (cloudConnected) "🟢 已连接" else "🟡 未连接"
+                        val connColor = if (cloudConnected) colors.green else colors.primaryLight
+                        addView(action(connLabel, connColor) { /* no-op, status display */ })
+                    } else {
+                        addView(action("设为当前") {
+                            activity.getSharedPreferences("autodial",0).edit().putString("cloud_server", entry.url).apply()
+                            onChanged(); render()
+                        })
+                    }
+                    addView(action("测速") {
+                        scope.launch { render(mapOf(entry.url to ctrl.testServer(entry.url))) }
+                    })
+                    addView(action("删除") {
+                        ctrl.removeServer(entry.url); onChanged(); render()
+                    })
+                })
             })
         }
     }
-    private fun showAdd(){ val input=EditText(activity).apply{hint="ws://server:port"}; android.app.AlertDialog.Builder(activity).setTitle("添加云服务器").setView(input).setPositiveButton("添加"){_,_->val v=input.text.toString().trim();if(v.isNotEmpty()){ctrl.addServer(CloudCtrl.ServerEntry(ctrl.normalizeServer(v),"new"));onChanged();render()}}.setNegativeButton("取消",null).show() }
+    
+    private fun showAliasEdit(url: String, currentAlias: String) {
+        val input = EditText(activity).apply {
+            setText(currentAlias); hint = "服务器别名（留空则不设别名）"
+        }
+        android.app.AlertDialog.Builder(activity)
+            .setTitle("设置别名")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                ctrl.updateAlias(url, input.text.toString())
+                onChanged(); render()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+    
+    private fun blend(hex1: String, hex2: String, percent: Int): String {
+        val c1 = Color.parseColor(hex1); val c2 = Color.parseColor(hex2)
+        val r = (Color.red(c1) + (Color.red(c2) - Color.red(c1)) * percent / 100).coerceIn(0, 255)
+        val g = (Color.green(c1) + (Color.green(c2) - Color.green(c1)) * percent / 100).coerceIn(0, 255)
+        val b = (Color.blue(c1) + (Color.blue(c2) - Color.blue(c1)) * percent / 100).coerceIn(0, 255)
+        return String.format("#%02X%02X%02X", r, g, b)
+    }
+
+    private fun action(label:String, click:()->Unit) = action(label, this@CloudServerSheet.colors.primary, click)
+    
+    private fun action(label:String, color: String, click:()->Unit)=TextView(activity).apply {
+        text=label; textSize=12f; gravity=Gravity.CENTER; setTextColor(Color.parseColor(color))
+        setPadding((12*dp).toInt(),(10*dp).toInt(),(12*dp).toInt(),(10*dp).toInt())
+        layoutParams=LinearLayout.LayoutParams(0,-2,1f).apply{marginStart=(4*dp).toInt();marginEnd=(4*dp).toInt()}
+        background=android.graphics.drawable.GradientDrawable().apply{
+            setColor(Color.parseColor(this@CloudServerSheet.colors.bg2));cornerRadius=12*dp
+            setStroke((1*dp).toInt(),Color.parseColor(color))
+        }
+        setOnClickListener{click()}
+    }
+    private fun showAdd(){ val input=EditText(activity).apply{hint="ws://server:port"}; android.app.AlertDialog.Builder(activity).setTitle("添加云服务器").setView(input).setPositiveButton("添加"){_,_->val v=input.text.toString().trim();if(v.isNotEmpty()){ctrl.addServer(CloudCtrl.ServerEntry(ctrl.normalizeServer(v),"new",""));onChanged();render()}}.setNegativeButton("取消",null).show() }
     private fun testAll(){scope.launch{val r=ctrl.testAllServers(ctrl.getServerList()).associate{it.first.url to it.second};render(r);Toast.makeText(activity,"测速完成",Toast.LENGTH_SHORT).show()}}
     private fun fetchServers(message:String){Toast.makeText(activity,message,Toast.LENGTH_SHORT).show();scope.launch{val servers=ctrl.fetchServerListFromGist();if(!servers.isNullOrEmpty()){ctrl.setServerList(servers);onChanged();render();Toast.makeText(activity,"已获取 ${servers.size} 台服务器",Toast.LENGTH_SHORT).show()}else Toast.makeText(activity,"获取失败，请检查网络",Toast.LENGTH_SHORT).show()}}
     override fun dismiss() { scope.cancel(); super.dismiss() }

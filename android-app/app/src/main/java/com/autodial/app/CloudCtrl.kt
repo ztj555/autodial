@@ -30,9 +30,10 @@ class CloudCtrl(private val context: Context) {
 
     // ==================== 服务器条目 ====================
 
-    data class ServerEntry(val url: String, val type: String) {
+    data class ServerEntry(val url: String, val type: String, val alias: String = "") {
         val isOld get() = type != "new"
         val isNew get() = type == "new"
+        val displayName get() = if (alias.isNotEmpty()) alias else stripCloudPrefix(url)
     }
 
     // ==================== 服务器列表 CRUD ====================
@@ -85,6 +86,14 @@ class CloudCtrl(private val context: Context) {
         onServerListChanged?.invoke()
     }
 
+    fun updateAlias(url: String, alias: String) {
+        val list = getServerList().map {
+            if (it.url == url) it.copy(alias = alias.trim()) else it
+        }
+        saveServerEntries(list)
+        onServerListChanged?.invoke()
+    }
+
     // ==================== 持久化 ====================
 
     private fun loadServerEntries(): List<ServerEntry> {
@@ -95,7 +104,11 @@ class CloudCtrl(private val context: Context) {
                 val list = mutableListOf<ServerEntry>()
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
-                    list.add(ServerEntry(obj.getString("url"), obj.optString("type", "old")))
+                    list.add(ServerEntry(
+                        obj.getString("url"),
+                        obj.optString("type", "old"),
+                        obj.optString("alias", "")
+                    ))
                 }
                 if (list.isNotEmpty()) return list
             } catch (_: Exception) {}
@@ -110,6 +123,7 @@ class CloudCtrl(private val context: Context) {
             arr.put(org.json.JSONObject().apply {
                 put("url", e.url)
                 put("type", e.type)
+                if (e.alias.isNotEmpty()) put("alias", e.alias)
             })
         }
         prefs.edit().putString("cloud_servers_v5", arr.toString()).apply()
@@ -213,24 +227,36 @@ class CloudCtrl(private val context: Context) {
                     if (trimmed.isEmpty() || trimmed.startsWith("#")) continue
                     if (trimmed.equals("[old]", ignoreCase = true)) { currentType = "old"; continue }
                     if (trimmed.equals("[new]", ignoreCase = true)) { currentType = "new"; continue }
-                    // 支持旧格式: "URL 标签" 如 "ws://x.x.x.x 新云端"
+                    // 提取标签 + 别名
                     val tag = when {
                         trimmed.contains("新云端") || trimmed.contains("[new]") -> "new"
                         trimmed.contains("老云端") || trimmed.contains("[old]") -> "old"
                         else -> currentType
                     }
-                    val serverUrl = trimmed
+                    var remain = trimmed
                         .replace("新云端", "").replace("老云端", "")
                         .replace("[new]", "").replace("[old]", "")
                         .trim()
-                    if (serverUrl.isNotEmpty()) {
+                    // 提取别名：URL 后面的空格后面的部分
+                    var alias = ""
+                    val spaceIdx = remain.indexOf(' ')
+                    if (spaceIdx > 0) {
+                        val urlPart = remain.substring(0, spaceIdx).trim()
+                        val aliasPart = remain.substring(spaceIdx + 1).trim()
+                        // 如果第一部分像是URL（含 . 或 :），拆分为URL+别名
+                        if (urlPart.contains(".") || urlPart.contains(":")) {
+                            remain = urlPart
+                            alias = aliasPart
+                        }
+                    }
+                    if (remain.isNotEmpty()) {
                         // 没有端口号则默认补 35430
-                        var url = serverUrl
+                        var url = remain
                         if (!url.contains(":")) url = "$url:35430"
                         // 自动补 ws:// 前缀
                         val fullUrl = if (url.startsWith("ws://") || url.startsWith("wss://")) url
                         else "ws://$url"
-                        allServers.add(ServerEntry(fullUrl, tag))
+                        allServers.add(ServerEntry(fullUrl, tag, alias))
                     }
                 }
             } catch (_: Exception) {}
