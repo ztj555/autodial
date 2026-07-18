@@ -126,6 +126,7 @@
                 android:layout_marginBottom="10dp">
 
                 <LinearLayout
+                    android:id="@+id/statsWeekCallCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -134,7 +135,9 @@
                     android:background="#888888"
                     android:gravity="center"
                     android:orientation="vertical"
-                    android:padding="13dp">
+                    android:padding="13dp"
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:id="@+id/statsWeekCallLabel"
@@ -142,9 +145,7 @@
                         android:layout_height="wrap_content"
                         android:text="一周拨号(财运)"
                         android:tag="text"
-                        android:textSize="14sp"
-                        android:clickable="true"
-                        android:focusable="true" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalCount"
@@ -168,6 +169,7 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/statsWeekDurationCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -176,7 +178,9 @@
                     android:background="#888888"
                     android:gravity="center"
                     android:orientation="vertical"
-                    android:padding="13dp">
+                    android:padding="13dp"
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:id="@+id/statsWeekDurationLabel"
@@ -184,9 +188,7 @@
                         android:layout_height="wrap_content"
                         android:text="一周通时(财气)"
                         android:tag="text"
-                        android:textSize="14sp"
-                        android:clickable="true"
-                        android:focusable="true" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalDuration"
@@ -212,11 +214,14 @@
                 android:padding="16dp">
 
                 <LinearLayout
+                    android:id="@+id/statsMonthCallCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:id="@+id/statsMonthCallLabel"
@@ -224,9 +229,7 @@
                         android:layout_height="wrap_content"
                         android:text="本月财运"
                         android:tag="text"
-                        android:textSize="14sp"
-                        android:clickable="true"
-                        android:focusable="true" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTodayLuck"
@@ -257,11 +260,14 @@
                     android:layout_marginEnd="12dp" />
 
                 <LinearLayout
+                    android:id="@+id/statsMonthDurationCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:gravity="center"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:clickable="true"
+                    android:focusable="true">
 
                     <TextView
                         android:id="@+id/statsMonthDurationLabel"
@@ -269,9 +275,7 @@
                         android:layout_height="wrap_content"
                         android:text="本月财气"
                         android:tag="text"
-                        android:textSize="14sp"
-                        android:clickable="true"
-                        android:focusable="true" />
+                        android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/statsTotalLuck"

@@ -110,26 +110,26 @@ class StatsFragment : Fragment() {
         visit30Days = view.findViewById(R.id.statsVisit30Days)
         visitSyncBtn = view.findViewById(R.id.statsVisitSyncBtn)
 
-        // 点击标题弹每日明细
-        val weekCallLabel = view.findViewById<TextView>(R.id.statsWeekCallLabel)
-        val weekDurLabel = view.findViewById<TextView>(R.id.statsWeekDurationLabel)
-        val monthCallLabel = view.findViewById<TextView>(R.id.statsMonthCallLabel)
-        val monthDurLabel = view.findViewById<TextView>(R.id.statsMonthDurationLabel)
+        // 点击卡片弹每日明细
+        val weekCallCard = view.findViewById<LinearLayout>(R.id.statsWeekCallCard)
+        val weekDurCard = view.findViewById<LinearLayout>(R.id.statsWeekDurationCard)
+        val monthCallCard = view.findViewById<LinearLayout>(R.id.statsMonthCallCard)
+        val monthDurCard = view.findViewById<LinearLayout>(R.id.statsMonthDurationCard)
 
         val weekClick = {
             val db = CallLogDb.getInstance(requireContext())
             showDialDetail("一周详情", db.getDailyDurationStats(requireContext(), 7))
         }
-        weekCallLabel.setOnClickListener { weekClick() }
-        weekDurLabel.setOnClickListener { weekClick() }
+        weekCallCard.setOnClickListener { weekClick() }
+        weekDurCard.setOnClickListener { weekClick() }
 
         val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         val monthClick = {
             val db = CallLogDb.getInstance(requireContext())
             showDialDetail("本月详情", db.getDailyDurationStats(requireContext(), todayDay))
         }
-        monthCallLabel.setOnClickListener { monthClick() }
-        monthDurLabel.setOnClickListener { monthClick() }
+        monthCallCard.setOnClickListener { monthClick() }
+        monthDurCard.setOnClickListener { monthClick() }
 
         // 同步按钮
         visitSyncBtn.setOnClickListener { syncVisitsFromCloud() }
@@ -667,90 +667,88 @@ class StatsFragment : Fragment() {
         }
     }
 
-    /** 弹窗展示每日拨号明细（呼出/接通/接通率/通时） */
+    /** 弹窗展示每日拨号明细（全宽卡片式，仿拨号模式选择器风格） */
     private fun showDialDetail(title: String, dailyStats: List<CallLogDb.DayStats>) {
         if (!isAdded) return
         val colors = ThemeManager.getColors(requireContext())
         val dp = resources.displayMetrics.density
-        val dayOfWeek = arrayOf("日", "一", "二", "三", "四", "五", "六")
 
         val dialog = BottomSheetDialog(requireContext())
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        val scroll = android.widget.ScrollView(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, -1)
-        }
-
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((20 * dp).toInt(), (16 * dp).toInt(), (20 * dp).toInt(), (24 * dp).toInt())
+            setPadding((16 * dp).toInt(), (14 * dp).toInt(), (16 * dp).toInt(), (24 * dp).toInt())
             setBackgroundColor(Color.parseColor(colors.bg))
         }
 
         // 标题
         root.addView(TextView(requireContext()).apply {
             text = title
-            textSize = 16f
+            textSize = 18f
             setTextColor(Color.parseColor(colors.primaryLight))
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
 
-        // 表头
-        root.addView(LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 0, 0, (8 * dp).toInt())
-            val hdrTexts = arrayOf("日期", "呼出", "接通", "接通率", "通时")
-            val hdrWeights = floatArrayOf(2f, 1f, 1f, 1.2f, 1f)
-            for (i in hdrTexts.indices) {
-                addView(TextView(requireContext()).apply {
-                    text = hdrTexts[i]
-                    textSize = 12f
-                    setTextColor(Color.parseColor(colors.text2))
-                    gravity = Gravity.CENTER
-                    layoutParams = LinearLayout.LayoutParams(0, -2, hdrWeights[i])
-                })
-            }
-        })
-
-        // 分隔线
-        root.addView(View(requireContext()).apply {
-            setBackgroundColor(Color.parseColor(colors.bg3))
-            layoutParams = LinearLayout.LayoutParams(-1, (1 * dp).toInt()).apply {
-                bottomMargin = (8 * dp).toInt()
-            }
-        })
-
-        // 数据行
+        // 每日卡片行（单行，列宽自适应全屏）
         for (s in dailyStats) {
             val rate = if (s.count > 0) s.connectedCount * 100 / s.count else 0
-            val parts = arrayOf(
-                s.date.substring(5),  // MM-dd
-                s.count.toString(),
-                s.connectedCount.toString(),
-                "$rate%",
-                "${formatMinutes(s.totalDurationSec)}分"
-            )
+            val timeStr = "${formatMinutes(s.totalDurationSec)}分"
+
             root.addView(LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(0, (6 * dp).toInt(), 0, (6 * dp).toInt())
-                val weights = floatArrayOf(2f, 1f, 1f, 1.2f, 1f)
-                for (i in parts.indices) {
-                    addView(TextView(requireContext()).apply {
-                        text = parts[i]
-                        textSize = 13f
-                        setTextColor(Color.parseColor(colors.text))
-                        gravity = Gravity.CENTER
-                        layoutParams = LinearLayout.LayoutParams(0, -2, weights[i])
-                    })
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor(colors.bg2))
+                    cornerRadius = 12 * dp
                 }
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = (6 * dp).toInt()
+                }
+
+                // 日期
+                addView(TextView(requireContext()).apply {
+                    text = s.date.substring(5)
+                    textSize = 13f
+                    setTextColor(Color.parseColor(colors.text2))
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1.5f)
+                })
+                // 呼出
+                addView(TextView(requireContext()).apply {
+                    text = s.count.toString()
+                    textSize = 13f
+                    setTextColor(Color.parseColor(colors.text))
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                })
+                // 接通
+                addView(TextView(requireContext()).apply {
+                    text = s.connectedCount.toString()
+                    textSize = 13f
+                    setTextColor(Color.parseColor(colors.text))
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                })
+                // 接通率
+                addView(TextView(requireContext()).apply {
+                    text = "$rate%"
+                    textSize = 13f
+                    setTextColor(Color.parseColor(colors.primary))
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                })
+                // 通时
+                addView(TextView(requireContext()).apply {
+                    text = timeStr
+                    textSize = 13f
+                    setTextColor(Color.parseColor(colors.text))
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, -2, 1.2f)
+                })
             })
         }
-
-        scroll.addView(root)
-        root.addView(View(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, (8 * dp).toInt())
-        })
 
         // 关闭按钮
         root.addView(TextView(requireContext()).apply {
@@ -758,14 +756,14 @@ class StatsFragment : Fragment() {
             textSize = 14f
             setTextColor(Color.parseColor(colors.text2))
             gravity = Gravity.CENTER
-            setPadding(0, (8 * dp).toInt(), 0, 0)
+            setPadding(0, (16 * dp).toInt(), 0, 0)
             setOnClickListener { dialog.dismiss() }
         })
 
-        dialog.setContentView(scroll)
+        dialog.setContentView(root)
         dialog.show()
         dialog.window?.setLayout(
-            (300 * dp).toInt(),
+            LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
     }
