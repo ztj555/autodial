@@ -639,8 +639,8 @@ class ConnectFragment : Fragment() {
         (serverAliasText.parent as? ViewGroup)?.removeView(serverAliasText)
         serverAliasText.apply {
             textSize = 12f
-            setTextColor(Color.parseColor(colors.text2))
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setTextColor(Color.parseColor(ThemeManager.getColors(requireContext()).text2))
+            gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
             setPadding(0, 0, (8 * dp).toInt(), 0)
         }
         topBar.addView(serverAliasText)
