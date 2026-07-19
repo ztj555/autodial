@@ -1677,8 +1677,8 @@ class ConnectFragment : Fragment() {
             { prefCtrl.setNotifyRegister(it) }, true)
 
         // 上次通话提示时长（最后一行，不加分隔线）
-        val opts = intArrayOf(5, 10, 30, 0)
-        val labels = arrayOf("5秒", "10秒", "30秒", "一直")
+        val opts = intArrayOf(2, 3, 5, 8)
+        val labels = arrayOf("2秒", "3秒", "5秒", "8秒")
         val dp = resources.displayMetrics.density
 
         val row = android.widget.LinearLayout(requireContext()).apply {

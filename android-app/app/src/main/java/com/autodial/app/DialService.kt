@@ -148,7 +148,7 @@ class DialService : Service() {
             FileLogger.i("DialService", "\u72b6\u6001\u53d8\u5316: $oldState \u2192 $newState, \u901a\u9053=$connectionMode")
             when (newState) {
                 ConnectionManager.ConnectionState.CONNECTED -> {
-                    updateNotification("\u5df2\u8fde\u63a5\u5230\u7535\u8111(${connectionMode})")
+                    updateNotification("已连接")
                     getSharedPreferences("autodial", MODE_PRIVATE)
                         .edit().putBoolean("was_connected", true).apply()
                     notifyConnectionChange(true, null)
@@ -382,7 +382,7 @@ class DialService : Service() {
                     getSharedPreferences("autodial", MODE_PRIVATE).edit()
                         .putBoolean("was_connected", false).apply()
                     connectionManager.disconnect()
-                    updateNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")
+                    updateNotification("运行中")
                 }
                 "DIAL_WITH_SIM" -> {
                     val number = intent.getStringExtra("number") ?: return START_STICKY
@@ -631,8 +631,22 @@ class DialService : Service() {
     }
 
     private fun buildNotification(text: String): Notification {
+        var titleLine = "Auto融鑫汇"
+        var bodyLine = text
+        try {
+            val today = callLogDb.getTodayCount(this)
+            val stats = callLogDb.getDailyDurationStats(this, 1)
+            if (stats.isNotEmpty()) {
+                val mins = (stats[0].totalDurationSec + 30) / 60
+                val connected = callLogDb.getTodayConnectedCount(this)
+                val rate = if (today > 0) connected * 100 / today else 0
+                val pin = getSharedPreferences("autodial", MODE_PRIVATE).getString("pin", "") ?: ""
+                titleLine = "Auto融鑫汇         今日财运：+$today"
+                bodyLine = "$text $pin           接通$connected · $rate%"
+            }
+        } catch (_: Exception) {}
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("\u8de8\u5c4f\u62e8\u53f7").setContentText(text)
+            .setContentTitle(titleLine).setContentText(bodyLine)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setOngoing(true).setSilent(true)
             .setVibrate(longArrayOf(0))
