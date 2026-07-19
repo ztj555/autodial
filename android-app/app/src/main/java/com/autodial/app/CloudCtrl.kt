@@ -95,6 +95,11 @@ class CloudCtrl(private val context: Context) {
         onServerListChanged?.invoke()
     }
 
+    /** 恢复为默认服务器列表（清除已保存的，回退到代码内置默认） */
+    fun resetToDefault() {
+        saveServerEntries(emptyList())
+        onServerListChanged?.invoke()
+    }
     fun updateAlias(url: String, alias: String) {
         val list = getServerList().map {
             if (it.url == url) it.copy(alias = alias.trim()) else it

@@ -32,7 +32,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
         })
         root.addView(LinearLayout(activity).apply {
             orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER
-            addView(action("PC 同步") { fetchServers("正在从 PC 同步...") }); addView(action("网络获取") { fetchServers("正在从网络获取...") })
+            addView(action("恢复默认") { resetToDefault() }); addView(action("网络获取") { fetchServers("正在从网络获取...") })
         })
         setContentView(root); render()
     }
@@ -104,7 +104,14 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                         }
                     })
                     addView(action("删除") {
-                        ctrl.removeServer(entry.url); onChanged(); render()
+                        android.app.AlertDialog.Builder(activity)
+                            .setTitle("删除服务器")
+                            .setMessage("确定删除 ${entry.alias.ifEmpty { ctrl.stripCloudPrefix(entry.url) }}？")
+                            .setPositiveButton("删除") { _, _ ->
+                                ctrl.removeServer(entry.url); onChanged(); render()
+                            }
+                            .setNegativeButton("取消", null)
+                            .show()
                     })
                 })
 
@@ -158,8 +165,59 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
         }
         setOnClickListener{click()}
     }
-    private fun showAdd(){ val input=EditText(activity).apply{hint="ws://server:port"}; android.app.AlertDialog.Builder(activity).setTitle("添加云服务器").setView(input).setPositiveButton("添加"){_,_->val v=input.text.toString().trim();if(v.isNotEmpty()){ctrl.addServer(CloudCtrl.ServerEntry(ctrl.normalizeServer(v),"new",""));onChanged();render()}}.setNegativeButton("取消",null).show() }
+    private fun showAdd(){
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((24*dp).toInt(),(16*dp).toInt(),(24*dp).toInt(),(8*dp).toInt())
+        }
+        container.addView(TextView(activity).apply {
+            text = "格式：IP或域名:端口，无需加 ws://"
+            textSize = 12f
+            setTextColor(Color.parseColor(this@CloudServerSheet.colors.text2))
+        })
+        container.addView(TextView(activity).apply {
+            text = "示例：101.34.65.254:35430"
+            textSize = 11f
+            setTextColor(Color.parseColor(this@CloudServerSheet.colors.text2))
+            setPadding(0, (4*dp).toInt(), 0, (8*dp).toInt())
+        })
+        val urlInput = EditText(activity).apply {
+            hint = "IP或域名:端口"; inputType = android.text.InputType.TYPE_TEXT_URI
+        }
+        val aliasInput = EditText(activity).apply {
+            hint = "别名（可选）"; inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setPadding(0, (12*dp).toInt(), 0, 0)
+        }
+        container.addView(urlInput)
+        container.addView(aliasInput)
+        android.app.AlertDialog.Builder(activity)
+            .setTitle("添加云服务器")
+            .setView(container)
+            .setPositiveButton("添加") { _, _ ->
+                val v = urlInput.text.toString().trim()
+                val alias = aliasInput.text.toString().trim()
+                if (v.isNotEmpty()) {
+                    val tag = if (v.contains(":")) "new" else "old"   // 域名/域名:端口为新云端，4位PIN为老
+                    ctrl.addServer(CloudCtrl.ServerEntry(ctrl.normalizeServer(v), tag, alias))
+                    onChanged(); render()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
     private fun testAll(){scope.launch{val r=ctrl.testAllServers(ctrl.getServerList()).associate{it.first.url to it.second};render(r);Toast.makeText(activity,"测试完成",Toast.LENGTH_SHORT).show()}}
+    private fun resetToDefault(){
+        android.app.AlertDialog.Builder(activity)
+            .setTitle("恢复默认")
+            .setMessage("将清除当前服务器列表，恢复为软件默认。确定？")
+            .setPositiveButton("确定") { _, _ ->
+                ctrl.resetToDefault()
+                onChanged(); render()
+                Toast.makeText(activity, "已恢复默认", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
     private fun fetchServers(message:String){Toast.makeText(activity,message,Toast.LENGTH_SHORT).show();scope.launch{val servers=ctrl.fetchServerListFromGist();if(!servers.isNullOrEmpty()){ctrl.setServerList(servers);onChanged();render();Toast.makeText(activity,"已获取 ${servers.size} 台服务器",Toast.LENGTH_SHORT).show()}else Toast.makeText(activity,"获取失败，请检查网络",Toast.LENGTH_SHORT).show()}}
     override fun dismiss() { scope.cancel(); super.dismiss() }
 }
