@@ -45,6 +45,7 @@ class ConnectFragment : Fragment() {
     private lateinit var pinInput: EditText
     private lateinit var connectBtnText: TextView
     private lateinit var disconnectBtn: TextView
+    private lateinit var serverAliasText: TextView
     private lateinit var discoveryHint: TextView
     private lateinit var foundPCInfo: LinearLayout
     private lateinit var foundPCText: TextView
@@ -205,6 +206,7 @@ class ConnectFragment : Fragment() {
                 setColor(Color.TRANSPARENT)
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
+            serverAliasText = TextView(requireContext())
 
             // The V3 hero is part of fragment_connect.xml. Keep business bindings on
             // the original IDs; never detach and re-parent these views at runtime.
@@ -634,6 +636,18 @@ class ConnectFragment : Fragment() {
         }
 
         (disconnectBtn.parent as? ViewGroup)?.removeView(disconnectBtn)
+        (serverAliasText.parent as? ViewGroup)?.removeView(serverAliasText)
+        serverAliasText.apply {
+            textSize = 12f
+            setTextColor(Color.parseColor(colors.text2))
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(0, 0, (8 * dp).toInt(), 0)
+        }
+        topBar.addView(serverAliasText)
+        // 当前云服务器别名（连上断开都显示）
+        val alias = prefCtrl.getCurrentServerAlias()
+        serverAliasText.text = alias
+        serverAliasText.visibility = if (alias.isNotEmpty()) View.VISIBLE else View.GONE
         disconnectBtn.layoutParams = LinearLayout.LayoutParams(
             (64 * dp).toInt(), (34 * dp).toInt()
         )

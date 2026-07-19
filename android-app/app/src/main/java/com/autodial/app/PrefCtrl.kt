@@ -74,6 +74,12 @@ class PrefCtrl(private val context: Context) {
     fun getCloudServer() = prefs.getString("cloud_server", "") ?: ""
     fun setCloudServer(server: String) = prefs.edit().putString("cloud_server", server).apply()
 
+    fun getCurrentServerAlias(): String {
+        val cloudCtrl = CloudCtrl(context)
+        val current = getCloudServer()
+        return cloudCtrl.getServerList().find { it.url == current }?.alias ?: ""
+    }
+
     fun isCloudEnabled() = prefs.getBoolean("cloud_enabled", false)
 
     fun getCardOpacity(): Int = prefs.getInt("card_opacity", 100)
