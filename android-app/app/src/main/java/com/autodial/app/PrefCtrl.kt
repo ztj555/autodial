@@ -57,7 +57,7 @@ class PrefCtrl(private val context: Context) {
         prefs.edit().putString("connection_strategy", strategy.key).apply()
     }
 
-    fun isAutoConnectEnabled() = prefs.getBoolean("auto_reconnect", true)
+    fun isAutoConnectEnabled() = prefs.getBoolean("auto_reconnect", false)
     fun setAutoConnect(enabled: Boolean) = prefs.edit().putBoolean("auto_reconnect", enabled).apply()
 
     fun isAutoCopyEnabled() = prefs.getBoolean("auto_copy_number", true)
