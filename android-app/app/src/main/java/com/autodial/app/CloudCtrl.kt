@@ -2,8 +2,13 @@ package com.autodial.app
 
 import android.content.Context
 import kotlinx.coroutines.*
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 /**
  * v5: 云服务器配置管理 — 纯后端 CRUD + 连通测试 + Gist同步
@@ -159,21 +164,47 @@ class CloudCtrl(private val context: Context) {
 
     suspend fun testServer(server: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val httpUrl = when {
-                server.startsWith("wss://") -> server.replace("wss://", "https://")
-                server.startsWith("ws://") -> server.replace("ws://", "http://")
-                server.contains("://") -> server
-                else -> "http://$server"
+            val wsUrl = when {
+                server.startsWith("ws://") || server.startsWith("wss://") -> server
+                else -> "ws://$server"
             }
-            withTimeout(4000) {
-                val conn = URL(httpUrl).openConnection() as HttpURLConnection
-                conn.connectTimeout = 2000
-                conn.readTimeout = 2000
-                conn.requestMethod = "GET"
-                conn.connect()
-                val code = conn.responseCode
-                conn.disconnect()
-                code in 200..499
+            kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(3, TimeUnit.SECONDS)
+                    .readTimeout(3, TimeUnit.SECONDS)
+                    .build()
+                val request = Request.Builder().url(wsUrl).build()
+                var resolved = false
+                client.newWebSocket(request, object : WebSocketListener() {
+                    override fun onOpen(ws: WebSocket, response: Response) {
+                        ws.send(JSONObject().apply {
+                            put("type", "auth")
+                            put("pin", "0000")   // 假PIN触发auth_fail，但证明链路通
+                            put("role", "phone")
+                            put("deviceName", "CloudTest")
+                        }.toString())
+                    }
+                    override fun onMessage(ws: WebSocket, text: String) {
+                        if (resolved) return
+                        val msg = JSONObject(text)
+                        val type = msg.optString("type", "")
+                        // auth_ok 或 auth_fail 都说明服务器功能正常
+                        if (type == "auth_ok" || type == "auth_fail") {
+                            resolved = true
+                            cont.resume(true)
+                            ws.close(1000, null)
+                        }
+                    }
+                    override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
+                        if (!resolved) { resolved = true; cont.resume(false) }
+                    }
+                    override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                        if (!resolved) { resolved = true; cont.resume(false) }
+                    }
+                })
+                cont.invokeOnCancellation {
+                    if (!resolved) { resolved = true; client.dispatcher.executorService.shutdown() }
+                }
             }
         } catch (_: Exception) { false }
     }

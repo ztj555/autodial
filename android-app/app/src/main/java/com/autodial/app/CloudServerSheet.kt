@@ -28,7 +28,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
         list = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }; root.addView(list)
         root.addView(LinearLayout(activity).apply {
             orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER
-            addView(action("＋ 添加") { showAdd() }); addView(action("全部测速") { testAll() })
+            addView(action("＋ 添加") { showAdd() }); addView(action("全部测试") { testAll() })
         })
         root.addView(LinearLayout(activity).apply {
             orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER
@@ -73,7 +73,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                         setPadding(0, (4*dp).toInt(), 0, (4*dp).toInt())
                     })
                     addView(TextView(activity).apply {
-                        text = "别名"; textSize = 11f
+                        text = "点击修改别名"; textSize = 11f
                         setTextColor(Color.parseColor(this@CloudServerSheet.colors.primary))
                         setPadding((8*dp).toInt(), (3*dp).toInt(), (8*dp).toInt(), (3*dp).toInt())
                         background = android.graphics.drawable.GradientDrawable().apply {
@@ -87,8 +87,8 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     if (isCurrent) {
-                        val connLabel = if (cloudConnected) "🟢 已连接" else "🟡 未连接"
-                        val connColor = if (cloudConnected) this@CloudServerSheet.colors.green else this@CloudServerSheet.colors.primaryLight
+                        val connLabel = if (cloudConnected) "🟢 已连接" else "🔴 未连接"
+                        val connColor = if (cloudConnected) this@CloudServerSheet.colors.green else this@CloudServerSheet.colors.red
                         addView(action(connLabel, connColor) { /* no-op, status display */ })
                     } else {
                         addView(action("设为当前") {
@@ -96,13 +96,29 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                             onChanged(); render()
                         })
                     }
-                    addView(action("测速") {
-                        scope.launch { render(mapOf(entry.url to ctrl.testServer(entry.url))) }
+                    addView(action("测试") {
+                        Toast.makeText(activity, "正在测试 ${entry.alias.ifEmpty { ctrl.stripCloudPrefix(entry.url) }} ...", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            val ok = ctrl.testServer(entry.url)
+                            render(mapOf(entry.url to ok))
+                        }
                     })
                     addView(action("删除") {
                         ctrl.removeServer(entry.url); onChanged(); render()
                     })
                 })
+
+                // Line 4: 测试结果
+                val testResult = results[entry.url]
+                if (testResult != null) {
+                    val resultLabel = if (testResult) "✅ 可达" else "❌ 不可达"
+                    val resultColor = if (testResult) this@CloudServerSheet.colors.green else this@CloudServerSheet.colors.red
+                    addView(TextView(activity).apply {
+                        text = resultLabel; textSize = 11f
+                        setTextColor(Color.parseColor(resultColor))
+                        setPadding(0, (4*dp).toInt(), 0, 0)
+                    })
+                }
             })
         }
     }
@@ -143,7 +159,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
         setOnClickListener{click()}
     }
     private fun showAdd(){ val input=EditText(activity).apply{hint="ws://server:port"}; android.app.AlertDialog.Builder(activity).setTitle("添加云服务器").setView(input).setPositiveButton("添加"){_,_->val v=input.text.toString().trim();if(v.isNotEmpty()){ctrl.addServer(CloudCtrl.ServerEntry(ctrl.normalizeServer(v),"new",""));onChanged();render()}}.setNegativeButton("取消",null).show() }
-    private fun testAll(){scope.launch{val r=ctrl.testAllServers(ctrl.getServerList()).associate{it.first.url to it.second};render(r);Toast.makeText(activity,"测速完成",Toast.LENGTH_SHORT).show()}}
+    private fun testAll(){scope.launch{val r=ctrl.testAllServers(ctrl.getServerList()).associate{it.first.url to it.second};render(r);Toast.makeText(activity,"测试完成",Toast.LENGTH_SHORT).show()}}
     private fun fetchServers(message:String){Toast.makeText(activity,message,Toast.LENGTH_SHORT).show();scope.launch{val servers=ctrl.fetchServerListFromGist();if(!servers.isNullOrEmpty()){ctrl.setServerList(servers);onChanged();render();Toast.makeText(activity,"已获取 ${servers.size} 台服务器",Toast.LENGTH_SHORT).show()}else Toast.makeText(activity,"获取失败，请检查网络",Toast.LENGTH_SHORT).show()}}
     override fun dismiss() { scope.cancel(); super.dismiss() }
 }
