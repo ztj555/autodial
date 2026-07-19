@@ -182,7 +182,7 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
             setPadding(0, (4*dp).toInt(), 0, (8*dp).toInt())
         })
         val urlInput = EditText(activity).apply {
-            hint = "IP或域名:端口"; inputType = android.text.InputType.TYPE_TEXT_URI
+            hint = "IP或域名:端口"; inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
         val aliasInput = EditText(activity).apply {
             hint = "别名（可选）"; inputType = android.text.InputType.TYPE_CLASS_TEXT

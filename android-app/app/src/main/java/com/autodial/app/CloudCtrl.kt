@@ -8,6 +8,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.net.URL
 import java.util.concurrent.TimeUnit
 
 /**
@@ -196,15 +197,15 @@ class CloudCtrl(private val context: Context) {
                         // auth_ok 或 auth_fail 都说明服务器功能正常
                         if (type == "auth_ok" || type == "auth_fail") {
                             resolved = true
-                            cont.resume(true)
+                            cont.resume(true) {}
                             ws.close(1000, null)
                         }
                     }
                     override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
-                        if (!resolved) { resolved = true; cont.resume(false) }
+                        if (!resolved) { resolved = true; cont.resume(false) {} }
                     }
                     override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                        if (!resolved) { resolved = true; cont.resume(false) }
+                        if (!resolved) { resolved = true; cont.resume(false) {} }
                     }
                 })
                 cont.invokeOnCancellation {
