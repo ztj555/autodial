@@ -429,7 +429,7 @@ class StatsFragment : Fragment() {
 
         // 可滚动数据区
         val scrollView = android.widget.ScrollView(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            layoutParams = LinearLayout.LayoutParams(-1, (400 * dp).toInt())
         }
         val scrollContent = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -461,7 +461,7 @@ class StatsFragment : Fragment() {
         dialog.show()
         dialog.window?.setLayout(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            (resources.displayMetrics.heightPixels * 0.6).toInt().coerceAtMost((600 * dp).toInt())
+            LinearLayout.LayoutParams.WRAP_CONTENT
         )
     }
 
@@ -721,8 +721,7 @@ class StatsFragment : Fragment() {
 
         // 可滚动数据区
         val scrollView = android.widget.ScrollView(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
-            setPadding(0, 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(-1, (400 * dp).toInt())
         }
         val scrollContent = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -802,11 +801,10 @@ class StatsFragment : Fragment() {
 
         dialog.setContentView(root)
         dialog.show()
-        // 限制弹窗最大高度为屏幕 60%，超出的内容在 ScrollView 内滚动
-        val screenHeight = resources.displayMetrics.heightPixels
+        // BottomSheet 自然贴底滑出，ScrollView 限制数据区高度
         dialog.window?.setLayout(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            (screenHeight * 0.6).toInt().coerceAtMost((600 * dp).toInt())
+            LinearLayout.LayoutParams.WRAP_CONTENT
         )
     }
 

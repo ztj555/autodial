@@ -359,6 +359,9 @@ async def handle_connection(ws, path=None):
 # ==================== HTTP Health Check (same port) ====================
 async def health_check_handler(path, request_headers):
     """Enhanced health check with per-PIN group stats"""
+    # Don't intercept WebSocket upgrade requests
+    if 'upgrade' in {k.lower() for k in request_headers}:
+        return None
     if path == '/health' or path == '/':
         uptime_sec = int(time.time() - SERVER_START_TIME)
 
@@ -566,8 +569,12 @@ def main():
     server_thread = threading.Thread(target=run_server_thread, daemon=True)
     server_thread.start()
 
-    # Tray runs on main thread (pystray requirement)
-    run_tray()
+    # Tray runs on main thread (pystray requirement); skip if no GUI
+    try:
+        run_tray()
+    except Exception:
+        log_info('SERVER', None, f'Running headless (no GUI), port={PORT}')
+        server_thread.join()
 
 if __name__ == '__main__':
     main()
