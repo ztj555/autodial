@@ -791,7 +791,7 @@ class CallLogFragment : Fragment() {
             if (dayStats.isNotEmpty()) {
                 val today = dayStats[0]
                 val minutes = (today.totalDurationSec + 30) / 60
-                todayLuckText.text = todayCount.toString()
+                todayLuckText.text = "+$todayCount"
                 todayFortuneText.text = "${minutes}分"
                 // v3: 同步更新 fortune strip
                 fortuneLuck.text = todayCount.toString()
