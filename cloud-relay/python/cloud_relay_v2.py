@@ -98,6 +98,48 @@ def init_db():
         name TEXT UNIQUE NOT NULL,
         created_at TEXT NOT NULL
     )'''
+    create_phones = '''CREATE TABLE IF NOT EXISTS phones (
+        device_id TEXT PRIMARY KEY,
+        label TEXT DEFAULT '',
+        last_pin TEXT DEFAULT '',
+        device_model TEXT DEFAULT '',
+        app_version TEXT DEFAULT '',
+        first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL
+    )'''
+    create_call_records = '''CREATE TABLE IF NOT EXISTS call_records_raw (
+        device_id TEXT NOT NULL,
+        local_id INTEGER NOT NULL,
+        number TEXT NOT NULL,
+        dial_time INTEGER NOT NULL,
+        duration INTEGER DEFAULT 0,
+        call_type INTEGER DEFAULT 0,
+        sim_slot INTEGER DEFAULT 0,
+        server_time TEXT NOT NULL,
+        PRIMARY KEY (device_id, local_id)
+    )'''
+    create_phone_events = '''CREATE TABLE IF NOT EXISTS phone_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        event_time TEXT NOT NULL,
+        pin TEXT DEFAULT '',
+        detail TEXT DEFAULT '',
+        server_time TEXT NOT NULL
+    )'''
+    create_phone_daily = '''CREATE TABLE IF NOT EXISTS phone_daily_stats (
+        device_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        server_dial INTEGER DEFAULT 0,
+        server_conn INTEGER DEFAULT 0,
+        server_dur INTEGER DEFAULT 0,
+        phone_dial INTEGER DEFAULT 0,
+        phone_conn INTEGER DEFAULT 0,
+        phone_dur INTEGER DEFAULT 0,
+        match_status TEXT DEFAULT 'OK',
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (device_id, date)
+    )'''
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -108,6 +150,10 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
         c.execute(create_admins)
+        c.execute(create_phones)
+        c.execute(create_call_records)
+        c.execute(create_phone_events)
+        c.execute(create_phone_daily)
         conn.commit()
         # 兼容旧版 DB：添加新列
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
@@ -228,6 +274,18 @@ def get_group(pin):
 def validate_pin(pin):
     """PIN 校验：仅接受 4 位或 11 位纯数字（兼容老版 4 位 PC 端 + 新版 11 位手机号）"""
     return pin and pin.isdigit() and (len(pin) == 4 or len(pin) == 11)
+
+def today_start_ms():
+    from datetime import datetime as dt
+    today = dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return int(today.timestamp() * 1000)
+
+def today_end_ms():
+    from datetime import datetime as dt
+    tomorrow = dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    from datetime import timedelta
+    tomorrow += timedelta(days=1)
+    return int(tomorrow.timestamp() * 1000)
 
 def remove_from_group(ws):
     meta = ws_meta.get(ws)
@@ -1193,6 +1251,98 @@ async def health_check_handler(path, request_headers):
     # 修改现有 visits 查询，支持 group_id 参数
 
     # ===== 一键登记 API（GET + query params，与 dial 风格一致） =====
+
+    # ===== 手机端数据上报 API =====
+
+    # 批量上传通话记录: GET /api/v1/calls/batch?device_id=xxx&pin=xxx&data=<json>
+    if path == '/api/v1/calls/batch':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0].strip()
+        pin = qs.get('pin', [''])[0].strip()
+        data_str = qs.get('data', [''])[0]
+        if not device_id or not data_str:
+            return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和data不能为空'))
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        inserted, skipped = 0, 0
+        try:
+            records = json.loads(data_str)
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''INSERT OR IGNORE INTO phones (device_id, last_pin, first_seen, last_seen)
+                         VALUES (?, ?, ?, ?)''', (device_id, pin, now_str, now_str))
+            for r in records:
+                try:
+                    c.execute('''INSERT OR IGNORE INTO call_records_raw
+                                 (device_id, local_id, number, dial_time, duration, call_type, sim_slot, server_time)
+                                 VALUES (?,?,?,?,?,?,?,?)''',
+                              (device_id, r['local_id'], r.get('number',''), r.get('dial_time',0),
+                               r.get('duration',0), r.get('call_type',0), r.get('sim_slot',0), now_str))
+                    if c.rowcount > 0: inserted += 1
+                    else: skipped += 1
+                except: skipped += 1
+            c.execute('UPDATE phones SET last_seen=? WHERE device_id=?', (now_str, device_id))
+            conn.commit()
+            conn.close()
+            log.info(f'CALLS_BATCH device={device_id} pin={pin} inserted={inserted} skipped={skipped}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'inserted': inserted, 'skipped': skipped}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('SERVER_ERROR', str(e)))
+
+    # 上报行为事件: GET /api/v1/events/log?device_id=xxx&event_type=login&pin=xxx&detail=xxx
+    if path == '/api/v1/events/log':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0].strip()
+        event_type = qs.get('event_type', [''])[0].strip()
+        event_pin = qs.get('pin', [''])[0].strip()
+        detail = qs.get('detail', [''])[0].strip()
+        if not device_id or not event_type:
+            return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和event_type不能为空'))
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('INSERT INTO phone_events (device_id, event_type, event_time, pin, detail, server_time) VALUES (?,?,?,?,?,?)',
+                  (device_id, event_type, now_str, event_pin, detail, now_str))
+        c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, first_seen, last_seen)
+                     VALUES (?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+                  (device_id, event_pin, device_id, now_str, now_str))
+        conn.commit()
+        conn.close()
+        return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+
+    # 上报每日统计快照: GET /api/v1/stats/report?device_id=xxx&pin=xxx&model=xxx&version=xxx&count=12&duration=180&connected=8
+    if path == '/api/v1/stats/report':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0].strip()
+        pin = qs.get('pin', [''])[0].strip()
+        model = qs.get('model', [''])[0].strip()
+        version = qs.get('version', [''])[0].strip()
+        phone_dial = int(qs.get('count', ['0'])[0])
+        phone_dur = int(qs.get('duration', ['0'])[0])
+        phone_conn = int(qs.get('connected', ['0'])[0])
+        if not device_id:
+            return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id不能为空'))
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, device_model, app_version, first_seen, last_seen)
+                     VALUES (?, ?, ?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+                  (device_id, pin, model, version, device_id, now_str, now_str))
+        # 从原始记录重算服务器端值
+        c.execute('SELECT COUNT(*), SUM(duration), COUNT(CASE WHEN duration>0 THEN 1 END) FROM call_records_raw WHERE device_id=? AND dial_time>=? AND dial_time<?',
+                  (device_id, today_start_ms(), today_end_ms()))
+        row = c.fetchone()
+        server_dial = row[0] or 0
+        server_dur = row[1] or 0
+        server_conn = row[2] or 0
+        match = 'OK' if (server_dial == phone_dial and server_conn == phone_conn) else 'MISMATCH'
+        c.execute('''INSERT OR REPLACE INTO phone_daily_stats
+                     (device_id, date, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match_status, updated_at)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                  (device_id, today_str, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match, now_str))
+        conn.commit()
+        conn.close()
+        return (200, JSON_HDR, json.dumps({'ok': True, 'match': match}).encode('utf-8'))
 
     # 创建登记: GET /api/v1/visit?name=...&mobile=...&...
     if path == '/api/v1/visit':

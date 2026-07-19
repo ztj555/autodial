@@ -92,6 +92,9 @@ class DialService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var lastDisconnectReason: String? = null  // 用于防止 kicked 被 disconnected 覆盖
     private var screenOnReceiver: BroadcastReceiver? = null
+    private var syncRunnable: Runnable? = null  // 数据同步定时任务
+    private var lastSyncedCallId: Long = 0      // 已同步的最后一条呼叫记录ID
+    private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private val pendingDialQueue = ArrayDeque<String>()
     private var pendingDialNumber: String?
@@ -290,6 +293,9 @@ class DialService : Service() {
                 acquire(12 * 60 * 60 * 1000L)
             }
 
+            // 启动数据同步到云中转
+            startDataSync()
+
             Thread {
                 try {
                     val count = callLogDb.syncFromSystemCallLog(this@DialService)
@@ -418,6 +424,9 @@ class DialService : Service() {
             FileLogger.shutdown()
             isRunning = false
             wakeLock?.release(); wakeLock = null
+            syncRunnable?.let { handler.removeCallbacks(it) }
+            syncRunnable = null
+            executor.shutdown()
             pendingDialQueue.clear()
             _instance = null
         } catch (_: Exception) {}
@@ -684,5 +693,126 @@ class DialService : Service() {
                 .notify(2001, notification)
         } catch (_: Exception) {}
         FileLogger.i("DialService", "已发送后台短信通知: $number")
+    }
+
+    // ==================== 云中转数据同步 ====================
+
+    private fun startDataSync() {
+        lastSyncedCallId = getSharedPreferences("autodial", MODE_PRIVATE).getLong("last_synced_call_id", 0)
+        syncRunnable = object : Runnable {
+            override fun run() {
+                if (!isConnected) { scheduleNextSync(); return }
+                executor.execute { syncCallRecords(); syncDailyStats(); scheduleNextSync() }
+            }
+        }
+        handler.post(syncRunnable!!)
+    }
+
+    private fun scheduleNextSync() {
+        syncRunnable?.let { handler.postDelayed(it, 5 * 60 * 1000L) }  // 每5分钟
+    }
+
+    private fun syncCallRecords() {
+        try {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+            val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+            val deviceId = PrefCtrl(this@DialService).getDeviceId()
+            val pin = prefs.getString("pin", "") ?: return
+            val serverUrl = prefs.getString("cloud_server", "") ?: return
+            if (serverUrl.isEmpty()) return
+            val baseUrl = normalizeHttpUrl(serverUrl)
+
+            val cursor = contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls._ID, android.provider.CallLog.Calls.NUMBER,
+                    android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.DURATION,
+                    android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.PHONE_ACCOUNT_ID),
+                "${android.provider.CallLog.Calls._ID} > ?",
+                arrayOf(lastSyncedCallId.toString()),
+                "${android.provider.CallLog.Calls._ID} ASC LIMIT 50"
+            ) ?: return
+            val records = JSONArray()
+            var maxId = lastSyncedCallId
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                maxId = id
+                val simSlot = try {
+                    val accountId = cursor.getString(5) ?: ""
+                    if (accountId.contains("@0")) 0 else if (accountId.contains("@1")) 1 else 0
+                } catch (_: Exception) { 0 }
+                records.put(JSONObject().apply {
+                    put("local_id", id)
+                    put("number", cursor.getString(1) ?: "")
+                    put("dial_time", cursor.getLong(2))
+                    put("duration", cursor.getLong(3))
+                    put("call_type", cursor.getInt(4))
+                    put("sim_slot", simSlot)
+                })
+            }
+            cursor.close()
+            if (records.length() == 0) return
+
+            val dataStr = java.net.URLEncoder.encode(records.toString(), "UTF-8")
+            val urlStr = "$baseUrl/api/v1/calls/batch?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&data=$dataStr"
+            val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000; conn.readTimeout = 5000
+            if (conn.responseCode in 200..299) {
+                lastSyncedCallId = maxId
+                prefs.edit().putLong("last_synced_call_id", maxId).apply()
+            }
+            conn.disconnect()
+        } catch (_: Exception) {}
+    }
+
+    private fun syncDailyStats() {
+        try {
+            val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+            val deviceId = PrefCtrl(this@DialService).getDeviceId()
+            val pin = prefs.getString("pin", "") ?: return
+            val serverUrl = prefs.getString("cloud_server", "") ?: return
+            if (serverUrl.isEmpty()) return
+            val baseUrl = normalizeHttpUrl(serverUrl)
+            val today = callLogDb.getTodayCount(this)
+            val stats = callLogDb.getDailyDurationStats(this, 1)
+            val dur = if (stats.isNotEmpty()) stats[0].totalDurationSec else 0L
+            val connected = callLogDb.getTodayConnectedCount(this)
+            val model = android.os.Build.MODEL ?: ""
+            val urlStr = "$baseUrl/api/v1/stats/report?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&count=$today&duration=$dur&connected=$connected" +
+                "&model=${java.net.URLEncoder.encode(model, "UTF-8")}&version=2.1"
+            val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000; conn.readTimeout = 5000
+            conn.connect(); conn.disconnect()
+        } catch (_: Exception) {}
+    }
+
+    fun logEvent(eventType: String, detail: String = "") {
+        executor.execute {
+            try {
+                val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+                val deviceId = PrefCtrl(this@DialService).getDeviceId()
+                val pin = prefs.getString("pin", "") ?: return@execute
+                val serverUrl = prefs.getString("cloud_server", "") ?: return@execute
+                if (serverUrl.isEmpty()) return@execute
+                val baseUrl = normalizeHttpUrl(serverUrl)
+                val urlStr = "$baseUrl/api/v1/events/log?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                    "&event_type=${java.net.URLEncoder.encode(eventType, "UTF-8")}" +
+                    "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}" +
+                    "&detail=${java.net.URLEncoder.encode(detail, "UTF-8")}"
+                val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000; conn.readTimeout = 5000
+                conn.connect(); conn.disconnect()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun normalizeHttpUrl(wsUrl: String): String {
+        return when {
+            wsUrl.startsWith("wss://") -> wsUrl.replace("wss://", "https://")
+            wsUrl.startsWith("ws://") -> wsUrl.replace("ws://", "http://")
+            else -> "http://$wsUrl"
+        }.removeSuffix("/")
     }
 }

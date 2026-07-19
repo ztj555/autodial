@@ -45,7 +45,7 @@ class CloudCtrl(private val context: Context) {
 
     fun getServerList(): List<ServerEntry> {
         val list = loadServerEntries().ifEmpty {
-            val default = listOf(ServerEntry("101.34.65.254:35430", "new"))
+            val default = listOf(ServerEntry("101.34.65.254:35430", "new", "融鑫汇腾讯云专线"))
             saveServerEntries(default)
             default
         }

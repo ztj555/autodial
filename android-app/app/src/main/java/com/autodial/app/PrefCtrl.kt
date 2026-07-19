@@ -41,6 +41,14 @@ enum class ConnectionStrategy(val key: String, val label: String) {
 class PrefCtrl(private val context: Context) {
     private val prefs = context.getSharedPreferences("autodial", Context.MODE_PRIVATE)
 
+    fun getDeviceId(): String {
+        val existing = prefs.getString("device_uuid", null)
+        if (existing != null) return existing
+        val uuid = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("device_uuid", uuid).apply()
+        return uuid
+    }
+
     fun getConnectionStrategy(): ConnectionStrategy {
         return ConnectionStrategy.readFromPrefs(prefs)
     }
