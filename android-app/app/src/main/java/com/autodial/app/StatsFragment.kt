@@ -427,8 +427,8 @@ class StatsFragment : Fragment() {
             setPadding(0, 0, 0, (12 * dp).toInt())
         })
 
-        // 可滚动数据区
-        val scrollView = android.widget.ScrollView(requireContext()).apply {
+        // 可滚动数据区（NestedScrollView 配合 BottomSheet 避免下滑关弹窗）
+        val scrollView = androidx.core.widget.NestedScrollView(requireContext()).apply {
             layoutParams = LinearLayout.LayoutParams(-1, (400 * dp).toInt())
         }
         val scrollContent = LinearLayout(requireContext()).apply {
@@ -459,6 +459,7 @@ class StatsFragment : Fragment() {
 
         dialog.setContentView(root)
         dialog.show()
+        dialog.behavior.isDraggable = false  // 禁止下滑关闭
         dialog.window?.setLayout(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -719,8 +720,8 @@ class StatsFragment : Fragment() {
             }
         })
 
-        // 可滚动数据区
-        val scrollView = android.widget.ScrollView(requireContext()).apply {
+        // 可滚动数据区（NestedScrollView 配合 BottomSheet 避免下滑关弹窗）
+        val scrollView = androidx.core.widget.NestedScrollView(requireContext()).apply {
             layoutParams = LinearLayout.LayoutParams(-1, (400 * dp).toInt())
         }
         val scrollContent = LinearLayout(requireContext()).apply {
