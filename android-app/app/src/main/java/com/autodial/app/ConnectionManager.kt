@@ -987,8 +987,11 @@ class ConnectionManager(private val context: Context) {
 
                 override fun onClosed(ws: WebSocket, code: Int, reason: String) {
                     v6LogW(TAG, pin, "Cloud closed code=$code reason=$reason")
+                    // 4001 = 被同 PIN 的新设备挤掉，通知 UI 显示"已被踢下线"
+                    if (code == 4001) {
+                        handler.post { notifyError(ConnectionError.Disconnected("kicked")) }
+                    }
                     handleCloudDisconnect()
-                    // 4001 = 被同 PIN 的新设备挤掉，不自动重连
                     if (code == 4001) {
                         v6LogI(TAG, pin, "被同 PIN 的新设备挤下线，停止重连")
                         return

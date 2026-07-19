@@ -90,6 +90,7 @@ class DialService : Service() {
     private var phoneStateListener: PhoneStateListener? = null
     private var telephonyCallback: android.telephony.TelephonyCallback? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var lastDisconnectReason: String? = null  // 用于防止 kicked 被 disconnected 覆盖
     private var screenOnReceiver: BroadcastReceiver? = null
 
     private val pendingDialQueue = ArrayDeque<String>()
@@ -155,8 +156,11 @@ class DialService : Service() {
                 }
                 ConnectionManager.ConnectionState.DISCONNECTED -> {
                     if (oldState == ConnectionManager.ConnectionState.CONNECTED) {
-                        updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
-                        notifyConnectionChange(false, "disconnected")
+                        // 如果 onError 已发送了具体原因（如 kicked），不再用通用 disconnected 覆盖
+                        if (lastDisconnectReason != "kicked") {
+                            updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
+                            notifyConnectionChange(false, "disconnected")
+                        }
                     }
                 }
                 ConnectionManager.ConnectionState.CONNECTING -> {
@@ -594,6 +598,7 @@ class DialService : Service() {
     // ==================== notification UI ====================
 
     private fun notifyConnectionChange(connected: Boolean, reason: String?) {
+        lastDisconnectReason = if (connected) null else reason
         val intent = Intent(ACTION_CONNECTION).apply {
             putExtra("connected", connected)
             putExtra("mode", connectionMode)
