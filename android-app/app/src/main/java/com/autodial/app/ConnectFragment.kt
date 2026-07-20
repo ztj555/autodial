@@ -206,14 +206,7 @@ class ConnectFragment : Fragment() {
                 setColor(Color.TRANSPARENT)
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
-            serverAliasText = TextView(requireContext()).apply {
-                textSize = 12f
-                gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
-                setPadding(0, 0, (8 * resources.displayMetrics.density).toInt(), 0)
-                visibility = View.GONE
-            }
-            (disconnectBtn.parent as? ViewGroup)?.addView(serverAliasText,
-                (disconnectBtn.parent as ViewGroup).indexOfChild(disconnectBtn))
+            serverAliasText = TextView(requireContext())
 
             // The V3 hero is part of fragment_connect.xml. Keep business bindings on
             // the original IDs; never detach and re-parent these views at runtime.
@@ -1021,11 +1014,9 @@ class ConnectFragment : Fragment() {
     private fun updateConnectionUI(connected: Boolean, reason: String?) {
         try {
             if (!isAdded) return
-            // 更新别名（连上断开都显示）
+            // 更新断开按钮：别名 + 断开连接
             val alias = prefCtrl.getCurrentServerAlias()
-            serverAliasText.text = alias
-            serverAliasText.visibility = if (alias.isNotEmpty()) View.VISIBLE else View.GONE
-            serverAliasText.setTextColor(Color.parseColor(ThemeManager.getColors(requireContext()).text2))
+            disconnectBtn.text = if (alias.isNotEmpty()) "$alias  断开连接" else "断开连接"
             val colors = ThemeManager.getColors(requireContext())
             pinInput.isEnabled = !connecting
 

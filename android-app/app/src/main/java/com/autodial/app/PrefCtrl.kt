@@ -85,7 +85,17 @@ class PrefCtrl(private val context: Context) {
     fun getCurrentServerAlias(): String {
         val cloudCtrl = CloudCtrl(context)
         val current = getCloudServer()
-        return cloudCtrl.getServerList().find { it.url == current }?.alias ?: ""
+        if (current.isEmpty()) return ""
+        // 兼容 ws:// 前缀不一致的情况
+        val normalized = if (current.startsWith("ws://") || current.startsWith("wss://")) current
+                        else "ws://$current"
+        val alias = cloudCtrl.getServerList().find {
+            it.url == current || it.url == normalized || it.url.removePrefix("ws://").removePrefix("wss://") == current
+        }?.alias ?: ""
+        if (alias.isNotEmpty()) return alias
+        // 硬编码回退：默认服务器
+        if (current == "101.34.65.254:35430" || normalized == "ws://101.34.65.254:35430") return "融鑫汇腾讯云专线"
+        return ""
     }
 
     fun isCloudEnabled() = prefs.getBoolean("cloud_enabled", false)
