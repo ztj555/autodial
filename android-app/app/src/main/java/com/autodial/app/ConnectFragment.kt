@@ -206,7 +206,16 @@ class ConnectFragment : Fragment() {
                 setColor(Color.TRANSPARENT)
             }
             disconnectBtn.setOnClickListener { handleDisconnectClick() }
-            serverAliasText = TextView(requireContext())
+            // 别名标签：插入断开按钮前
+            serverAliasText = TextView(requireContext()).apply {
+                textSize = 11f
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (10 * resources.displayMetrics.density).toInt() }
+                visibility = View.GONE
+            }
+            (disconnectBtn.parent as? ViewGroup)?.addView(serverAliasText,
+                (disconnectBtn.parent as ViewGroup).indexOfChild(disconnectBtn))
 
             // The V3 hero is part of fragment_connect.xml. Keep business bindings on
             // the original IDs; never detach and re-parent these views at runtime.
@@ -397,6 +406,7 @@ class ConnectFragment : Fragment() {
             view.findViewById<View>(R.id.cloudServerManageRow).setOnClickListener {
                 CloudServerSheet(requireActivity()) {
                     updateCloudServerCurrentText()
+                    updateServerAliasText()
                 }.show()
             }
             cloudServerAddBtn.setOnClickListener { addCloudServer() }
@@ -828,6 +838,16 @@ class ConnectFragment : Fragment() {
         } catch (_: Exception) {}
     }
 
+    private fun updateServerAliasText() {
+        if (!::serverAliasText.isInitialized) return
+        val alias = prefCtrl.getCurrentServerAlias()
+        serverAliasText.text = alias
+        serverAliasText.visibility = if (alias.isNotEmpty()) View.VISIBLE else View.GONE
+        try {
+            serverAliasText.setTextColor(Color.parseColor(ThemeManager.getColors(requireContext()).text2))
+        } catch (_: Exception) {}
+    }
+
     /** 更新状态条按钮的文本和颜色 */
     private fun updateBtnState(state: String) {
         if (!isAdded) return
@@ -1014,9 +1034,7 @@ class ConnectFragment : Fragment() {
     private fun updateConnectionUI(connected: Boolean, reason: String?) {
         try {
             if (!isAdded) return
-            // 更新断开按钮：别名 + 断开连接
-            val alias = prefCtrl.getCurrentServerAlias()
-            disconnectBtn.text = if (alias.isNotEmpty()) "$alias  断开连接" else "断开连接"
+            updateServerAliasText()
             val colors = ThemeManager.getColors(requireContext())
             pinInput.isEnabled = !connecting
 
