@@ -1,5 +1,100 @@
 # GoDial 更新日志
 
+## 2026-07-21
+
+### 同步登记列表全链路修复 + 纯增量去重 (v4.11)
+
+**核心问题**：扩展端"同步登记列表"功能完全失效（3个bug），且云中继去重逻辑导致跨天重复入库。
+
+**content-script.js** — 修复 3 个 Bug + 自动翻页
+- **Bug #1**（严重）选择器错误：`form[name="fdsf"] table tr` 匹配了搜索表单（1行）而非数据表格（22行），导致循环从未执行
+  - 修复：`form[name="fdsf"] ~ table tr`
+- **Bug #2** 列数过滤错误：`cells.length < 12`，实际表格只有 11 列，所有行被过滤
+  - 修复：`cells.length < 11`
+- **Bug #3** 时间列索引错误：`cells[11]` 超出范围，应为 `cells[10]`
+  - 修复：`cells[10]`
+- **新增** 自动翻页抓取：从分页链接扫描所有页码，用 `fetch + DOMParser` 逐页解析，合并全量记录
+- **新增** 增量反馈 toast：`✅ 同步完成：共 120 条，新增 80 条，跳过 35 条（当日已存在），失败 5 条`
+
+**background.js** — 右键菜单增强 + visit_time 传参 + 分状态计数
+- **新增** 3个右键菜单入口：
+  - 🔁 一键同步上门数据（任意CRM页面右键 → 自动跳转+同步）
+  - 同步登记列表当前页（仅列表页右键）
+  - 🔁 一键同步上门数据（扩展图标右键）
+- **新增** `visit_time` 参数传递到云中继
+- **改进** `batchSyncVisits` 区分 `synced / skipped / failed` 三种状态
+- **去除** 重复的 `VISIT_LIST_URL` 局部声明，提升为模块常量
+- **修复** 使用 `chrome.contextMenus.removeAll()` 防止 MV3 service worker 重启时菜单重复
+
+**cloud_relay_v2.py** — 纯增量去重 + visit_time 支持
+- **新增** `visit_time` 字段：DB迁移 + CREATE TABLE + INSERT + visit_record推送
+- **改进** 去重逻辑：有 `visit_time` → `WHERE mobile=? AND visit_time=?`（真·纯增量）；无 `visit_time` → 回退旧逻辑（兼容一键登记/手机端）
+- **关键变化**：同一客户同一天的 CRM 来访记录，无论同步多少次，只存一条
+
+**dashboard.html** — Web 管理面板增强
+- **新增** 表格"来访时间"列（第9列）
+- **改进** 日期筛选优先按 CRM 来访时间（`visit_time || created_at`）
+- **新增** 来源筛选增加"CRM同步"选项 + 独立 badge 样式（`.badge-crm` 蓝紫色）
+- **改进** CSV 导出增加"来访时间"列
+- **更新** 所有 colspan 9→10
+
+### 全链路数据流
+
+```
+CRM list_user_visit.html
+  → extractVisits() + 自动翻页
+  → batchSyncVisits (name/mobile/kefu_tel/visit_type/visit_time)
+  → Cloud Relay (/api/v1/visit) → mobile+visit_time 精确去重
+  → SQLite INSERT (含 visit_time)
+  → WebSocket push {type:'visit_record', data:{...}} → Android
+  → Dashboard 查看/编辑/删除/导出
+```
+
+### 触发方式
+
+| 入口 | 路径 |
+|------|------|
+| CRM 页面右键 | 🔁 一键同步上门数据 |
+| 扩展图标右键 | 🔁 一键同步上门数据 |
+| Popup 按钮 | 同步登记列表 |
+
+---
+
+## 2026-07-20
+
+### 管理面板重大升级 (v4.10) + P0/P1 缺陷修复
+
+**cloud_relay_v2.py** (1736→1989行)
+- 新增 6 个管理 API 端点：
+  - `GET /api/v1/devices` — 已注册设备清单（含在线状态标注）
+  - `GET /api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` — 通话记录查询+分页
+  - `GET /api/v1/kick?pin=&role=` — 踢出在线客户端
+  - `GET /api/v1/phone-stats?device_id=` — 每日对账数据（服务端 vs 手机端，OK/MISMATCH）
+  - `GET /api/v1/events?device_id=&event_type=&limit=` — 手机行为事件日志
+  - `GET /api/history` — 连接数历史（供仪表盘趋势图）
+- `/api/stats` 扩展：新增 `by_type`（消息类型分布）和 `by_pin`（按PIN统计）字段
+- `/api/logs` 扩展：支持 `?n=N` 行数和 `?q=关键词` 搜索
+- 新增连接数历史追踪系统：每30秒快照，环形数组保留24小时(2880点)
+- 新增 `cleanup_memory()` 定期清理机制（每10分钟）：message_count_by_pin(Top200)、last_ext_activity(1h过期)、pending_visits(上限100)、last_dial(10min过期)、daily_stats(90天)、_pin_attempts过期条目
+- **P0修复**：`/api/v1/calls/batch`、`/api/v1/events/log`、`/api/v1/stats/report` 三个端点补全 `try/finally` 确保数据库连接释放
+- **P1修复**：`save_stats()`/`load_stats()` 失败增加日志输出；CRM同步更新失败记日志
+
+**dashboard.html** (817→864行，完全重写)
+- 新增 3 个 Tab 页：📞 通话记录、📱 设备管理、📊 对账面板
+- 仪表盘增强：6个统计卡片（含在线PC/手机计数）+ 连接趋势折线图 + 消息类型饼图
+- 客户端管理：踢出功能真正实现（不再弹"暂未实现"）+ 角色筛选 + 设备名搜索
+- 通话记录：日期/设备/号码筛选 + 分页 + CSV导出
+- 设备管理：在线状态(绿/灰点) + 手机型号/版本 + 首次/最后在线
+- 对账面板：OK/MISMATCH 高亮标记
+- 日志增强：关键词搜索 + 行数选择(100/200/500/1000)
+- 流量统计：新增消息类型饼图 + 按PIN柱状图(Top10)
+- UI 现代化：卡片阴影/渐变动画/响应式布局/自动刷新15秒
+
+**pc-app-Electron/modules/cloud.js** (481→484行)
+- **P0修复**：error 事件不再提前设置 `_cleanedUp = true`，改用 `_errorHandled` 标记
+- close 事件中检查 `_errorHandled`，跳过重复UI清理但仍触发自动重连
+- 修复了"error先于close触发时自动重连永不执行"的bug
+
 ## 2026-07-19
 
 ### 手机端云中转数据同步系统（新功能）

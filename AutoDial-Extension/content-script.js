@@ -242,50 +242,122 @@
         sendResponse({ ok: false, error: msg });
         return;
       }
-      // 3) 抓取表格数据
-        var visits = [];
-        var rows = document.querySelectorAll('form[name="fdsf"] table tr');
-        for (var r = 1; r < rows.length; r++) {
-          var cells = rows[r].querySelectorAll('td');
-          if (cells.length < 12) continue;
-          var id = (cells[0].textContent || '').trim();
-          var name = (cells[1].textContent || '').replace(/\(.*\)$/, '').trim();
-          var mobileCell = (cells[2].textContent || '').trim();
-          var mobile = (mobileCell.match(/1[3-9]\d{9}/) || [''])[0];
-          var visitType = (cells[4].textContent || '').trim();
-          var advisorPhone = (cells[5].textContent || '').trim();
-          var advisorName = (cells[6].textContent || '').trim();
-          var visitTime = (cells[11].textContent || '').trim();
-          if (!name || !mobile) continue;
-          visits.push({
-            crm_id: id, name: name, mobile: mobile,
-            visit_type: visitType, advisor_phone: advisorPhone,
-            advisor_name: advisorName, visit_time: visitTime
-          });
+      // 3) 抓取表格数据（utils: 从文档中解析来访记录）
+        function extractVisits(doc) {
+          var rows = doc.querySelectorAll('form[name="fdsf"] ~ table tr');
+          var result = [];
+          for (var r = 1; r < rows.length; r++) {
+            var cells = rows[r].querySelectorAll('td');
+            if (cells.length < 11) continue;
+            var id = (cells[0].textContent || '').trim();
+            var name = (cells[1].textContent || '').replace(/\(.*\)$/, '').trim();
+            var mobileCell = (cells[2].textContent || '').trim();
+            var mobile = (mobileCell.match(/1[3-9]\d{9}/) || [''])[0];
+            var visitType = (cells[4].textContent || '').trim();
+            var advisorPhone = (cells[5].textContent || '').trim();
+            var advisorName = (cells[6].textContent || '').trim();
+            var visitTime = (cells[10].textContent || '').trim();
+            if (!name || !mobile) continue;
+            result.push({
+              crm_id: id, name: name, mobile: mobile,
+              visit_type: visitType, advisor_phone: advisorPhone,
+              advisor_name: advisorName, visit_time: visitTime
+            });
+          }
+          return result;
         }
-        if (visits.length === 0) {
-          var msg = '未找到登记记录';
-          toastFn('✗ ' + msg);
-          sendResponse({ ok: false, error: msg });
+
+        // 抓取当前页
+        var visits = extractVisits(document);
+
+        // 收集后续分页链接（去重、按页码排序）
+        var pageUrls = {};
+        var seenPages = {};
+        var paginationLinks = document.querySelectorAll('a');
+        for (var pi = 0; pi < paginationLinks.length; pi++) {
+          var a = paginationLinks[pi];
+          var pageNum = parseInt(a.textContent.trim(), 10);
+          if (pageNum > 1 && a.href && !seenPages[pageNum]) {
+            seenPages[pageNum] = true;
+            pageUrls[pageNum] = a.href;
+          }
+        }
+
+        var pageNums = Object.keys(pageUrls).sort(function(a, b) { return a - b; });
+        if (pageNums.length === 0) {
+          // 单页数据，直接提交
+          if (visits.length === 0) {
+            var msg = '未找到登记记录';
+            toastFn('✗ ' + msg);
+            sendResponse({ ok: false, error: msg });
+            return;
+          }
+          submitToCloud();
           return;
         }
-        // 4) 批量提交到云端
-        toastFn('正在同步 ' + visits.length + ' 条记录...');
-        chrome.runtime.sendMessage({
-          type: 'batchSyncVisits',
-          pin: pin,
-          visits: visits
-        }, function(syncResp) {
-          if (syncResp && syncResp.ok) {
-            var msg = '✅ 已同步 ' + syncResp.synced + '/' + syncResp.total + ' 条';
-            toastFn(msg);
-            sendResponse({ ok: true, synced: syncResp.synced, total: syncResp.total });
-          } else {
-            var msg = '✗ 同步失败: ' + (syncResp ? syncResp.error : '未知错误');
-            toastFn(msg);
-            sendResponse({ ok: false, error: syncResp ? syncResp.error : '未知错误' });
+
+        // 多页数据：逐页 fetch 抓取
+        var totalPages = pageNums.length + 1; // 含当前第1页
+        toastFn('检测到 ' + totalPages + ' 页数据 (' + visits.length + ' 条/页)，正在逐页抓取...');
+
+        var pageIndex = 0;
+        function fetchNextPage() {
+          if (pageIndex >= pageNums.length) {
+            // 全部抓完
+            toastFn('共抓取 ' + visits.length + ' 条记录（' + totalPages + ' 页）');
+            submitToCloud();
+            return;
           }
-        });
+          var url = pageUrls[pageNums[pageIndex]];
+          fetch(url, { credentials: 'include' })
+            .then(function(res) { return res.text(); })
+            .then(function(html) {
+              var parser = new DOMParser();
+              var doc = parser.parseFromString(html, 'text/html');
+              var pageVisits = extractVisits(doc);
+              visits = visits.concat(pageVisits);
+              pageIndex++;
+              toastFn('已抓取 ' + (pageIndex + 1) + '/' + totalPages + ' 页，累计 ' + visits.length + ' 条');
+              fetchNextPage();
+            })
+            .catch(function(err) {
+              toastFn('⚠ 第 ' + pageNums[pageIndex] + ' 页抓取失败: ' + err.message + '，跳过继续');
+              pageIndex++;
+              fetchNextPage();
+            });
+        }
+
+        function submitToCloud() {
+          if (visits.length === 0) {
+            var msg = '未找到登记记录';
+            toastFn('✗ ' + msg);
+            sendResponse({ ok: false, error: msg });
+            return;
+          }
+          // 4) 批量提交到云端
+          toastFn('正在同步 ' + visits.length + ' 条记录...');
+          chrome.runtime.sendMessage({
+            type: 'batchSyncVisits',
+            pin: pin,
+            visits: visits
+          }, function(syncResp) {
+            if (syncResp && syncResp.ok) {
+              var parts = ['✅ 同步完成：共 ' + syncResp.total + ' 条'];
+              if (syncResp.synced > 0) parts.push('新增 ' + syncResp.synced + ' 条');
+              if (syncResp.skipped > 0) parts.push('跳过 ' + syncResp.skipped + ' 条（当日已存在）');
+              if (syncResp.failed > 0) parts.push('失败 ' + syncResp.failed + ' 条');
+              var msg = parts.join('，');
+              toastFn(msg);
+              sendResponse({ ok: true, synced: syncResp.synced, skipped: syncResp.skipped, failed: syncResp.failed, total: syncResp.total });
+            } else {
+              var msg = '✗ 同步失败: ' + (syncResp ? syncResp.error : '未知错误');
+              toastFn(msg);
+              sendResponse({ ok: false, error: syncResp ? syncResp.error : '未知错误' });
+            }
+          });
+        }
+
+        fetchNextPage();
     });
   }
 

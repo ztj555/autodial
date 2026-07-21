@@ -1,5 +1,5 @@
 """
-AutoDial 云中转服务器 - Python 版（带 Web 管理界面）
+AutoDial 云中转服务器 - Python 版（带 Web 管理界面 v4.10）
 功能：WebSocket 中转 + 系统托盘图标 + Web 可视化界面，打包为单个 EXE
 依赖：websockets, pystray, Pillow
 """
@@ -80,6 +80,7 @@ def init_db():
         visit_type TEXT DEFAULT '贷款咨询',
         source TEXT DEFAULT 'plugin',
         crm_synced INTEGER DEFAULT 0,
+        visit_time TEXT DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )'''
@@ -157,9 +158,11 @@ def init_db():
         conn.commit()
         # 兼容旧版 DB：添加新列
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
-        except: pass
+        except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN visit_time TEXT DEFAULT \'\''); conn.commit()
+        except: pass  # column already exists
         try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
-        except: pass
+        except: pass  # column already exists
         conn.close()
         log.info(f'Visits DB initialized at {DB_PATH}')
     except Exception as e:
@@ -176,9 +179,11 @@ def init_db():
         c.execute(create_admins)
         conn.commit()
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
-        except: pass
+        except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN visit_time TEXT DEFAULT \'\''); conn.commit()
+        except: pass  # column already exists
         try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
-        except: pass
+        except: pass  # column already exists
         conn.close()
 
 init_db()
@@ -191,6 +196,66 @@ total_bytes_received = 0
 message_count_by_pin = defaultdict(int)  # pin -> 消息数
 message_count_by_type = defaultdict(int)  # 消息类型 -> 计数
 daily_stats = defaultdict(lambda: {'messages': 0, 'bytes': 0})  # YYYY-MM-DD -> stats
+
+# ==================== 连接数历史（供仪表盘趋势图） ====================
+connection_history = []  # [{time: str, count: int}, ...]
+MAX_HISTORY_POINTS = 2880  # 24小时 × 每30秒一次
+
+def snapshot_connection_history():
+    """记录当前连接数快照"""
+    connection_history.append({
+        'time': datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+        'count': len(ws_connections),
+        'groups': len(pin_groups),
+        'pcs': sum(1 for m in ws_meta.values() if m.get('role') == 'pc'),
+        'phones': sum(1 for m in ws_meta.values() if m.get('role') == 'phone'),
+    })
+    if len(connection_history) > MAX_HISTORY_POINTS:
+        connection_history.pop(0)
+
+def cleanup_memory():
+    """定期清理无界增长的数据结构，防止内存泄露"""
+    # 1. message_count_by_pin: 保留 Top 200，其余删除
+    if len(message_count_by_pin) > 200:
+        top = sorted(message_count_by_pin.items(), key=lambda x: x[1], reverse=True)[:200]
+        message_count_by_pin.clear()
+        message_count_by_pin.update(top)
+        log.info(f'MEM_CLEANUP: trimmed message_count_by_pin to top 200')
+
+    # 2. last_ext_activity: 清理超过 1 小时未活跃的 PIN
+    now = datetime.now()
+    stale_pins = [p for p, t in list(last_ext_activity.items())
+                  if (now - t).total_seconds() > 3600]
+    for p in stale_pins:
+        del last_ext_activity[p]
+    if stale_pins:
+        log.info(f'MEM_CLEANUP: removed {len(stale_pins)} stale ext_activity entries')
+
+    # 3. _pin_attempts: 清理超过 5 分钟未尝试的 IP
+    for ip in list(_pin_attempts.keys()):
+        _pin_attempts[ip] = [t for t in _pin_attempts[ip] if now - t < timedelta(minutes=1)]
+        if not _pin_attempts[ip]:
+            del _pin_attempts[ip]
+
+    # 4. pending_visits: 每 PIN 最多保留 100 条
+    for pin, group in list(pin_groups.items()):
+        if len(group.pending_visits) > 100:
+            trimmed = group.pending_visits[-100:]
+            log.warning(f'MEM_CLEANUP: pin={pin} pending_visits trimmed {len(group.pending_visits)}→{len(trimmed)}')
+            group.pending_visits = trimmed
+
+    # 5. PinGroup.last_dial: 清理超过 10 分钟的拨号记录
+    for pin, group in pin_groups.items():
+        cutoff = time.time() - 600
+        stale_numbers = [n for n, t in list(group.last_dial.items()) if t < cutoff]
+        for n in stale_numbers:
+            del group.last_dial[n]
+
+    # 6. daily_stats: 保留最近 90 天
+    sorted_dates = sorted(daily_stats.keys())
+    if len(sorted_dates) > 90:
+        for old_date in sorted_dates[:-90]:
+            del daily_stats[old_date]
 
 def record_message(pin, msg_type, bytes_count):
     """记录消息统计"""
@@ -226,8 +291,8 @@ def save_stats():
         }
         with open(STATS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f'Failed to save stats: {e}')
 
 def load_stats():
     """Restore persisted stats from JSON file"""
@@ -249,8 +314,8 @@ def load_stats():
         total_bytes_sent = data.get('total_bytes_sent', 0)
         total_bytes_received = data.get('total_bytes_received', 0)
         log.info(f'Stats restored: {total_messages} messages across {len(daily_stats)} days')
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning(f'Failed to load stats (starting fresh): {e}')
 
 # ==================== PIN 分组管理 ====================
 class PinGroup:
@@ -845,8 +910,8 @@ def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
                 c.execute('UPDATE visits SET crm_synced=1, updated_at=? WHERE id=?',
                           (datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), visit_id))
                 conn.commit()
-            except:
-                pass
+            except Exception as e:
+                log.warning(f'CRM sync flag update failed visit_id={visit_id}: {e}')
             finally:
                 if conn:
                     conn.close()
@@ -907,7 +972,7 @@ async def health_check_handler(path, request_headers):
     if path == '/health':
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '4.00',
+            'version': '4.10',
             'port': PORT,
             'uptime_seconds': get_uptime_seconds(),
             'total_connections': len(ws_connections),
@@ -919,7 +984,7 @@ async def health_check_handler(path, request_headers):
     if path == '/api/status':
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '4.00',
+            'version': '4.10',
             'port': PORT,
             'uptime_seconds': get_uptime_seconds(),
             'total_connections': len(ws_connections),
@@ -943,14 +1008,23 @@ async def health_check_handler(path, request_headers):
             'total_messages': total_messages,
             'total_bytes_sent': total_bytes_sent,
             'total_bytes_received': total_bytes_received,
-            'daily': get_daily_stats()
+            'daily': get_daily_stats(),
+            'by_type': dict(message_count_by_type),
+            'by_pin': dict(message_count_by_pin)
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
     
-    # API: 日志
+    # API: 日志（支持 ?n=500&q=关键词）
     if path == '/api/logs':
+        qs = parse_qs(parsed.query)
+        n = int(qs.get('n', ['100'])[0])
+        q = qs.get('q', [''])[0]
+        logs = get_logs(min(n, 1000))
+        if q:
+            logs = [l for l in logs if q.lower() in l.lower()]
         body = json.dumps({
-            'logs': get_logs(100)
+            'logs': logs,
+            'total': len(logs)
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
 
@@ -1264,6 +1338,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和data不能为空'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         inserted, skipped = 0, 0
+        conn = None
         try:
             records = json.loads(data_str)
             conn = sqlite3.connect(DB_PATH)
@@ -1279,14 +1354,21 @@ async def health_check_handler(path, request_headers):
                                r.get('duration',0), r.get('call_type',0), r.get('sim_slot',0), now_str))
                     if c.rowcount > 0: inserted += 1
                     else: skipped += 1
-                except: skipped += 1
+                except Exception:
+                    skipped += 1
             c.execute('UPDATE phones SET last_seen=? WHERE device_id=?', (now_str, device_id))
             conn.commit()
-            conn.close()
             log.info(f'CALLS_BATCH device={device_id} pin={pin} inserted={inserted} skipped={skipped}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'inserted': inserted, 'skipped': skipped}).encode('utf-8'))
+        except json.JSONDecodeError as e:
+            log.error(f'CALLS_BATCH JSON parse error device={device_id}: {e}')
+            return (400, JSON_HDR, _err_json('INVALID_JSON', 'data格式错误'))
         except Exception as e:
+            log.error(f'CALLS_BATCH error device={device_id}: {e}')
             return (500, JSON_HDR, _err_json('SERVER_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 上报行为事件: GET /api/v1/events/log?device_id=xxx&event_type=login&pin=xxx&detail=xxx
     if path == '/api/v1/events/log':
@@ -1298,16 +1380,23 @@ async def health_check_handler(path, request_headers):
         if not device_id or not event_type:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和event_type不能为空'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('INSERT INTO phone_events (device_id, event_type, event_time, pin, detail, server_time) VALUES (?,?,?,?,?,?)',
-                  (device_id, event_type, now_str, event_pin, detail, now_str))
-        c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, first_seen, last_seen)
-                     VALUES (?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
-                  (device_id, event_pin, device_id, now_str, now_str))
-        conn.commit()
-        conn.close()
-        return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('INSERT INTO phone_events (device_id, event_type, event_time, pin, detail, server_time) VALUES (?,?,?,?,?,?)',
+                      (device_id, event_type, now_str, event_pin, detail, now_str))
+            c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, first_seen, last_seen)
+                         VALUES (?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+                      (device_id, event_pin, device_id, now_str, now_str))
+            conn.commit()
+            return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+        except Exception as e:
+            log.error(f'EVENTS_LOG error device={device_id}: {e}')
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 上报每日统计快照: GET /api/v1/stats/report?device_id=xxx&pin=xxx&model=xxx&version=xxx&count=12&duration=180&connected=8
     if path == '/api/v1/stats/report':
@@ -1323,26 +1412,33 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id不能为空'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         today_str = datetime.now().strftime('%Y-%m-%d')
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, device_model, app_version, first_seen, last_seen)
-                     VALUES (?, ?, ?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
-                  (device_id, pin, model, version, device_id, now_str, now_str))
-        # 从原始记录重算服务器端值
-        c.execute('SELECT COUNT(*), SUM(duration), COUNT(CASE WHEN duration>0 THEN 1 END) FROM call_records_raw WHERE device_id=? AND dial_time>=? AND dial_time<?',
-                  (device_id, today_start_ms(), today_end_ms()))
-        row = c.fetchone()
-        server_dial = row[0] or 0
-        server_dur = row[1] or 0
-        server_conn = row[2] or 0
-        match = 'OK' if (server_dial == phone_dial and server_conn == phone_conn) else 'MISMATCH'
-        c.execute('''INSERT OR REPLACE INTO phone_daily_stats
-                     (device_id, date, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match_status, updated_at)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)''',
-                  (device_id, today_str, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match, now_str))
-        conn.commit()
-        conn.close()
-        return (200, JSON_HDR, json.dumps({'ok': True, 'match': match}).encode('utf-8'))
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, device_model, app_version, first_seen, last_seen)
+                         VALUES (?, ?, ?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+                      (device_id, pin, model, version, device_id, now_str, now_str))
+            # 从原始记录重算服务器端值
+            c.execute('SELECT COUNT(*), SUM(duration), COUNT(CASE WHEN duration>0 THEN 1 END) FROM call_records_raw WHERE device_id=? AND dial_time>=? AND dial_time<?',
+                      (device_id, today_start_ms(), today_end_ms()))
+            row = c.fetchone()
+            server_dial = row[0] or 0
+            server_dur = row[1] or 0
+            server_conn = row[2] or 0
+            match = 'OK' if (server_dial == phone_dial and server_conn == phone_conn) else 'MISMATCH'
+            c.execute('''INSERT OR REPLACE INTO phone_daily_stats
+                         (device_id, date, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match_status, updated_at)
+                         VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                      (device_id, today_str, server_dial, server_conn, server_dur, phone_dial, phone_conn, phone_dur, match, now_str))
+            conn.commit()
+            return (200, JSON_HDR, json.dumps({'ok': True, 'match': match}).encode('utf-8'))
+        except Exception as e:
+            log.error(f'STATS_REPORT error device={device_id}: {e}')
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
 
     # 创建登记: GET /api/v1/visit?name=...&mobile=...&...
     if path == '/api/v1/visit':
@@ -1357,6 +1453,7 @@ async def health_check_handler(path, request_headers):
         kefu_tel = qs.get('kefu_tel', [''])[0].strip()
         visit_type = qs.get('visit_type', ['贷款咨询'])[0].strip()
         source = qs.get('source', ['plugin'])[0].strip()
+        visit_time = qs.get('visit_time', [''])[0].strip()
 
         if not name or not mobile or not kefu_tel:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', '缺少必填字段: name, mobile, kefu_tel'))
@@ -1366,19 +1463,25 @@ async def health_check_handler(path, request_headers):
         try:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
-            # 去重：同一手机号今日已有记录则跳过
-            today_str = datetime.now().strftime('%Y-%m-%d')
-            c.execute(
-                'SELECT id FROM visits WHERE mobile = ? AND created_at LIKE ? LIMIT 1',
-                (mobile, today_str + '%')
-            )
+            # 去重：优先用 CRM 来访时间 (mobile+visit_time)，否则回退到当日去重
+            if visit_time:
+                c.execute(
+                    'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
+                    (mobile, visit_time)
+                )
+            else:
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                c.execute(
+                    'SELECT id FROM visits WHERE mobile = ? AND created_at LIKE ? LIMIT 1',
+                    (mobile, today_str + '%')
+                )
             if c.fetchone():
                 conn.close()
-                return (200, JSON_HDR, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate_mobile_today'}).encode('utf-8'))
+                return (200, JSON_HDR, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
             c.execute(
-                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, created_at, updated_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                (pin, name, mobile, kefu_tel, visit_type, source, now_str, now_str)
+                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, created_at, updated_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (pin, name, mobile, kefu_tel, visit_type, source, visit_time, now_str, now_str)
             )
             # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
             if kefu_tel and kefu_tel.strip():
@@ -1399,7 +1502,7 @@ async def health_check_handler(path, request_headers):
         # 客户端已直接提交 CRM，云端只做记录 + WS 推送，不再重复提交 CRM
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
                         'kefu_tel': kefu_tel, 'visit_type': visit_type, 'source': source,
-                        'created_at': now_str, 'updated_at': now_str}
+                        'visit_time': visit_time, 'created_at': now_str, 'updated_at': now_str}
         _push_visit_to_phone(pin, visit_record)
 
         log.info(f'VISIT_CREATE pin={pin} name={name} id={row_id}')
@@ -1493,6 +1596,155 @@ async def health_check_handler(path, request_headers):
             if conn:
                 conn.close()
 
+    # ===== 新增: Dashboard 管理 API =====
+
+    # API: 设备清单 GET /api/v1/devices
+    if path == '/api/v1/devices':
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
+            rows = [dict(r) for r in c.fetchall()]
+            # 标注在线状态 + IP
+            online_map = {}
+            for _ws, _meta in ws_meta.items():
+                if _meta.get('role') == 'phone' and _meta.get('device_name'):
+                    online_map[_meta['device_name']] = _meta.get('ip', '')
+            for row in rows:
+                did = row.get('device_id', '')
+                row['is_online'] = did in online_map
+                row['current_ip'] = online_map.get(did, '')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'devices': rows}, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 通话记录查询 GET /api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=
+    if path == '/api/v1/calls':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0]
+        pin = qs.get('pin', [''])[0]
+        date_from = qs.get('date_from', [''])[0]
+        date_to = qs.get('date_to', [''])[0]
+        number = qs.get('number', [''])[0]
+        limit = min(int(qs.get('limit', ['200'])[0]), 1000)
+        offset = int(qs.get('offset', ['0'])[0])
+
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            where = []
+            params = []
+            if device_id:
+                where.append('cr.device_id = ?'); params.append(device_id)
+            if pin:
+                where.append('p.last_pin = ?'); params.append(pin)
+            if number:
+                where.append('cr.number LIKE ?'); params.append(f'%{number}%')
+            if date_from:
+                try:
+                    d = datetime.strptime(date_from, '%Y-%m-%d')
+                    where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
+                except Exception: pass  # invalid date format, skip filter
+            if date_to:
+                try:
+                    d = datetime.strptime(date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
+                    where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
+                except Exception: pass  # invalid date format, skip filter
+            w = ' AND '.join(where) if where else '1=1'
+            c.execute(f'''SELECT cr.*, p.last_pin as pin, p.device_model, p.app_version
+                         FROM call_records_raw cr
+                         LEFT JOIN phones p ON cr.device_id = p.device_id
+                         WHERE {w} ORDER BY cr.dial_time DESC LIMIT ? OFFSET ?''',
+                      params + [limit, offset])
+            rows = [dict(r) for r in c.fetchall()]
+            c.execute(f'SELECT COUNT(*) FROM call_records_raw cr LEFT JOIN phones p ON cr.device_id=p.device_id WHERE {w}', params)
+            total = c.fetchone()[0]
+            return (200, JSON_HDR, json.dumps({
+                'ok': True, 'calls': rows, 'total': total, 'limit': limit, 'offset': offset
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 踢出客户端 GET /api/v1/kick?pin=&role=
+    if path == '/api/v1/kick':
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0]
+        role = qs.get('role', [''])[0]
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING', 'pin不能为空'))
+        kicked = 0
+        for _ws, _meta in list(ws_meta.items()):
+            if _meta.get('pin') == pin and (not role or _meta.get('role') == role):
+                try:
+                    await _ws.close(4000, 'kicked by admin')
+                    kicked += 1
+                except Exception:
+                    pass
+        log.info(f'KICK pin={pin} role={role or "any"} count={kicked}')
+        return (200, JSON_HDR, json.dumps({'ok': True, 'kicked': kicked}).encode('utf-8'))
+
+    # API: 每日对账 GET /api/v1/phone-stats?device_id=
+    if path == '/api/v1/phone-stats':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0]
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            if device_id:
+                c.execute('SELECT * FROM phone_daily_stats WHERE device_id=? ORDER BY date DESC LIMIT 30', (device_id,))
+            else:
+                c.execute('SELECT * FROM phone_daily_stats ORDER BY date DESC, device_id LIMIT 200')
+            rows = [dict(r) for r in c.fetchall()]
+            return (200, JSON_HDR, json.dumps({'ok': True, 'stats': rows}, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 手机事件日志 GET /api/v1/events?device_id=&event_type=&limit=
+    if path == '/api/v1/events':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0]
+        event_type = qs.get('event_type', [''])[0]
+        limit = min(int(qs.get('limit', ['100'])[0]), 500)
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            where = []; params = []
+            if device_id:
+                where.append('device_id=?'); params.append(device_id)
+            if event_type:
+                where.append('event_type=?'); params.append(event_type)
+            w = ' AND '.join(where) if where else '1=1'
+            c.execute(f'SELECT * FROM phone_events WHERE {w} ORDER BY event_time DESC LIMIT ?', params + [limit])
+            rows = [dict(r) for r in c.fetchall()]
+            return (200, JSON_HDR, json.dumps({'ok': True, 'events': rows}, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 连接数历史 GET /api/history
+    if path == '/api/history':
+        data = list(connection_history[-288:])  # 最近4小时（288×30s）
+        return (200, JSON_HDR, json.dumps({'ok': True, 'history': data}, ensure_ascii=False).encode('utf-8'))
+
     # Web 管理界面
     if path == '/' or path == '/index.html':
         return (200, [('Content-Type', 'text/html; charset=utf-8')], HTML_CONTENT.encode('utf-8'))
@@ -1538,6 +1790,20 @@ async def run_server():
                 await asyncio.sleep(300)
                 save_stats()
         asyncio.create_task(periodic_save())
+
+        # 连接数历史快照（每30秒记录一次，供仪表盘趋势图）
+        async def periodic_snapshot():
+            while True:
+                await asyncio.sleep(30)
+                snapshot_connection_history()
+        asyncio.create_task(periodic_snapshot())
+
+        # 内存清理（每10分钟清理一次无界数据结构）
+        async def periodic_cleanup():
+            while True:
+                await asyncio.sleep(600)
+                cleanup_memory()
+        asyncio.create_task(periodic_cleanup())
 
         # 保持运行
         await asyncio.Future()  # 永不完成
@@ -1708,7 +1974,7 @@ def main():
     print('')
     print('========================================')
     print('  AutoDial Cloud Relay Server')
-    print('  版本: 4.00 (带 Web 管理界面)')
+    print('  版本: 4.10 (增强版管理面板)')
     print('========================================')
     print(f'  Port:     {PORT}')
     print(f'  PID:      {os.getpid()}')

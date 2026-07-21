@@ -3,576 +3,696 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoDial 云中转 - 管理界面</title>
+    <title>AutoDial 云中转 - 管理面板 v4.10</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5a6fd6;
+            --accent: #764ba2;
+            --danger: #e74c3c;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --bg: #f0f2f5;
+            --card: #fff;
+            --text: #333;
+            --text-muted: #999;
+            --border: #e0e0e0;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #333; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; text-align: center; }
-        .header h1 { font-size: 24px; margin-bottom: 5px; }
-        .header p { opacity: 0.9; font-size: 14px; }
-        .nav { background: white; padding: 10px; display: flex; gap: 10px; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
-        .nav-btn { padding: 8px 16px; border: none; background: #f0f0f0; cursor: pointer; border-radius: 4px; font-size: 14px; }
-        .nav-btn.active { background: #667eea; color: white; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; padding: 24px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .header-left h1 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .header-left h1 span { background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .header-right { display: flex; gap: 16px; align-items: center; font-size: 13px; color: rgba(255,255,255,0.8); }
+        .header-right .dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; display: inline-block; margin-right: 4px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .nav { background: var(--card); padding: 0 20px; display: flex; gap: 2px; border-bottom: 1px solid var(--border); overflow-x: auto; white-space: nowrap; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .nav-btn { padding: 14px 16px; border: none; background: transparent; cursor: pointer; font-size: 13px; color: var(--text-muted); border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; font-weight: 500; }
+        .nav-btn:hover { color: var(--text); background: #f5f5f5; }
+        .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        .refresh-bar { background: var(--card); padding: 8px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+        .refresh-btn { background: var(--primary); color: white; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+        .refresh-btn:hover { background: var(--primary-dark); }
+        .auto-badge { background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .container { max-width: 1300px; margin: 20px auto; padding: 0 20px; }
         .page { display: none; }
-        .page.active { display: block; }
-        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .card h2 { font-size: 18px; margin-bottom: 15px; color: #333; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; }
-        .stat-card h3 { font-size: 14px; opacity: 0.9; margin-bottom: 10px; }
-        .stat-card .value { font-size: 28px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f5f5f5; font-weight: 600; }
-        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-        .badge-pc { background: #e3f2fd; color: #1976d2; }
+        .page.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card h3 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 500; }
+        .stat-card .value { font-size: 32px; font-weight: 700; color: var(--text); }
+        .stat-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .stat-card.accent { border-left-color: var(--accent); }
+        .stat-card.success { border-left-color: var(--success); }
+        .stat-card.warning { border-left-color: var(--warning); }
+        .card { background: var(--card); border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+        .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 900px) { .card-row { grid-template-columns: 1fr; } }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: #f8f9fa; font-weight: 600; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        tr:hover td { background: #fafbfc; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+        .badge-pc { background: #e3f2fd; color: #1565c0; }
         .badge-phone { background: #f3e5f5; color: #7b1fa2; }
-        .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .badge-online { background: #e8f5e9; color: #2e7d32; }
+        .badge-offline { background: #f5f5f5; color: #999; }
+        .badge-plugin { background: #e8f5e9; color: #2e7d32; }
+        .badge-phone-src { background: #fff3e0; color: #e65100; }
+        .badge-crm { background: #e8eaf6; color: #283593; }
+        .badge-ok { background: #e8f5e9; color: #2e7d32; }
+        .badge-mismatch { background: #fbe9e7; color: #c62828; }
+        .btn { padding: 6px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s; }
+        .btn-sm { padding: 4px 10px; font-size: 11px; }
         .btn-danger { background: #f44336; color: white; }
         .btn-danger:hover { background: #d32f2f; }
-        .refresh-btn { background: #4caf50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; float: right; }
-        .refresh-btn:hover { background: #45a049; }
-        .log-container { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; font-family: monospace; max-height: 500px; overflow-y: auto; font-size: 13px; }
-        .log-line { margin-bottom: 5px; }
-        .setting-item { margin-bottom: 15px; }
-        .setting-item label { display: block; margin-bottom: 5px; font-weight: 600; }
-        .setting-item input { padding: 8px; width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 4px; }
-        .save-btn { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-        .save-btn:hover { background: #45a049; }
-        .empty-state { text-align: center; padding: 40px; color: #999; }
-        /* 上门记录样式 */
-        .visit-filters { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
-        .visit-filters .filter-group { display: flex; flex-direction: column; gap: 4px; }
-        .visit-filters .filter-group label { font-size: 13px; font-weight: 600; color: #555; }
-        .visit-filters .filter-group input, .visit-filters .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-        .visit-filters .filter-group input[type="date"] { min-width: 150px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { background: #f5f5f5; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover { background: #43a047; }
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end; }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+        .filter-group input, .filter-group select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 120px; transition: border 0.2s; }
+        .filter-group input:focus, .filter-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+        .log-container { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; max-height: 520px; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+        .log-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+        .log-line.warn { color: #f39c12; }
+        .log-line.error { color: #e74c3c; }
+        .log-line.info { color: #3498db; }
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .pagination { display: flex; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; color: var(--text-muted); }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-overlay.active { display: flex; }
-        .modal { background: white; border-radius: 8px; padding: 30px; min-width: 450px; max-width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
-        .modal h3 { margin-bottom: 20px; font-size: 18px; }
-        .modal .form-group { margin-bottom: 15px; }
-        .modal .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 13px; color: #555; }
-        .modal .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .modal { background: white; border-radius: 12px; padding: 28px; min-width: 440px; max-width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .modal h3 { margin-bottom: 20px; font-size: 17px; }
+        .modal .form-group { margin-bottom: 14px; }
+        .modal .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
+        .modal .form-group input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+        .modal .form-group input:focus { outline: none; border-color: var(--primary); }
         .modal .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-        .btn-primary { background: #667eea; color: white; }
-        .btn-primary:hover { background: #5a6fd6; }
-        .btn-cancel { background: #e0e0e0; color: #333; }
-        .btn-cancel:hover { background: #ccc; }
-        .badge-plugin { background: #e8f5e9; color: #2e7d32; }
-        .badge-phone { background: #fff3e0; color: #e65100; }
+        .setting-item { margin-bottom: 16px; }
+        .setting-item label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 12px; color: var(--text-muted); text-transform: uppercase; }
+        .setting-item input, .setting-item select { padding: 9px 12px; width: 100%; max-width: 400px; border: 1px solid var(--border); border-radius: 6px; }
+        .highlight-mismatch { background: rgba(244,67,54,0.06); }
+        .chart-wrap { position: relative; height: 260px; width: 100%; }
+        .chart-wrap-sm { position: relative; height: 220px; width: 100%; }
+        .search-box { display: flex; gap: 8px; margin-bottom: 12px; }
+        .search-box input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+        .search-box input:focus { outline: none; border-color: var(--primary); }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #666; margin-right: 4px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🚀 AutoDial 云中转服务器</h1>
-        <p>版本 2.0.0 | 端口 <span id="port">-</span> | 运行时间: <span id="uptime">-</span></p>
+        <div class="header-left">
+            <h1>🚀 AutoDial <span>云中转</span></h1>
+            <div style="font-size:12px;opacity:0.7;margin-top:2px;">管理面板 v4.10</div>
+        </div>
+        <div class="header-right">
+            <span><span class="dot"></span> 运行中</span>
+            <span>端口: <strong id="hdr-port">-</strong></span>
+            <span>运行: <strong id="hdr-uptime">-</strong></span>
+            <span>连接: <strong id="hdr-conn">0</strong></span>
+        </div>
     </div>
 
     <div class="nav">
         <button class="nav-btn active" onclick="showPage('dashboard')">📊 仪表盘</button>
-        <button class="nav-btn" onclick="showPage('clients')">👥 客户端管理</button>
+        <button class="nav-btn" onclick="showPage('clients')">👥 客户端</button>
+        <button class="nav-btn" onclick="showPage('calls')">📞 通话记录</button>
+        <button class="nav-btn" onclick="showPage('devices')">📱 设备管理</button>
         <button class="nav-btn" onclick="showPage('stats')">📈 流量统计</button>
-        <button class="nav-btn" onclick="showPage('logs')">📋 日志记录</button>
-        <button class="nav-btn" onclick="showPage('settings')">⚙️ 设置</button>
+        <button class="nav-btn" onclick="showPage('logs')">📋 日志</button>
         <button class="nav-btn" onclick="showPage('visits')">🏠 上门记录</button>
+        <button class="nav-btn" onclick="showPage('phonestats')">📊 对账面板</button>
         <button class="nav-btn" onclick="showPage('pins')">👤 PIN管理</button>
-        <button class="refresh-btn" onclick="refreshAll()">🔄 刷新数据</button>
+        <button class="nav-btn" onclick="showPage('settings')">⚙️ 设置</button>
+    </div>
+
+    <div class="refresh-bar">
+        <span>🔄 自动刷新: <span class="auto-badge" id="refresh-label">每30秒</span> &nbsp;|&nbsp; 上次刷新: <span id="last-refresh">-</span></span>
+        <button class="refresh-btn" onclick="refreshAll()">🔄 立即刷新</button>
     </div>
 
     <div class="container">
-        <!-- 仪表盘页面 -->
+        <!-- 仪表盘 -->
         <div id="page-dashboard" class="page active">
             <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>当前连接数</h3>
-                    <div class="value" id="stat-connections">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>PIN 组数</h3>
-                    <div class="value" id="stat-groups">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>总消息数</h3>
-                    <div class="value" id="stat-messages">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>总流量</h3>
-                    <div class="value" id="stat-bytes">0 MB</div>
-                </div>
+                <div class="stat-card"><h3>当前连接数</h3><div class="value" id="stat-connections">0</div><div class="sub">WS 长连接</div></div>
+                <div class="stat-card accent"><h3>PIN 组数</h3><div class="value" id="stat-groups">0</div><div class="sub">活跃配对组</div></div>
+                <div class="stat-card success"><h3>总消息数</h3><div class="value" id="stat-messages">0</div><div class="sub">累计转发</div></div>
+                <div class="stat-card warning"><h3>总流量</h3><div class="value" id="stat-bytes">0</div><div class="sub">上行+下行</div></div>
+                <div class="stat-card"><h3>在线PC</h3><div class="value" id="stat-pcs">0</div></div>
+                <div class="stat-card accent"><h3>在线手机</h3><div class="value" id="stat-phones">0</div></div>
+            </div>
+
+            <div class="card-row">
+                <div class="card"><h2>📈 连接数趋势（最近4小时）</h2><div class="chart-wrap"><canvas id="conn-chart"></canvas></div></div>
+                <div class="card"><h2>🍩 消息类型分布</h2><div class="chart-wrap-sm"><canvas id="msg-chart"></canvas></div></div>
             </div>
 
             <div class="card">
                 <h2>📋 最近连接的客户端</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>设备名称</th>
-                            <th>角色</th>
-                            <th>PIN 码</th>
-                            <th>IP 地址</th>
-                            <th>连接时间</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recent-clients">
-                        <tr><td colspan="5" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
+                <table><thead><tr><th>设备名称</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th></tr></thead>
+                <tbody id="recent-clients"><tr><td colspan="5" class="empty-state">加载中...</td></tr></tbody></table>
             </div>
         </div>
 
-        <!-- 客户端管理页面 -->
+        <!-- 客户端管理 -->
         <div id="page-clients" class="page">
             <div class="card">
-                <h2>👥 所有客户端 (<span id="client-count">0</span>)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>设备名称</th>
-                            <th>角色</th>
-                            <th>PIN 码</th>
-                            <th>IP 地址</th>
-                            <th>连接时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="clients-list">
-                        <tr><td colspan="6" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
+                <h2>👥 在线客户端 (<span id="client-count">0</span>)</h2>
+                <div class="filters">
+                    <div class="filter-group"><label>角色筛选</label><select id="client-role-filter" onchange="loadClients()"><option value="">全部</option><option value="pc">PC</option><option value="phone">手机</option></select></div>
+                    <div class="filter-group"><label>搜索</label><input type="text" id="client-search" placeholder="设备名/PIN/IP..." oninput="loadClients()"></div>
+                </div>
+                <table><thead><tr><th>设备名称</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th><th>上次消息</th><th>操作</th></tr></thead>
+                <tbody id="clients-list"><tr><td colspan="7" class="empty-state">加载中...</td></tr></tbody></table>
             </div>
         </div>
 
-        <!-- 流量统计页面 -->
+        <!-- 通话记录 -->
+        <div id="page-calls" class="page">
+            <div class="card">
+                <h2>📞 通话记录 (<span id="calls-total">0</span>条)</h2>
+                <div class="filters">
+                    <div class="filter-group"><label>设备筛选</label><select id="call-device-filter" onchange="loadCalls()"><option value="">全部设备</option></select></div>
+                    <div class="filter-group"><label>开始日期</label><input type="date" id="call-date-from" onchange="loadCalls()"></div>
+                    <div class="filter-group"><label>结束日期</label><input type="date" id="call-date-to" onchange="loadCalls()"></div>
+                    <div class="filter-group"><label>号码搜索</label><input type="text" id="call-number" placeholder="输入号码..." oninput="callSearchDebounce()"></div>
+                    <button class="refresh-btn" onclick="loadCalls()">🔄 查询</button>
+                    <button class="btn btn-success" onclick="exportCallsCSV()">📥 导出CSV</button>
+                </div>
+                <table><thead><tr><th>设备ID</th><th>号码</th><th>通话时间</th><th>时长(秒)</th><th>类型</th><th>SIM</th><th>模型</th><th>版本</th></tr></thead>
+                <tbody id="calls-list"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody></table>
+                <div class="pagination" id="calls-pagination"></div>
+            </div>
+        </div>
+
+        <!-- 设备管理 -->
+        <div id="page-devices" class="page">
+            <div class="card">
+                <h2>📱 已注册设备 (<span id="device-count">0</span>台)</h2>
+                <table><thead><tr><th>设备ID</th><th>状态</th><th>最后PIN</th><th>手机型号</th><th>App版本</th><th>IP</th><th>首次上线</th><th>最后在线</th></tr></thead>
+                <tbody id="devices-list"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody></table>
+            </div>
+        </div>
+
+        <!-- 流量统计 -->
         <div id="page-stats" class="page">
             <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>总消息数</h3>
-                    <div class="value" id="stats-total-messages">0</div>
-                </div>
-                <div class="stat-card">
-                    <h3>上传流量</h3>
-                    <div class="value" id="stats-bytes-sent">0 MB</div>
-                </div>
-                <div class="stat-card">
-                    <h3>下载流量</h3>
-                    <div class="value" id="stats-bytes-received">0 MB</div>
-                </div>
+                <div class="stat-card"><h3>总消息数</h3><div class="value" id="stats-total-msg">0</div></div>
+                <div class="stat-card accent"><h3>上行流量</h3><div class="value" id="stats-bytes-sent">0</div></div>
+                <div class="stat-card success"><h3>下行流量</h3><div class="value" id="stats-bytes-recvd">0</div></div>
             </div>
-
-            <div class="card">
-                <h2>📈 按天统计（最近7天）</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>日期</th>
-                            <th>消息数</th>
-                            <th>流量</th>
-                        </tr>
-                    </thead>
-                    <tbody id="daily-stats">
-                        <tr><td colspan="3" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
+            <div class="card-row">
+                <div class="card"><h2>📈 每日流量趋势</h2><div class="chart-wrap"><canvas id="daily-chart"></canvas></div></div>
+                <div class="card"><h2>👥 按PIN统计 Top 10</h2><div class="chart-wrap"><canvas id="pin-chart"></canvas></div></div>
             </div>
-
-            <div class="card">
-                <h2>📊 按 PIN 统计</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>PIN 码</th>
-                            <th>消息数</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pin-stats">
-                        <tr><td colspan="2" style="text-align: center; color: #999;">加载中...</td></tr>
-                    </tbody>
-                </table>
+            <div class="card"><h2>📋 每日明细</h2>
+                <table><thead><tr><th>日期</th><th>消息数</th><th>流量</th></tr></thead>
+                <tbody id="daily-stats"><tr><td colspan="3" class="empty-state">暂无数据</td></tr></tbody></table>
             </div>
         </div>
 
-        <!-- 日志记录页面 -->
+        <!-- 日志 -->
         <div id="page-logs" class="page">
             <div class="card">
-                <h2>📋 系统日志（最近100条）</h2>
-                <button class="refresh-btn" onclick="loadLogs()" style="margin-bottom: 15px;">🔄 刷新日志</button>
-                <div class="log-container" id="log-container">
-                    <div class="empty-state">加载中...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 设置页面 -->
-        <div id="page-settings" class="page">
-            <div class="card">
-                <h2>⚙️ 服务器设置</h2>
-                <div class="setting-item">
-                    <label>服务器端口（需重启生效）</label>
-                    <input type="number" id="setting-port" value="35430" min="1024" max="65535">
-                </div>
-                <div class="setting-item">
-                    <label>日志级别</label>
-                    <select id="setting-log-level" style="padding: 8px; width: 100%; max-width: 400px; border: 1px solid #ddd; border-radius: 4px;">
-                        <option value="INFO">INFO</option>
-                        <option value="DEBUG">DEBUG</option>
-                        <option value="ERROR">ERROR</option>
+                <h2>📋 系统日志</h2>
+                <div class="search-box">
+                    <input type="text" id="log-search" placeholder="搜索日志关键词..." oninput="loadLogs()">
+                    <select id="log-lines" onchange="loadLogs()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+                        <option value="100">最近100条</option>
+                        <option value="200">最近200条</option>
+                        <option value="500">最近500条</option>
+                        <option value="1000">最近1000条</option>
                     </select>
                 </div>
-                <button class="save-btn" onclick="saveSettings()">💾 保存设置</button>
-                <div id="settings-msg" style="margin-top: 10px;"></div>
+                <div class="log-container" id="log-container"><div class="empty-state">加载中...</div></div>
             </div>
         </div>
 
-        <!-- 上门记录页面 -->
+        <!-- 上门记录（保留原有功能） -->
         <div id="page-visits" class="page">
             <div class="card">
                 <h2>🏠 上门记录管理</h2>
-                <div class="visit-filters">
-                    <div class="filter-group">
-                        <label>业务员筛选</label>
-                        <select id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()">
-                            <option value="">不限（全部）</option>
-                            <option value="__group__">按分组筛选...</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>分组筛选</label>
-                        <select id="visit-filter-group" style="min-width:140px;display:none;" onchange="loadVisits()">
-                            <option value="">不限分组</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>开始日期</label>
-                        <input type="date" id="visit-filter-date-from" onchange="loadVisits()">
-                    </div>
-                    <div class="filter-group">
-                        <label>结束日期</label>
-                        <input type="date" id="visit-filter-date-to" onchange="loadVisits()">
-                    </div>
-                    <div class="filter-group">
-                        <label>来源筛选</label>
-                        <select id="visit-filter-source" onchange="loadVisits()">
-                            <option value="">全部</option>
-                            <option value="plugin">插件</option>
-                            <option value="phone">手机</option>
-                            <option value="unsynced">⚠ 未同步</option>
-                        </select>
-                    </div>
-                    <button class="refresh-btn" onclick="loadVisits()" style="margin-top: auto;">🔄 刷新</button>
-                    <button class="refresh-btn" onclick="exportCSV()" style="margin-top: auto; background: #4CAF50;">📥 导出CSV</button>
+                <div class="filters">
+                    <div class="filter-group"><label>业务员</label><select id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()"><option value="">不限（全部）</option><option value="__group__">按分组筛选...</option></select></div>
+                    <div class="filter-group"><label>分组</label><select id="visit-filter-group" style="min-width:140px;display:none;" onchange="loadVisits()"><option value="">不限分组</option></select></div>
+                    <div class="filter-group"><label>开始日期</label><input type="date" id="visit-filter-date-from" onchange="loadVisits()"></div>
+                    <div class="filter-group"><label>结束日期</label><input type="date" id="visit-filter-date-to" onchange="loadVisits()"></div>
+                    <div class="filter-group"><label>来源</label><select id="visit-filter-source" onchange="loadVisits()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">⚠ 未同步</option></select></div>
+                    <button class="refresh-btn" onclick="loadVisits()">🔄 刷新</button>
+                    <button class="btn btn-success" onclick="exportCSV()">📥 导出CSV</button>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>客户姓名</th>
-                            <th>客户手机号</th>
-                            <th>接待顾问</th>
-                            <th>事由</th>
-                            <th>来源</th>
-                            <th>CRM同步</th>
-                            <th>登记时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="visits-list">
-                        <tr><td colspan="9" style="text-align: center; color: #999;">请先输入 PIN 码查询</td></tr>
-                    </tbody>
-                </table>
+                <table><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>接待顾问</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
+                <tbody id="visits-list"><tr><td colspan="10" class="empty-state">请选择筛选条件</td></tr></tbody></table>
             </div>
+            <div class="card"><h2>📊 上门趋势（14天）</h2><div class="chart-wrap"><canvas id="visit-chart"></canvas></div></div>
+        </div>
+
+        <!-- 对账面板 -->
+        <div id="page-phonestats" class="page">
             <div class="card">
-                <h2>📊 上门趋势（最近14天）</h2>
-                <div style="height: 200px; position: relative;">
-                    <canvas id="visit-chart"></canvas>
-                </div>
+                <h2>📊 每日对账（服务端 vs 手机端）</h2>
+                <table><thead><tr><th>设备ID</th><th>日期</th><th>服务端-拨号</th><th>手机端-拨号</th><th>服务端-接通</th><th>手机端-接通</th><th>服务端-时长</th><th>手机端-时长</th><th>状态</th></tr></thead>
+                <tbody id="phonestats-list"><tr><td colspan="9" class="empty-state">加载中...</td></tr></tbody></table>
             </div>
         </div>
 
-        <!-- PIN管理页面 -->
+        <!-- PIN管理（保留原有功能） -->
         <div id="page-pins" class="page">
             <div class="card">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
                     <h2>👤 PIN 管理</h2>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                        <span>分组:</span>
-                        <select id="pin-group-filter" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;" onchange="loadPins()">
-                            <option value="">全部</option>
-                        </select>
-                        <input type="text" id="new-group-name" placeholder="新建分组" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;width:100px;">
-                        <button class="btn" style="background:#667eea;color:white;font-size:12px;" onclick="addGroup()">＋新建</button>
-                        <button class="btn btn-danger" style="font-size:12px;" onclick="delGroup()">🗑删分组</button>
+                        <span style="font-size:12px;color:var(--text-muted);">分组:</span>
+                        <select id="pin-group-filter" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;" onchange="loadPins()"><option value="">全部</option></select>
+                        <input type="text" id="new-group-name" placeholder="新建分组" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;width:100px;">
+                        <button class="btn btn-primary btn-sm" onclick="addGroup()">＋新建</button>
+                        <button class="btn btn-danger btn-sm" onclick="delGroup()">🗑删分组</button>
                     </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>PIN (手机号)</th>
-                            <th>姓名</th>
-                            <th>分组</th>
-                            <th>管理员</th>
-                            <th>更新时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pins-list">
-                        <tr><td colspan="6" style="text-align:center;color:#999;">加载中...</td></tr>
-                    </tbody>
+                <table><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>管理员</th><th>更新时间</th><th>操作</th></tr></thead>
+                <tbody id="pins-list"><tr><td colspan="6" class="empty-state">加载中...</td></tr></tbody></table>
+            </div>
+        </div>
+
+        <!-- 设置 -->
+        <div id="page-settings" class="page">
+            <div class="card">
+                <h2>⚙️ 服务器设置</h2>
+                <div class="setting-item"><label>服务器端口（需重启）</label><input type="number" id="setting-port" value="35430" min="1024" max="65535"></div>
+                <div class="setting-item"><label>日志级别（需重启）</label><select id="setting-log-level" style="padding:8px;width:100%;max-width:400px;border:1px solid var(--border);border-radius:6px;"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="ERROR">ERROR</option></select></div>
+                <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+                <div id="settings-msg" style="margin-top:10px;font-size:13px;"></div>
+            </div>
+            <div class="card">
+                <h2>📦 系统信息</h2>
+                <table><tr><td>服务版本</td><td><strong>4.10 (Enhanced Dashboard)</strong></td></tr>
+                <tr><td>API 端点</td><td><code id="api-url">-</code></td></tr>
+                <tr><td>数据库</td><td><code>visits.db (SQLite)</code></td></tr>
+                <tr><td>WebSocket</td><td>同端口 ping_interval=30s ping_timeout=90s</td></tr>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- 编辑弹窗 -->
+    <!-- 编辑弹窗（保留） -->
     <div class="modal-overlay" id="visit-edit-modal">
-        <div class="modal">
-            <h3>✏️ 编辑上门记录</h3>
+        <div class="modal"><h3>✏️ 编辑上门记录</h3>
             <input type="hidden" id="visit-edit-id">
-            <div class="form-group">
-                <label>客户姓名</label>
-                <input type="text" id="visit-edit-name" placeholder="客户姓名">
-            </div>
-            <div class="form-group">
-                <label>客户手机号</label>
-                <input type="text" id="visit-edit-mobile" placeholder="客户手机号">
-            </div>
-            <div class="form-group">
-                <label>接待顾问</label>
-                <input type="text" id="visit-edit-kefu_tel" placeholder="接待顾问姓名">
-            </div>
-            <div class="form-group">
-                <label>事由</label>
-                <input type="text" id="visit-edit-type" placeholder="事由（如：贷款咨询）">
-            </div>
-            <div class="form-actions">
-                <button class="btn btn-cancel" onclick="closeEditModal()">取消</button>
-                <button class="btn btn-primary" onclick="saveVisitEdit()">💾 保存</button>
-            </div>
+            <div class="form-group"><label>客户姓名</label><input type="text" id="visit-edit-name"></div>
+            <div class="form-group"><label>客户手机号</label><input type="text" id="visit-edit-mobile"></div>
+            <div class="form-group"><label>接待顾问</label><input type="text" id="visit-edit-kefu_tel"></div>
+            <div class="form-group"><label>事由</label><input type="text" id="visit-edit-type"></div>
+            <div class="form-actions"><button class="btn btn-outline" onclick="closeEditModal()">取消</button><button class="btn btn-primary" onclick="saveVisitEdit()">💾 保存</button></div>
         </div>
-    </div>
     </div>
 
     <script>
         const API_BASE = '';
         const VISIT_API_BASE = window.location.origin;
+        const REFRESH_INTERVAL = 15000;
+        let refreshTimer = null;
+        let lastRefresh = null;
 
-        function showPage(pageId) {
-            // 隐藏所有页面
+        // ==================== Chart instances ====================
+        let connChart = null, msgChart = null, dailyChart = null, pinChart = null, visitChart = null;
+
+        // ==================== Navigation ====================
+        function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            // 显示选中的页面
-            document.getElementById('page-' + pageId).classList.add('active');
-            document.querySelector(`.nav-btn[onclick="showPage('${pageId}')"]`).classList.add('active');
-            // 加载页面数据
-            if (pageId === 'dashboard') loadDashboard();
-            if (pageId === 'clients') loadClients();
-            if (pageId === 'stats') loadStats();
-            if (pageId === 'logs') loadLogs();
-            if (pageId === 'visits') { loadVisits(); loadPinDropdown(); }
-            if (pageId === 'pins') loadPins();
+            const page = document.getElementById('page-' + id);
+            if (page) page.classList.add('active');
+            const btn = document.querySelector(`.nav-btn[onclick="showPage('${id}')"]`);
+            if (btn) btn.classList.add('active');
+
+            if (id === 'dashboard') loadDashboard();
+            else if (id === 'clients') loadClients();
+            else if (id === 'calls') loadCalls();
+            else if (id === 'devices') loadDevices();
+            else if (id === 'stats') loadStats();
+            else if (id === 'logs') loadLogs();
+            else if (id === 'visits') { loadVisits(); loadPinDropdown(); setTimeout(renderVisitChart, 300); }
+            else if (id === 'phonestats') loadPhoneStats();
+            else if (id === 'pins') loadPins();
+            document.getElementById('api-url').textContent = VISIT_API_BASE;
         }
 
-        async function apiCall(endpoint) {
-            const res = await fetch(API_BASE + endpoint);
-            return await res.json();
+        // ==================== Helpers ====================
+        async function apiGet(url) {
+            try { const r = await fetch(API_BASE + url); return await r.json(); }
+            catch(e) { return null; }
         }
 
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        function fmtBytes(b) {
+            if (!b || b === 0) return '0 B';
+            const k = 1024, sizes = ['B','KB','MB','GB'];
+            const i = Math.floor(Math.log(b)/Math.log(k));
+            return parseFloat((b/Math.pow(k,i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        function formatUptime(seconds) {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
-            return `${h}小时 ${m}分钟 ${s}秒`;
+        function fmtUptime(s) {
+            const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+            return `${h}时${m}分${sec}秒`;
         }
 
+        function esc(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+        function escA(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+        function timeAgo(iso) {
+            if (!iso) return '-';
+            const d = (Date.now() - new Date(iso).getTime()) / 1000;
+            if (d < 60) return '刚刚';
+            if (d < 3600) return Math.floor(d/60) + '分钟前';
+            if (d < 86400) return Math.floor(d/3600) + '小时前';
+            return Math.floor(d/86400) + '天前';
+        }
+
+        const CALL_TYPES = {0:'未知', 1:'呼入', 2:'呼出', 3:'未接'};
+
+        // ==================== Dashboard ====================
         async function loadDashboard() {
-            const data = await apiCall('/api/status');
-            document.getElementById('port').textContent = data.port;
-            document.getElementById('uptime').textContent = formatUptime(data.uptime_seconds);
-            document.getElementById('stat-connections').textContent = data.total_connections;
-            document.getElementById('stat-groups').textContent = data.total_groups;
-            document.getElementById('stat-messages').textContent = data.total_messages;
-            document.getElementById('stat-bytes').textContent = formatBytes(data.total_bytes_sent + data.total_bytes_received);
-            // 最近客户端
+            const d = await apiGet('/api/status');
+            if (!d) return;
+            document.getElementById('hdr-port').textContent = d.port;
+            document.getElementById('hdr-uptime').textContent = fmtUptime(d.uptime_seconds);
+            document.getElementById('hdr-conn').textContent = d.total_connections;
+            document.getElementById('stat-connections').textContent = d.total_connections;
+            document.getElementById('stat-groups').textContent = d.total_groups;
+            document.getElementById('stat-messages').textContent = d.total_messages;
+            document.getElementById('stat-bytes').textContent = fmtBytes(d.total_bytes_sent + d.total_bytes_received);
+
+            // Connection history chart
+            const h = await apiGet('/api/history');
+            if (h && h.history && h.history.length > 1) {
+                let totalPcs = 0, totalPhones = 0;
+                h.history.forEach(p => { totalPcs += (p.pcs||0); totalPhones += (p.phones||0); });
+                document.getElementById('stat-pcs').textContent = h.history[h.history.length-1].pcs || 0;
+                document.getElementById('stat-phones').textContent = h.history[h.history.length-1].phones || 0;
+                renderConnChart(h.history);
+            }
+
+            // Message type chart
+            const s = await apiGet('/api/stats');
+            if (s && s.by_type) renderMsgChart(s.by_type);
+
+            // Recent clients
+            const c = await apiGet('/api/clients');
             const tbody = document.getElementById('recent-clients');
-            if (data.clients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
+            if (!c || !c.clients || c.clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无客户端连接</td></tr>';
             } else {
-                tbody.innerHTML = data.clients.slice(0, 10).map(c => `
-                    <tr>
-                        <td>${c.device_name}</td>
-                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
-                        <td>${c.pin}</td>
-                        <td>${c.ip}</td>
-                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = c.clients.slice(0, 10).map(cl => `<tr>
+                    <td><strong>${esc(cl.device_name)}</strong></td>
+                    <td><span class="badge badge-${cl.role}">${cl.role==='pc'?'PC':'手机'}</span></td>
+                    <td>${cl.pin}</td><td>${cl.ip}</td>
+                    <td>${new Date(cl.connected_at).toLocaleString('zh-CN')}</td>
+                </tr>`).join('');
             }
+
+            lastRefresh = new Date();
+            document.getElementById('last-refresh').textContent = lastRefresh.toLocaleTimeString('zh-CN');
         }
 
+        function renderConnChart(history) {
+            const ctx = document.getElementById('conn-chart');
+            if (!ctx) return;
+            if (connChart) connChart.destroy();
+            const labels = history.map(p => p.time.slice(11,16));
+            connChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: '总连接', data: history.map(p=>p.count), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
+                        { label: 'PC', data: history.map(p=>p.pcs||0), borderColor: '#2ecc71', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                        { label: '手机', data: history.map(p=>p.phones||0), borderColor: '#e74c3c', borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        function renderMsgChart(byType) {
+            const ctx = document.getElementById('msg-chart');
+            if (!ctx) return;
+            if (msgChart) msgChart.destroy();
+            const entries = Object.entries(byType).sort((a,b) => b[1]-a[1]);
+            const colors = ['#667eea','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#3498db','#e67e22','#95a5a6','#34495e'];
+            msgChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: entries.map(e=>e[0]), datasets: [{ data: entries.map(e=>e[1]), backgroundColor: entries.map((_,i)=>colors[i%colors.length]) }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: { size: 11 } } } } }
+            });
+        }
+
+        // ==================== Clients ====================
         async function loadClients() {
-            const data = await apiCall('/api/clients');
-            document.getElementById('client-count').textContent = data.clients.length;
+            const data = await apiGet('/api/clients');
+            const roleFilter = document.getElementById('client-role-filter')?.value || '';
+            const search = (document.getElementById('client-search')?.value || '').toLowerCase();
+            let clients = data?.clients || [];
+            if (roleFilter) clients = clients.filter(c => c.role === roleFilter);
+            if (search) clients = clients.filter(c => (c.device_name||'').toLowerCase().includes(search) || (c.pin||'').includes(search) || (c.ip||'').includes(search));
+            document.getElementById('client-count').textContent = clients.length;
             const tbody = document.getElementById('clients-list');
-            if (data.clients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">暂无客户端连接</td></tr>';
+            if (clients.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无在线客户端</td></tr>'; return; }
+            tbody.innerHTML = clients.map(c => `<tr>
+                <td><strong>${esc(c.device_name)}</strong></td>
+                <td><span class="badge badge-${c.role}">${c.role==='pc'?'PC':'手机'}</span></td>
+                <td>${c.pin}</td><td>${c.ip}</td>
+                <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
+                <td style="font-size:11px;color:var(--text-muted);">${timeAgo(c.connected_at)}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="kickClient('${c.pin}','${c.role}','${escA(c.device_name)}')">踢出</button></td>
+            </tr>`).join('');
+        }
+
+        async function kickClient(pin, role, name) {
+            if (!confirm(`确定要踢出 "${name}" (PIN: ${pin}) 吗？\n被踢出的设备需要重新连接。`)) return;
+            const r = await apiGet(`/api/v1/kick?pin=${encodeURIComponent(pin)}&role=${encodeURIComponent(role)}`);
+            if (r && r.ok) {
+                alert(`已踢出 ${r.kicked} 个连接`);
+                loadClients();
             } else {
-                tbody.innerHTML = data.clients.map(c => `
-                    <tr>
-                        <td>${c.device_name}</td>
-                        <td><span class="badge badge-${c.role}">${c.role === 'pc' ? 'PC' : '手机'}</span></td>
-                        <td>${c.pin}</td>
-                        <td>${c.ip}</td>
-                        <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
-                        <td><button class="btn btn-danger" onclick="kickClient('${c.pin}', '${c.role}', '${c.device_name}')">踢出</button></td>
-                    </tr>
-                `).join('');
+                alert('踢出失败，请重试');
             }
         }
 
-        async function kickClient(pin, role, deviceName) {
-            if (!confirm(`确定要踢出设备 "${deviceName}" 吗？`)) return;
-            alert('踢出功能暂未实现，请在后续版本中使用。');
+        // ==================== Calls ====================
+        let callsOffset = 0;
+        async function loadCalls() {
+            callsOffset = 0;
+            await _loadCallsInternal();
+        }
+        async function _loadCallsInternal() {
+            const device_id = document.getElementById('call-device-filter')?.value || '';
+            const date_from = document.getElementById('call-date-from')?.value || '';
+            const date_to = document.getElementById('call-date-to')?.value || '';
+            const number = document.getElementById('call-number')?.value || '';
+            let url = `/api/v1/calls?limit=50&offset=${callsOffset}`;
+            if (device_id) url += '&device_id=' + encodeURIComponent(device_id);
+            if (date_from) url += '&date_from=' + date_from;
+            if (date_to) url += '&date_to=' + date_to;
+            if (number) url += '&number=' + encodeURIComponent(number);
+
+            const d = await apiGet(url);
+            document.getElementById('calls-total').textContent = d?.total || 0;
+            const tbody = document.getElementById('calls-list');
+            if (!d || !d.calls || d.calls.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无通话记录</td></tr>';
+                document.getElementById('calls-pagination').innerHTML = '';
+                return;
+            }
+            tbody.innerHTML = d.calls.map(c => {
+                const dt = c.dial_time ? new Date(c.dial_time).toLocaleString('zh-CN') : '-';
+                return `<tr>
+                    <td title="${esc(c.device_id)}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.device_id?.slice(0,18)||'')}</td>
+                    <td><strong>${esc(c.number)}</strong></td>
+                    <td>${dt}</td>
+                    <td>${c.duration || 0}</td>
+                    <td>${CALL_TYPES[c.call_type] || '未知'}</td>
+                    <td>SIM${(c.sim_slot||0)+1}</td>
+                    <td style="font-size:11px;color:var(--text-muted);">${esc(c.device_model||'')}</td>
+                    <td style="font-size:11px;color:var(--text-muted);">${esc(c.app_version||'')}</td>
+                </tr>`;
+            }).join('');
+            const pag = document.getElementById('calls-pagination');
+            const totalPages = Math.ceil(d.total / d.limit);
+            pag.innerHTML = `
+                <button class="btn btn-outline btn-sm" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ${callsOffset===0?'disabled':''}>◀ 上一页</button>
+                <span>第 ${Math.floor(callsOffset/50)+1} / ${totalPages} 页 (共${d.total}条)</span>
+                <button class="btn btn-outline btn-sm" onclick="callsOffset+=50;_loadCallsInternal()" ${callsOffset+50>=d.total?'disabled':''}>下一页 ▶</button>`;
         }
 
+        let callSearchTimer = null;
+        function callSearchDebounce() { clearTimeout(callSearchTimer); callSearchTimer = setTimeout(loadCalls, 500); }
+
+        async function loadCallDeviceOptions() {
+            const d = await apiGet('/api/v1/devices');
+            if (!d || !d.devices) return;
+            const sel = document.getElementById('call-device-filter');
+            sel.innerHTML = '<option value="">全部设备</option>';
+            d.devices.forEach(dev => {
+                sel.innerHTML += `<option value="${escA(dev.device_id)}">${esc(dev.device_id?.slice(0,20))} (${esc(dev.device_model||'未知')})</option>`;
+            });
+        }
+
+        function exportCallsCSV() {
+            const rows = document.querySelectorAll('#calls-list tr');
+            if (rows.length===0 || rows[0].querySelectorAll('td').length < 7) { alert('无数据可导出'); return; }
+            let csv = '\uFEFF设备ID,号码,通话时间,时长(秒),类型,SIM卡,模型,版本\n';
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length < 8) return;
+                csv += Array.from(cells).slice(0,8).map(c => '"'+c.textContent.replace(/"/g,'""')+'"').join(',') + '\n';
+            });
+            const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = 'calls_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+        }
+
+        // ==================== Devices ====================
+        async function loadDevices() {
+            const d = await apiGet('/api/v1/devices');
+            document.getElementById('device-count').textContent = d?.devices?.length || 0;
+            const tbody = document.getElementById('devices-list');
+            if (!d || !d.devices || d.devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无已注册设备</td></tr>'; return;
+            }
+            tbody.innerHTML = d.devices.map(dev => `<tr>
+                <td title="${esc(dev.device_id)}" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>${esc(dev.device_id?.slice(0,24)||'')}</strong></td>
+                <td><span class="badge ${dev.is_online?'badge-online':'badge-offline'}">${dev.is_online?'🟢 在线':'⚫ 离线'}</span></td>
+                <td>${esc(dev.last_pin)}</td>
+                <td>${esc(dev.device_model||'未知')}</td>
+                <td>${esc(dev.app_version||'未知')}</td>
+                <td style="font-size:11px;">${esc(dev.current_ip||'-')}</td>
+                <td style="font-size:11px;">${dev.first_seen?new Date(dev.first_seen).toLocaleString('zh-CN'):'-'}</td>
+                <td style="font-size:11px;color:var(--text-muted);">${dev.last_seen?timeAgo(dev.last_seen):'-'}</td>
+            </tr>`).join('');
+        }
+
+        // ==================== Stats ====================
         async function loadStats() {
-            const data = await apiCall('/api/stats');
-            document.getElementById('stats-total-messages').textContent = data.total_messages;
-            document.getElementById('stats-bytes-sent').textContent = formatBytes(data.total_bytes_sent);
-            document.getElementById('stats-bytes-received').textContent = formatBytes(data.total_bytes_received);
-            // 按天统计
-            const tbody1 = document.getElementById('daily-stats');
-            if (data.daily.length === 0) {
-                tbody1.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">暂无数据</td></tr>';
+            const d = await apiGet('/api/stats');
+            if (!d) return;
+            document.getElementById('stats-total-msg').textContent = d.total_messages;
+            document.getElementById('stats-bytes-sent').textContent = fmtBytes(d.total_bytes_sent);
+            document.getElementById('stats-bytes-recvd').textContent = fmtBytes(d.total_bytes_received);
+            if (d.daily?.length) renderDailyChart(d.daily);
+            if (d.by_pin) renderPinChart(d.by_pin);
+            const tbody = document.getElementById('daily-stats');
+            if (!d.daily || d.daily.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-state">暂无数据</td></tr>';
             } else {
-                tbody1.innerHTML = data.daily.map(d => `
-                    <tr>
-                        <td>${d.date}</td>
-                        <td>${d.messages}</td>
-                        <td>${formatBytes(d.bytes)}</td>
-                    </tr>
-                `).join('');
-            }
-            // 按 PIN 统计
-            const tbody2 = document.getElementById('pin-stats');
-            const pins = Object.entries(data.by_pin);
-            if (pins.length === 0) {
-                tbody2.innerHTML = '<tr><td colspan="2" style="text-align: center; color: #999;">暂无数据</td></tr>';
-            } else {
-                tbody2.innerHTML = pins.map(([pin, count]) => `
-                    <tr>
-                        <td>${pin}</td>
-                        <td>${count}</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = d.daily.map(dd => `<tr><td>${dd.date}</td><td>${dd.messages}</td><td>${fmtBytes(dd.bytes)}</td></tr>`).join('');
             }
         }
 
+        function renderDailyChart(daily) {
+            const ctx = document.getElementById('daily-chart');
+            if (!ctx) return;
+            if (dailyChart) dailyChart.destroy();
+            dailyChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: daily.map(d=>d.date.slice(5)), datasets: [
+                    { label: '消息数', data: daily.map(d=>d.messages), backgroundColor: '#667eea', borderRadius: 4, yAxisID: 'y' },
+                    { label: '流量(MB)', data: daily.map(d=>(d.bytes/1048576).toFixed(2)), backgroundColor: '#2ecc71', borderRadius: 4, yAxisID: 'y1' }
+                ]},
+                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index' },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+                    scales: { y: { type: 'linear', position: 'left', title: { display: true, text: '消息数' } },
+                        y1: { type: 'linear', position: 'right', title: { display: true, text: 'MB' }, grid: { drawOnChartArea: false } } } }
+            });
+        }
+
+        function renderPinChart(byPin) {
+            const ctx = document.getElementById('pin-chart');
+            if (!ctx) return;
+            if (pinChart) pinChart.destroy();
+            const entries = Object.entries(byPin).sort((a,b)=>b[1]-a[1]).slice(0,10);
+            pinChart = new Chart(ctx, {
+                type: 'bar', indexAxis: 'y',
+                data: { labels: entries.map(e=>e[0]), datasets: [{ label: '消息数', data: entries.map(e=>e[1]), backgroundColor: entries.map((_,i)=>`hsl(${240-i*20},70%,60%)`), borderRadius: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+                    scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        // ==================== Logs ====================
         async function loadLogs() {
-            const data = await apiCall('/api/logs');
+            const n = document.getElementById('log-lines')?.value || '100';
+            const q = document.getElementById('log-search')?.value || '';
+            const d = await apiGet(`/api/logs?n=${n}&q=${encodeURIComponent(q)}`);
             const container = document.getElementById('log-container');
-            if (data.logs.length === 0) {
-                container.innerHTML = '<div class="empty-state">暂无日志记录</div>';
-            } else {
-                container.innerHTML = data.logs.map(line => `<div class="log-line">${line}</div>`).join('');
-                container.scrollTop = container.scrollHeight;
-            }
+            if (!d || !d.logs || d.logs.length === 0) { container.innerHTML = '<div class="empty-state">暂无日志</div>'; return; }
+            container.innerHTML = d.logs.map(line => {
+                let cls = ''; const l = line.toLowerCase();
+                if (l.includes('[error]') || l.includes('fail') || l.includes('error')) cls = 'error';
+                else if (l.includes('[warning]') || l.includes('warn')) cls = 'warn';
+                else if (l.includes('[info]')) cls = 'info';
+                return `<div class="log-line ${cls}">${esc(line)}</div>`;
+            }).join('');
+            container.scrollTop = container.scrollHeight;
         }
 
-        function saveSettings() {
-            const port = document.getElementById('setting-port').value;
-            const logLevel = document.getElementById('setting-log-level').value;
-            document.getElementById('settings-msg').innerHTML = '<span style="color: orange;">⚠️ 设置已保存（部分功能需重启生效）</span>';
-            setTimeout(() => {
-                document.getElementById('settings-msg').innerHTML = '';
-            }, 3000);
-        }
-
-        function refreshAll() {
-            const activePage = document.querySelector('.page.active');
-            if (activePage) {
-                const pageId = activePage.id.replace('page-', '');
-                showPage(pageId);
-            }
-        }
-
-        // 页面加载时自动加载仪表盘
-        loadDashboard();
-        // 每30秒自动刷新当前页面
-        setInterval(refreshAll, 30000);
-
-        // ========== 上门记录管理 ==========
-
+        // ==================== Visits (保留原功能) ====================
         async function loadVisits() {
-            const pinFilter = document.getElementById('visit-filter-pin').value;
-            const groupFilter = document.getElementById('visit-filter-group').value;
+            const pinFilter = document.getElementById('visit-filter-pin')?.value || '';
+            const groupFilter = document.getElementById('visit-filter-group')?.value || '';
             const tbody = document.getElementById('visits-list');
-
             let url = VISIT_API_BASE + '/api/v1/visits?';
-            if (groupFilter) {
-                url += 'group=' + encodeURIComponent(groupFilter);
-            } else if (pinFilter && pinFilter !== '__group__') {
-                url += 'pin=' + encodeURIComponent(pinFilter);
-            }
-
+            if (groupFilter) url += 'group=' + encodeURIComponent(groupFilter);
+            else if (pinFilter && pinFilter !== '__group__') url += 'pin=' + encodeURIComponent(pinFilter);
             try {
-                const res = await fetch(url);
-                const data = await res.json();
-                if (!Array.isArray(data)) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">查询失败</td></tr>';
-                    return;
-                }
-                // 日期和来源筛选
+                const res = await fetch(url); const data = await res.json();
+                if (!Array.isArray(data)) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">查询失败</td></tr>'; return; }
                 let filtered = data;
-                const dFrom = document.getElementById('visit-filter-date-from').value;
-                const dTo = document.getElementById('visit-filter-date-to').value;
-                const src = document.getElementById('visit-filter-source').value;
-                if (dFrom) filtered = filtered.filter(r => r.created_at >= dFrom);
-                if (dTo) filtered = filtered.filter(r => r.created_at <= dTo + 'T23:59:59');
+                const dFrom = document.getElementById('visit-filter-date-from')?.value || '';
+                const dTo = document.getElementById('visit-filter-date-to')?.value || '';
+                const src = document.getElementById('visit-filter-source')?.value || '';
+                // 日期筛选：优先按 CRM 来访时间，无则回退到登记时间
+                if (dFrom) filtered = filtered.filter(r => (r.visit_time || r.created_at) >= dFrom);
+                if (dTo) filtered = filtered.filter(r => (r.visit_time || r.created_at) <= dTo + 'T23:59:59');
                 if (src === 'unsynced') filtered = filtered.filter(r => !r.crm_synced);
                 else if (src) filtered = filtered.filter(r => r.source === src);
-
-                if (filtered.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">暂无记录</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = filtered.map(r => `
-                    <tr style="${r.crm_synced ? '' : 'background: rgba(244,67,54,0.08);'}">
-                        <td>${r.id}</td><td>${escHtml(r.name)}</td><td>${escHtml(r.mobile)}</td>
-                        <td>${escHtml(r.kefu_tel)}</td><td>${escHtml(r.visit_type)}</td>
-                        <td><span class="badge badge-${r.source==='phone'?'phone':'plugin'}">${r.source==='phone'?'手机':'插件'}</span></td>
-                        <td>${r.crm_synced?'<span style="color:#2ECC71;">✅ 已同步</span>':'<span style="color:#E74C3C;" title="未同步到CRM">⚠ 未同步</span>'}</td>
-                        <td>${r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-'}</td>
-                        <td><button class="btn btn-primary" style="margin-right:4px;" onclick="openEditModal(${r.id},'${escAttr(r.name)}','${escAttr(r.mobile)}','${escAttr(r.kefu_tel)}','${escAttr(r.visit_type)}')">编辑</button>
-                        <button class="btn btn-danger" onclick="deleteVisit(${r.id})">删除</button></td>
-                    </tr>`).join('');
-            } catch(e) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#f44336;">请求失败</td></tr>'; }
+                if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无记录</td></tr>'; return; }
+                tbody.innerHTML = filtered.map(r => `<tr style="${r.crm_synced?'':'background:rgba(244,67,54,0.06);'}">
+                    <td>${r.id}</td><td>${esc(r.name)}</td><td>${esc(r.mobile)}</td><td>${esc(r.kefu_tel)}</td><td>${esc(r.visit_type)}</td>
+                    <td><span class="badge badge-${r.source==='phone'?'phone-src':r.source==='crm_sync'?'crm':'plugin'}">${r.source==='phone'?'手机':r.source==='crm_sync'?'CRM同步':'插件'}</span></td>
+                    <td>${r.crm_synced?'<span style="color:#2ecc71;">✅</span>':'<span style="color:#e74c3c;">⚠ 未同步</span>'}</td>
+                    <td>${r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-'}</td>
+                    <td>${r.visit_time||'-'}</td>
+                    <td><button class="btn btn-primary btn-sm" onclick="openEditModal(${r.id},'${escA(r.name)}','${escA(r.mobile)}','${escA(r.kefu_tel)}','${escA(r.visit_type)}')">编辑</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteVisit(${r.id})">删除</button></td>
+                </tr>`).join('');
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state" style="color:#e74c3c;">请求失败</td></tr>'; }
         }
 
         async function loadPinDropdown() {
             const selPin = document.getElementById('visit-filter-pin');
             const selGrp = document.getElementById('visit-filter-group');
             try {
-                const r = await fetch(VISIT_API_BASE + '/api/v1/pins');
-                const d = await r.json();
+                const r = await fetch(VISIT_API_BASE + '/api/v1/pins'); const d = await r.json();
                 if (!d.ok) return;
-                // 保留前两个选项
                 selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
-                d.pins.forEach(p => { selPin.innerHTML += `<option value="${p.pin}">${escHtml(p.name)} (${p.pin})</option>`; });
-
-                // 加载分组下拉
-                const gr = await fetch(VISIT_API_BASE + '/api/v1/groups');
-                const gd = await gr.json();
+                d.pins.forEach(p => { selPin.innerHTML += `<option value="${p.pin}">${esc(p.name)} (${p.pin})</option>`; });
+                const gr = await fetch(VISIT_API_BASE + '/api/v1/groups'); const gd = await gr.json();
                 selGrp.innerHTML = '<option value="">不限分组</option>';
-                if (gd.groups) gd.groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
+                if (gd.groups) gd.groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${esc(g.name)}</option>`; });
             } catch(e) {}
         }
 
@@ -582,100 +702,16 @@
             loadVisits();
         }
 
-        // ===== PIN 管理 =====
-        async function loadPins() {
-            const tbody = document.getElementById('pins-list');
-            try {
-                const [pr, gr] = await Promise.all([
-                    fetch(VISIT_API_BASE + '/api/v1/pins').then(r => r.json()),
-                    fetch(VISIT_API_BASE + '/api/v1/groups').then(r => r.json())
-                ]);
-                if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">无数据</td></tr>'; return; }
-
-                // 更新分组下拉
-                const sel = document.getElementById('pin-group-filter');
-                sel.innerHTML = '<option value="">全部</option>';
-                const groups = gr.groups || [];
-                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
-                // 同步更新筛选下拉
-                const selGrp = document.getElementById('visit-filter-group');
-                if (selGrp) {
-                    selGrp.innerHTML = '<option value="">不限分组</option>';
-                    groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${escHtml(g.name)}</option>`; });
-                }
-
-                const groupFilter = sel.value;
-                let pins = pr.pins;
-                if (groupFilter) pins = pins.filter(p => p.group_id == groupFilter);
-                if (pins.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无PIN</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = pins.map(p => {
-                    const g = groups.find(g => g.id == p.group_id);
-                    return `<tr>
-                        <td>${p.pin}</td><td><strong>${escHtml(p.name)}</strong></td>
-                        <td><select onchange="setPinGroup('${p.pin}',this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
-                            <option value="">--</option>
-                            ${groups.map(g => `<option value="${g.id}" ${g.id==p.group_id?'selected':''}>${escHtml(g.name)}</option>`).join('')}
-                        </select></td>
-                        <td><button class="btn" style="background:${p.is_admin?'#f44336':'#667eea'};color:white;font-size:11px;" onclick="togglePinAdmin('${p.pin}')">${p.is_admin?'👑取消':'设为管理'}</button></td>
-                        <td style="font-size:11px;color:#999;">${p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-'}</td>
-                        <td></td>
-                    </tr>`;
-                }).join('');
-            } catch(e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#f44336;">加载失败</td></tr>'; }
-        }
-
-        async function togglePinAdmin(pin) {
-            const ck = await fetch(VISIT_API_BASE + '/api/v1/advisor/is_admin?pin=' + encodeURIComponent(pin)).then(r => r.json());
-            const ep = ck.is_admin ? 'del_admin' : 'set_admin';
-            await fetch(VISIT_API_BASE + '/api/v1/advisor/' + ep + '?pin=' + encodeURIComponent(pin));
-            loadPins();
-        }
-
-        async function setPinGroup(pin, gid) {
-            await fetch(VISIT_API_BASE + '/api/v1/pin/set_group?pin=' + encodeURIComponent(pin) + '&group_id=' + encodeURIComponent(gid));
-        }
-
-        async function addGroup() {
-            const name = document.getElementById('new-group-name').value.trim();
-            if (!name) { alert('请输入分组名'); return; }
-            await fetch(VISIT_API_BASE + '/api/v1/group/add?name=' + encodeURIComponent(name));
-            document.getElementById('new-group-name').value = '';
-            loadPins();
-        }
-
-        async function delGroup() {
-            const gid = document.getElementById('pin-group-filter').value;
-            if (!gid) { alert('请先选择要删除的分组'); return; }
-            if (!confirm('删除分组不会删除PIN数据，仅取消关联。确定？')) return;
-            await fetch(VISIT_API_BASE + '/api/v1/group/del?id=' + encodeURIComponent(gid));
-            loadPins();
-        }
-
-        function escHtml(s) {
-            if (!s) return '';
-            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        function escAttr(s) {
-            if (!s) return '';
-            return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-        }
-
-        function openEditModal(id, name, mobile, kefu_tel, visit_type) {
+        function openEditModal(id, name, mobile, kefu_tel, type) {
             document.getElementById('visit-edit-id').value = id;
             document.getElementById('visit-edit-name').value = name;
             document.getElementById('visit-edit-mobile').value = mobile;
             document.getElementById('visit-edit-kefu_tel').value = kefu_tel;
-            document.getElementById('visit-edit-type').value = visit_type;
+            document.getElementById('visit-edit-type').value = type;
             document.getElementById('visit-edit-modal').classList.add('active');
         }
 
-        function closeEditModal() {
-            document.getElementById('visit-edit-modal').classList.remove('active');
-        }
+        function closeEditModal() { document.getElementById('visit-edit-modal').classList.remove('active'); }
 
         async function saveVisitEdit() {
             const id = parseInt(document.getElementById('visit-edit-id').value);
@@ -683,134 +719,149 @@
             const mobile = document.getElementById('visit-edit-mobile').value.trim();
             const kefu_tel = document.getElementById('visit-edit-kefu_tel').value.trim();
             const visit_type = document.getElementById('visit-edit-type').value.trim();
-
-            if (!name && !mobile && !kefu_tel && !visit_type) {
-                alert('请至少填写一个字段');
-                return;
-            }
-
+            if (!name && !mobile && !kefu_tel && !visit_type) { alert('请至少填写一个字段'); return; }
             try {
-                const params = new URLSearchParams({ id: id, name, mobile, kefu_tel, visit_type });
+                const params = new URLSearchParams({id, name, mobile, kefu_tel, visit_type});
                 const res = await fetch(VISIT_API_BASE + '/api/v1/visit/update?' + params.toString());
                 const data = await res.json();
-                if (data.ok) {
-                    closeEditModal();
-                    loadVisits();
-                } else {
-                    alert('更新失败: ' + (data.message || '未知错误'));
-                }
-            } catch (e) {
-                console.error('saveVisitEdit error:', e);
-                alert('请求失败，请检查网络');
-            }
+                if (data.ok) { closeEditModal(); loadVisits(); } else { alert('更新失败: ' + (data.message||'未知错误')); }
+            } catch(e) { alert('请求失败，请检查网络'); }
         }
 
         async function deleteVisit(id) {
-            if (!confirm('确定要删除这条上门记录吗？此操作不可撤销。')) return;
-
+            if (!confirm('确定删除此上门记录？不可撤销。')) return;
             try {
                 const res = await fetch(VISIT_API_BASE + '/api/v1/visit/delete?id=' + encodeURIComponent(id));
                 const data = await res.json();
-                if (data.ok) {
-                    loadVisits();
-                } else {
-                    alert('删除失败: ' + (data.message || '未知错误'));
-                }
-            } catch (e) {
-                console.error('deleteVisit error:', e);
-                alert('请求失败，请检查网络');
-            }
+                if (data.ok) loadVisits(); else alert('删除失败: ' + (data.message||'未知错误'));
+            } catch(e) { alert('请求失败'); }
         }
 
-        // ===== CSV 导出 =====
         function exportCSV() {
-            const tbody = document.getElementById('visits-list');
-            const rows = tbody.querySelectorAll('tr');
-            if (rows.length === 0 || rows[0].querySelectorAll('td').length < 8) {
-                alert('没有可导出的数据');
-                return;
-            }
-            let csv = '\uFEFFID,客户姓名,手机号,接待顾问,事由,来源,CRM同步,登记时间\n';
+            const rows = document.querySelectorAll('#visits-list tr');
+            if (rows.length===0 || rows[0].querySelectorAll('td').length < 8) { alert('无数据可导出'); return; }
+            let csv = '\uFEFFID,客户姓名,手机号,接待顾问,事由,来源,CRM同步,登记时间,来访时间\n';
             rows.forEach(row => {
                 const cells = row.querySelectorAll('td');
-                if (cells.length < 8) return;
-                const vals = [];
-                for (let i = 0; i < Math.min(cells.length, 8); i++) {
-                    let v = cells[i].textContent.replace(/,/g, '，').replace(/\n/g, ' ').trim();
-                    vals.push('"' + v + '"');
-                }
-                csv += vals.join(',') + '\n';
+                if (cells.length < 9) return;
+                csv += Array.from(cells).slice(0,9).map(c => '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"').join(',') + '\n';
             });
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'visits_' + new Date().toISOString().slice(0, 10) + '.csv';
-            a.click();
+            const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = 'visits_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
         }
 
-        // ===== 趋势图 =====
-        let chartInstance = null;
-
-        async function loadChart() {
-            if (document.getElementById('page-visits').classList.contains('active')) {
-                await renderChart();
-            }
-        }
-
-        async function renderChart() {
+        async function renderVisitChart() {
             try {
-                const res = await fetch(VISIT_API_BASE + '/api/v1/visits?');
-                const data = await res.json();
+                const res = await fetch(VISIT_API_BASE + '/api/v1/visits?'); const data = await res.json();
                 if (!Array.isArray(data)) return;
-
-                const ctx = document.getElementById('visit-chart').getContext('2d');
-                // 按天分组统计
+                const ctx = document.getElementById('visit-chart')?.getContext('2d');
+                if (!ctx) return;
                 const days = {};
-                for (let i = 13; i >= 0; i--) {
-                    const d = new Date();
-                    d.setDate(d.getDate() - i);
-                    const key = d.toISOString().slice(0, 10);
-                    days[key] = 0;
-                }
-                data.forEach(r => {
-                    if (!r.created_at) return;
-                    const key = r.created_at.slice(0, 10);
-                    if (days[key] !== undefined) days[key]++;
-                });
-
-                const labels = Object.keys(days).map(d => d.slice(5));
-                const values = Object.values(days);
-
-                if (chartInstance) chartInstance.destroy();
-                chartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: '上门数',
-                            data: values,
-                            backgroundColor: '#667eea',
-                            borderRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                        }
-                    }
-                });
+                for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); days[d.toISOString().slice(0,10)] = 0; }
+                data.forEach(r => { if (r.created_at) { const k = r.created_at.slice(0,10); if (days[k]!==undefined) days[k]++; } });
+                if (visitChart) visitChart.destroy();
+                visitChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(days).map(d=>d.slice(5)), datasets: [{ label:'上门数', data:Object.values(days), backgroundColor:'#667eea', borderRadius:4 }] },
+                    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} } });
             } catch(e) {}
         }
 
-        // 切换到上门记录页时渲染图表
-        const origShowPage = showPage;
-        showPage = function(id) {
-            origShowPage(id);
-            if (id === 'visits') setTimeout(renderChart, 200);
-        };
+        // ==================== Phone Stats ====================
+        async function loadPhoneStats() {
+            const d = await apiGet('/api/v1/phone-stats');
+            const tbody = document.getElementById('phonestats-list');
+            if (!d || !d.stats || d.stats.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无对账数据（需手机端上报）</td></tr>'; return;
+            }
+            tbody.innerHTML = d.stats.map(s => {
+                const isOk = s.match_status === 'OK';
+                return `<tr class="${isOk?'':'highlight-mismatch'}">
+                    <td title="${esc(s.device_id)}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.device_id?.slice(0,18)||'')}</td>
+                    <td>${s.date}</td>
+                    <td>${s.server_dial}</td><td>${s.phone_dial}</td>
+                    <td>${s.server_conn}</td><td>${s.phone_conn}</td>
+                    <td>${s.server_dur}s</td><td>${s.phone_dur}s</td>
+                    <td><span class="badge badge-${isOk?'ok':'mismatch'}">${isOk?'✅ OK':'⚠ MISMATCH'}</span></td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ==================== Pins (保留原功能) ====================
+        async function loadPins() {
+            const tbody = document.getElementById('pins-list');
+            try {
+                const [pr, gr] = await Promise.all([
+                    fetch(VISIT_API_BASE+'/api/v1/pins').then(r=>r.json()),
+                    fetch(VISIT_API_BASE+'/api/v1/groups').then(r=>r.json())
+                ]);
+                if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">无数据</td></tr>'; return; }
+                const sel = document.getElementById('pin-group-filter');
+                sel.innerHTML = '<option value="">全部</option>';
+                const groups = gr.groups || [];
+                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${esc(g.name)}</option>`; });
+                const groupFilter = sel.value;
+                let pins = pr.pins;
+                if (groupFilter) pins = pins.filter(p => p.group_id == groupFilter);
+                if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无PIN</td></tr>'; return; }
+                tbody.innerHTML = pins.map(p => {
+                    const g = groups.find(g => g.id == p.group_id);
+                    return `<tr><td>${p.pin}</td><td><strong>${esc(p.name)}</strong></td>
+                        <td><select onchange="setPinGroup('${p.pin}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;">
+                            <option value="">--</option>${groups.map(g=>`<option value="${g.id}" ${g.id==p.group_id?'selected':''}>${esc(g.name)}</option>`).join('')}
+                        </select></td>
+                        <td><button class="btn btn-sm" style="background:${p.is_admin?'#f44336':'#667eea'};color:white;" onclick="togglePinAdmin('${p.pin}')">${p.is_admin?'👑取消':'设为管理'}</button></td>
+                        <td style="font-size:11px;color:var(--text-muted);">${p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-'}</td><td></td></tr>`;
+                }).join('');
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:#e74c3c;">加载失败</td></tr>'; }
+        }
+
+        async function togglePinAdmin(pin) {
+            const ck = await fetch(VISIT_API_BASE+'/api/v1/advisor/is_admin?pin='+encodeURIComponent(pin)).then(r=>r.json());
+            await fetch(VISIT_API_BASE+'/api/v1/advisor/'+(ck.is_admin?'del_admin':'set_admin')+'?pin='+encodeURIComponent(pin));
+            loadPins();
+        }
+
+        async function setPinGroup(pin, gid) {
+            await fetch(VISIT_API_BASE+'/api/v1/pin/set_group?pin='+encodeURIComponent(pin)+'&group_id='+encodeURIComponent(gid));
+        }
+
+        async function addGroup() {
+            const name = document.getElementById('new-group-name').value.trim();
+            if (!name) { alert('请输入分组名'); return; }
+            await fetch(VISIT_API_BASE+'/api/v1/group/add?name='+encodeURIComponent(name));
+            document.getElementById('new-group-name').value = ''; loadPins();
+        }
+
+        async function delGroup() {
+            const gid = document.getElementById('pin-group-filter').value;
+            if (!gid) { alert('请选择要删除的分组'); return; }
+            if (!confirm('删除分组不会删除PIN数据，仅取消关联。确定？')) return;
+            await fetch(VISIT_API_BASE+'/api/v1/group/del?id='+encodeURIComponent(gid)); loadPins();
+        }
+
+        // ==================== Settings ====================
+        function saveSettings() {
+            document.getElementById('settings-msg').innerHTML = '<span style="color:#f39c12;">⚠️ 设置已保存提示（端口和日志级别需重启服务生效）</span>';
+            setTimeout(() => { document.getElementById('settings-msg').innerHTML = ''; }, 4000);
+        }
+
+        // ==================== Auto-refresh ====================
+        function refreshAll() {
+            const page = document.querySelector('.page.active');
+            if (!page) return;
+            const id = page.id.replace('page-', '');
+            showPage(id);
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(refreshAll, REFRESH_INTERVAL);
+        }
+
+        // ==================== Init ====================
+        loadDashboard();
+        loadCallDeviceOptions();
+        startAutoRefresh();
     </script>
 </body>
 </html>

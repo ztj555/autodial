@@ -1,6 +1,6 @@
 # AutoDial 浏览器插件端技术文档
 
-> 最后修改：2026-06-30 21:15 | MV3 v4.1.1 | 登记CRM直连 + 姓名自动检测 + 右键同步登记列表
+> 最后修改：2026-07-21 23:30 | MV3 v4.2 | 全链路同步修复 + 纯增量去重 + 自动翻页 + 右键一键同步
 
 ---
 
@@ -160,6 +160,47 @@ async function hangup() {
 - `rongxinhui.com` — 融信汇（备用域名）
 
 当检测到 CRM 页面时自动注入浮动按钮，非 CRM 页面不注入。
+
+### 4.4 同步登记列表（v4.2 全链路修复）
+
+**功能说明**：从 CRM 来访列表页全量抓取客户来访记录，批量同步到云中继，推送手机端。纯增量去重。
+
+**数据提取** (`extractVisits`):
+```
+form[name="fdsf"] ~ table tr  ← 数据表格（兄弟元素，非子元素）
+cells[0] = crm_id       cells[1] = name (去括号)
+cells[2] = mobile       cells[4] = visit_type
+cells[5] = advisor_phone  cells[6] = advisor_name
+cells[10] = visit_time  ← CRM 真实来访时间（v4.2 新增）
+```
+
+**自动翻页流程**:
+```
+第1页 → extractVisits(document)
+扫描分页链接 (page 2,3,4...) → 去重排序
+逐页 fetch(url, {credentials:'include'})
+  → DOMParser → extractVisits → 合并
+单页失败跳过继续（不中断整体）
+```
+
+**提交到云中继** (`batchSyncVisits`):
+```
+GET /api/v1/visit?name=&mobile=&kefu_tel=&visit_type=&visit_time=&source=crm_sync
+Header: X-AutoDial-PIN
+```
+
+**触发方式（v4.2 新增3个入口）**:
+| 入口 | 触发位置 | 行为 |
+|------|----------|------|
+| 🔁 右键菜单 | 任意 CRM 页面 | 自动跳转列表页 + 同步 |
+| 同步当前页 | 列表页右键 | 仅同步当前页 |
+| 🔁 扩展图标右键 | 工具栏 | 同上 |
+| Popup 按钮 | 扩展弹窗 | 同上 |
+
+**增量反馈**:
+```
+✅ 同步完成：共 120 条，新增 80 条，跳过 35 条（已存在），失败 5 条
+```
 
 ---
 

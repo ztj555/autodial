@@ -456,19 +456,58 @@ chrome.tabs.onRemoved.addListener(tabId => { delete tabPhones[tabId]; });
 
 // ==================== 右键菜单：同步登记列表 ====================
 
-chrome.contextMenus.create({
-  id: 'syncVisitList',
-  title: '同步登记列表',
-  contexts: ['page'],
-  documentUrlPatterns: ['*://guwen.zhudaicms.com/*']
+chrome.contextMenus.removeAll(() => {
+  // 1) 一键同步（任意 CRM 页面右键 → 自动跳转列表页并同步）
+  chrome.contextMenus.create({
+    id: 'oneClickSync',
+    title: '🔁 一键同步上门数据',
+    contexts: ['page'],
+    documentUrlPatterns: ['*://guwen.zhudaicms.com/*']
+  });
+
+  // 2) 同步当前页（仅在列表页显示，手动控制范围）
+  chrome.contextMenus.create({
+    id: 'syncVisitList',
+    title: '同步登记列表（当前页）',
+    contexts: ['page'],
+    documentUrlPatterns: ['*://guwen.zhudaicms.com/manage/kefu_reportformlist/*']
+  });
+
+  // 3) 扩展图标右键菜单
+  chrome.contextMenus.create({
+    id: 'oneClickSyncAction',
+    title: '🔁 一键同步上门数据',
+    contexts: ['action']
+  });
 });
 
+const VISIT_LIST_URL = 'https://guwen.zhudaicms.com/manage/kefu_reportformlist/list_user_visit.html';
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== 'syncVisitList') return;
-  chrome.tabs.sendMessage(tab.id, { type: 'syncVisitList' }, (resp) => {
-    // 通过 content-script 弹出 toast 显示结果
-    // 如果 content-script 已自行处理 toast，此处无需额外操作
-  });
+  const menuId = info.menuItemId;
+
+  // 一键同步：自动找到/打开列表页 → 触发 syncVisitList
+  if (menuId === 'oneClickSync' || menuId === 'oneClickSyncAction') {
+    chrome.tabs.query({ url: '*://guwen.zhudaicms.com/*' }, (tabs) => {
+      const target = tabs.find(t => t.url && t.url.includes('list_user_visit'));
+      if (target) {
+        chrome.tabs.update(target.id, { active: true });
+        chrome.tabs.sendMessage(target.id, { type: 'syncVisitList' });
+        return;
+      }
+      if (tabs.length > 0) {
+        chrome.tabs.update(tabs[0].id, { url: VISIT_LIST_URL, active: true });
+      } else {
+        chrome.tabs.create({ url: VISIT_LIST_URL });
+      }
+    });
+    return;
+  }
+
+  // 同步当前页（仅在列表页可用）
+  if (menuId === 'syncVisitList') {
+    chrome.tabs.sendMessage(tab.id, { type: 'syncVisitList' });
+  }
 });
 
 // 管理员检查 + 同步处理
@@ -493,21 +532,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const visits = msg.visits; // array of visit objects
     getCloudApi().then(apiUrl => {
       // 逐条提交（简单可靠）
-      let count = 0;
+      let synced = 0;
+      let skipped = 0;
+      let failed = 0;
       const promises = visits.map(v => {
         const params = new URLSearchParams({
           name: v.name, mobile: v.mobile,
           kefu_tel: v.advisor_name || pin,
           visit_type: v.visit_type || '贷款咨询',
+          visit_time: v.visit_time || '',
           source: 'crm_sync'
         });
         return fetch(`${apiUrl}/api/v1/visit?${params.toString()}`, {
           headers: { 'X-AutoDial-PIN': pin }
-        }).then(r => r.json()).then(d => { if (d.ok) count++; });
+        }).then(r => r.json()).then(d => {
+          if (d.skipped) { skipped++; }
+          else if (d.ok) { synced++; }
+          else { failed++; }
+        }).catch(() => { failed++; });
       });
-      return Promise.all(promises).then(() => count);
-    }).then(count => {
-      sendResponse({ ok: true, synced: count, total: visits.length });
+      return Promise.all(promises).then(() => ({ synced, skipped, failed, total: visits.length }));
+    }).then(r => {
+      sendResponse({ ok: true, synced: r.synced, skipped: r.skipped, failed: r.failed, total: r.total });
     }).catch(e => {
       sendResponse({ ok: false, error: e.message });
     });
@@ -516,7 +562,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // popup 点击"同步登记列表"按钮 → 找到 CRM tab 并发送消息
   if (msg.type === 'triggerSync') {
-    const VISIT_LIST_URL = 'https://guwen.zhudaicms.com/manage/kefu_reportformlist/list_user_visit.html';
     chrome.tabs.query({ url: '*://guwen.zhudaicms.com/*' }, (tabs) => {
       // 1) 没有 CRM 页面 → 打开新标签页到登记列表
       if (tabs.length === 0) {

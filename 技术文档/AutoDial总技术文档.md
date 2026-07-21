@@ -1,6 +1,6 @@
 # AutoDial 技术文档（当前版本）
 
-> 最后修改：2026-06-30 21:15 | v4.1.1 | 登记kid适配 + 云端管理面板 + 姓名检测 + PIN分组
+> 最后修改：2026-07-21 23:30 | v4.2 | 全链路同步修复 + 纯增量去重 + 自动翻页 + 右键一键同步
 
 ---
 
@@ -13,6 +13,8 @@
 | **云中继（主）** | **v2** | Python + websockets + SQLite | PIN（4位或11位手机号） |
 | **Chrome 扩展** | **v4.1.1** | MV3 + Service Worker | X-AutoDial-PIN Header |
 | **Android 端** | **v4.54** | Kotlin + HttpURLConnection | PIN + WS 双通道 |
+
+> **v4.2 新增**：全链路同步修复（3个Bug修复+自动翻页+纯增量去重+visit_time字段）、右键一键同步（3入口）、增量反馈toast、Web管理面板增强。
 
 > **v4.1.1 新增**：登记 CRM kid 适配（姓名→ID 两步提交）、云端管理面板重构（PIN/分组/管理员/未同步筛选/CSV导出/趋势图）、CRM 姓名自动检测（CSS选择器）、右键同步登记列表、手机端离线补推、云中继 advisor_names / admins / pin_groups 表。
 
