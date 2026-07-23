@@ -1,6 +1,6 @@
 # AutoDial v4 API 文档
 
-> 最后修改：2026-06-30 21:15 | 云中继端口 35430 | 4/11 位 PIN 兼容 | 含顾问管理/分组/PIN管理 API
+> 最后修改：2026-07-23 | 云中继端口 35430 | 4/11 位 PIN 兼容 | 管理员鉴权 | 含顾问管理/分组/PIN管理/鉴权 API
 
 ## REST API（云中继 35430）
 
@@ -175,3 +175,24 @@ Header: X-AutoDial-PIN: 13800138000
 ```
 
 > 短信仅支持 PC 直连模式。云端无短信转发端点（`process_request` 不接收 POST body）。
+
+---
+
+## 五、管理员鉴权 API 🔐
+
+管理接口（写操作）需管理员登录后方可调用。
+
+| 端点 | 说明 | 鉴权 |
+|------|------|------|
+| `GET /api/v1/login?user=&pass=` | 管理员登录，返回会话令牌（24h有效） | - |
+| `GET /api/v1/logout?token=` | 管理员登出 | - |
+| `GET /api/v1/advisor/set_admin?pin=&token=` | 设为管理员 | 🔐 |
+| `GET /api/v1/advisor/del_admin?pin=&token=` | 取消管理员 | 🔐 |
+| `GET /api/v1/pin/set_group?pin=&group_id=&token=` | 设置 PIN 分组 | 🔐 |
+| `GET /api/v1/group/add?name=&token=` | 添加分组 | 🔐 |
+| `GET /api/v1/group/del?id=&token=` | 删除分组 | 🔐 |
+| `GET /api/v1/visit/delete?id=&token=` | 删除访问记录 | 🔐 |
+| `GET /api/v1/visit/update?id=&name=&token=` | 更新访问记录 | 🔐 |
+| `GET /api/v1/kick?pin=&role=&token=` | 踢出在线客户端 | 🔐 |
+
+**启用方式**：设 `AUTODIAL_ADMIN_PASS` 环境变量。不设则调试模式，管理接口无需登录。

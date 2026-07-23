@@ -137,7 +137,7 @@ cloud_relay_v3.py (WS 35440)
 └── 双模握手：JWT 优先 → PIN 降级
 ```
 
-> **注意**：v3 模块代码保留但**不作为主中继**使用。主中继为 cloud_relay.py (v2 PIN-only)。v3 的 `requirements.txt` 中包含了 `bcrypt`、`PyJWT`、`aiosqlite` 等依赖，这些仅用于 v3 模块，主中继不需要。
+> **注意**：v3 模块代码保留但**不作为主中继**使用。主中继为 cloud_relay_v2.py (v4.10)。v3 的 `requirements.txt` 中包含了 `bcrypt`、`PyJWT`、`aiosqlite` 等依赖，这些仅用于 v3 模块，主中继不需要。
 
 ---
 
@@ -367,8 +367,8 @@ enum class ConnectionStrategy {
 | 扩展请求 | X-AutoDial-PIN Header | background.js |
 | Electron PC | `if (msg.pin !== PIN_CODE)` | main.js |
 | Go PC | 11 位手机号强校验 | server.go / app.go |
-| 云中继 REST | `is_valid_pin()`: 4 位纯数字 或 11 位手机号 | cloud_relay.py |
-| 云中继 WS | 同上 | cloud_relay.py |
+| 云中继 REST | `is_valid_pin()`: 4 位纯数字 或 11 位手机号 | cloud_relay_v2.py |
+| 云中继 WS | 同上 | cloud_relay_v2.py |
 | Android | 11 位数字强校验 | ConnectionManager.kt |
 
 ---
@@ -391,7 +391,7 @@ enum class ConnectionStrategy {
 
 | 组件 | 依赖 | 启动方式 |
 |------|------|---------|
-| 云中继 v2 | `websockets pystray Pillow` | `python cloud_relay.py` |
+| 云中继 v4.10 | `websockets pystray Pillow` | `python cloud_relay_v2.py` |
 | 云中继 v3（可选） | `+ aiosqlite bcrypt PyJWT` | `python cloud_relay_v3.py` |
 | Electron PC | Node.js + npm | `npm start` 或打包后 exe |
 | Go PC | Go 1.21+ | `wails build` → 单文件 exe |
