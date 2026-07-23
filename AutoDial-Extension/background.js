@@ -150,7 +150,7 @@ async function dial(phone, tabId) {
       const res = await fetch(`${PC_BASE}/dial?number=${encodeURIComponent(phone)}`);
       if (res.ok) {
         notifyTab(tabId, { type: 'dialResult', ok: true });
-        return;
+        return { success: true };
       }
     } catch {}
   }
@@ -163,7 +163,7 @@ async function dial(phone, tabId) {
       ? '服务器不可达 (端口35430)'
       : '未检测到坐席手机号，请打开 CRM 页面';
     notifyTab(tabId, { type: 'dialResult', ok: false, err });
-    return;
+    return { success: false, error: err };
   }
 
   try {
@@ -174,11 +174,13 @@ async function dial(phone, tabId) {
     if (d.code === 'PC_CONNECTED') {
       pcAvailable = true;
       notifyTab(tabId, { type: 'dialResult', ok: false, err: 'PC已上线，请重试' });
-      return;
+      return { success: false, error: 'PC已上线，请重试' };
     }
     notifyTab(tabId, { type: 'dialResult', ok: d.ok, err: d.message || '' });
+    return { success: d.ok, error: d.message || '' };
   } catch {
     notifyTab(tabId, { type: 'dialResult', ok: false, err: '网络错误，请检查云端服务器' });
+    return { success: false, error: '网络错误' };
   }
 }
 
@@ -302,25 +304,32 @@ async function lookupKidFromCrm(managerName) {
 
 async function hangup(tabId) {
   if (await isPcAlive()) {
-    try { await fetch(`${PC_BASE}/hangup`); return; } catch {}
+    try {
+      const r = await fetch(`${PC_BASE}/hangup`);
+      return { success: r.ok };
+    } catch {}
   }
   const pin = await getPin();
-  if (!pin) return;
+  if (!pin) return { success: false, error: 'PIN 未设置' };
   try {
     await fetch(`${await getCloudApi()}/api/v1/hangup`, {
       headers: { 'X-AutoDial-PIN': pin }
     });
-  } catch {}
+    return { success: true };
+  } catch {
+    return { success: false, error: '挂断请求失败' };
+  }
 }
 
 async function sendSms(phone, tabId) {
   if (await isPcAlive()) {
     try {
       const r = await fetch(`${PC_BASE}/sms?number=${encodeURIComponent(phone)}`);
-      if (r.ok) return;
+      return { success: r.ok };
     } catch {}
   }
   notifyTab(tabId, { type: 'dialResult', ok: false, err: '短信仅支持 PC 直连模式' });
+  return { success: false, error: '短信仅支持 PC 直连模式' };
 }
 
 // ==================== 辅助函数（与 v3.1 一致） ====================
@@ -359,9 +368,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
-  if (msg.type === 'dial') { dial(msg.phone, tabId); return true; }
-  if (msg.type === 'hangup') { hangup(tabId); return true; }
-  if (msg.type === 'sendSms') { sendSms(msg.phone, tabId); return true; }
+  if (msg.type === 'dial') { dial(msg.phone, tabId).then(sendResponse); return true; }
+  if (msg.type === 'hangup') { hangup(tabId).then(sendResponse); return true; }
+  if (msg.type === 'sendSms') { sendSms(msg.phone, tabId).then(sendResponse); return true; }
 
   // 一键登记
   if (msg.type === 'registerVisit') {

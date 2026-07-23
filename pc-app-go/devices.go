@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -36,7 +37,7 @@ var (
 	onUpdate     func()
 	pendAcks     = make(map[string]*AckEntry)
 	ackMu        sync.Mutex
-	msgCounter   int
+	msgCounter   atomic.Uint64
 	dialQueue    = make(map[string]*DialQueueEntry)
 	dialQueueMu  sync.Mutex
 

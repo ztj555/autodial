@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir websockets>=12.0 aiohttp>=3.11
 
 # 复制应用文件
-COPY python/cloud_relay.py .
+COPY python/cloud_relay_v2.py .
 COPY python/dashboard.html .
 RUN mkdir -p /app/data
 
@@ -27,15 +27,15 @@ RUN echo '#!/usr/bin/env python3' > /app/entrypoint.py && \
     echo 'sys.path.insert(0, "/app")' >> /app/entrypoint.py && \
     echo 'os.environ["APPDATA"] = "/app/data"' >> /app/entrypoint.py && \
     echo '' >> /app/entrypoint.py && \
-    echo 'from cloud_relay import run_server, log_info, log_error' >> /app/entrypoint.py && \
+    echo 'from cloud_relay_v2 import run_server, log' >> /app/entrypoint.py && \
     echo '' >> /app/entrypoint.py && \
     echo 'async def main():' >> /app/entrypoint.py && \
     echo '    try:' >> /app/entrypoint.py && \
     echo '        await run_server()' >> /app/entrypoint.py && \
     echo '    except KeyboardInterrupt:' >> /app/entrypoint.py && \
-    echo '        log_info("SERVER", None, "Received SIGTERM, shutting down...")' >> /app/entrypoint.py && \
+    echo '        log.info("Received SIGTERM, shutting down...")' >> /app/entrypoint.py && \
     echo '    except Exception as e:' >> /app/entrypoint.py && \
-    echo '        log_error("SERVER", None, f"Fatal: {e}")' >> /app/entrypoint.py && \
+    echo '        log.error(f"Fatal: {e}")' >> /app/entrypoint.py && \
     echo '        sys.exit(1)' >> /app/entrypoint.py && \
     echo '' >> /app/entrypoint.py && \
     echo 'if __name__ == "__main__":' >> /app/entrypoint.py && \

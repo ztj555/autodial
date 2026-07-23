@@ -30,7 +30,7 @@ func startHTTPServer() *http.Server {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(200)
 				return
@@ -64,14 +64,14 @@ func startHTTPServer() *http.Server {
 		} else {
 			// 手机不在线 → 尝试排队 + 云端唤醒
 			if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
-				// B9/B25修复: 仅当 activePin 非空时入队
-				if activePin != "" {
+				targetPin := activePin
+				if targetPin != "" {
 					dialQueueMu.Lock()
-					dialQueue[activePin] = &DialQueueEntry{
+					dialQueue[targetPin] = &DialQueueEntry{
 						Number: number,
 						Timer:  time.AfterFunc(DialQueueTimeout, func() {
 							dialQueueMu.Lock()
-							delete(dialQueue, activePin)
+							delete(dialQueue, targetPin)
 							dialQueueMu.Unlock()
 						}),
 					}
@@ -79,10 +79,10 @@ func startHTTPServer() *http.Server {
 				}
 				// Cloud wake
 				cloudWsMu.Lock()
-				if cloudWs != nil && activePin != "" {
+				if cloudWs != nil && targetPin != "" {
 					cloudWs.WriteJSON(map[string]interface{}{
 						"type":         "reconnect_request",
-						"targetDevice": activePin,
+						"targetDevice": targetPin,
 					})
 					queuedCloud = true
 				}
@@ -242,7 +242,7 @@ func startHTTPServer() *http.Server {
 	})
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", Port),
+		Addr:    fmt.Sprintf("127.0.0.1:%d", Port),
 		Handler: mux,
 	}
 	go func() {
@@ -475,8 +475,7 @@ func handleLocalWS(conn *websocket.Conn) {
 
 func sendToPhone(msgType string, msg map[string]interface{}) bool {
 	// Generate message ID for ACK tracking
-	msgID := fmt.Sprintf("%s-%d-%d", msgType, time.Now().UnixNano(), msgCounter)
-	msgCounter++
+	msgID := fmt.Sprintf("%s-%d-%d", msgType, time.Now().UnixNano(), msgCounter.Add(1))
 	msg["messageId"] = msgID
 
 	// Snapshot device websockets under lock, then do I/O outside lock

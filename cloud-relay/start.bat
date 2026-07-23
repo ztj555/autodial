@@ -19,9 +19,9 @@ if "%PYTHON%"=="" (
     exit /b 1
 )
 
-REM === Check cloud_relay.py ===
-if not exist "%EXE_DIR%\python\cloud_relay.py" (
-    echo [Error] python\cloud_relay.py not found.
+REM === Check cloud_relay_v2.py ===
+if not exist "%EXE_DIR%\python\cloud_relay_v2.py" (
+    echo [Error] python\cloud_relay_v2.py not found.
     pause
     exit /b 1
 )
@@ -48,7 +48,7 @@ goto :parse_args
 :start
 REM === Start server (no console output — quiet mode) ===
 set PYTHONUNBUFFERED=1
-"%PYTHON%" -B "%EXE_DIR%\python\cloud_relay.py" --port %PORT%
+"%PYTHON%" -B "%EXE_DIR%\python\cloud_relay_v2.py" --port %PORT%
 
 REM If python exits unexpectedly, pause for error reading
 pause

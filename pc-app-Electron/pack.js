@@ -1,5 +1,7 @@
 const https = require('https');
-// 强制跳过 SSL 证书验证（公司网络/代理环境）
+// 仅在 Electron 下载期间临时放行证书（企业代理环境）
+// ⚠️ 这是妥协方案，理想情况应在系统证书存储中安装受信任的企业 CA
+const oldReject = https.globalAgent.options.rejectUnauthorized;
 https.globalAgent.options.rejectUnauthorized = false;
 
 const { packager } = require('@electron/packager');
@@ -38,6 +40,8 @@ async function build() {
   } catch (err) {
     console.error('[Build] 打包失败:', err);
     process.exit(1);
+  } finally {
+    https.globalAgent.options.rejectUnauthorized = oldReject; // 恢复全局 TLS 校验
   }
 }
 

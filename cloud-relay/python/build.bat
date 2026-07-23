@@ -6,7 +6,7 @@ echo.
   --onefile ^
   --windowed ^
   --name "AutoDial-Cloud-Relay" ^
-  cloud_relay.py
+  cloud_relay_v2.py
 
 echo.
 echo Build complete! Output: dist\AutoDial-Cloud-Relay.exe

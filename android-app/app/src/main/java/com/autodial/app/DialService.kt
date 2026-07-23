@@ -730,7 +730,7 @@ class DialService : Service() {
                     android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.PHONE_ACCOUNT_ID),
                 "${android.provider.CallLog.Calls._ID} > ?",
                 arrayOf(lastSyncedCallId.toString()),
-                "${android.provider.CallLog.Calls._ID} ASC LIMIT 50"
+                "${android.provider.CallLog.Calls._ID} ASC LIMIT 20"
             ) ?: return
             val records = JSONArray()
             var maxId = lastSyncedCallId
@@ -753,6 +753,7 @@ class DialService : Service() {
             cursor.close()
             if (records.length() == 0) return
 
+            // 限制单批最多 20 条，避免 URL 超长（URL 约 4KB，20条约 2KB，远低于限制）
             val dataStr = java.net.URLEncoder.encode(records.toString(), "UTF-8")
             val urlStr = "$baseUrl/api/v1/calls/batch?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
                 "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&data=$dataStr"

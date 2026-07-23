@@ -440,9 +440,9 @@ function extractPhone(text) {
 
 function pollClipboard() {
   window.api.invoke('read-clipboard').then(d => {
-    if (d.text && d.text !== lastClipboard) {
-      lastClipboard = d.text;
-      const phone = extractPhone(d.text);
+    if (d && d !== lastClipboard) {
+      lastClipboard = d;
+      const phone = extractPhone(d);
       if (phone) {
         const fbInput = document.getElementById('fbInput');
         const fbDialBtn = document.getElementById('fbDialBtn');

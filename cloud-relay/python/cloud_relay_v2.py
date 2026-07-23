@@ -14,6 +14,7 @@ import threading
 import subprocess
 import time
 import sqlite3
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,6 +36,16 @@ for i, arg in enumerate(args):
             PORT = int(args[i + 1])
         except ValueError:
             pass
+
+# ==================== 管理鉴权 ====================
+# 设 AUTODIAL_ADMIN_PASS 环境变量启用鉴权，不设则跳过（调试/内网模式）
+ADMIN_USER = os.environ.get('AUTODIAL_ADMIN_USER', 'admin')
+ADMIN_PASS = os.environ.get('AUTODIAL_ADMIN_PASS', None)
+AUTH_ENABLED = ADMIN_PASS is not None
+if ADMIN_PASS:
+    print(f'[ADMIN] 鉴权已启用 | 账号: {ADMIN_USER}')
+else:
+    print(f'[ADMIN] 未设置 AUTODIAL_ADMIN_PASS，管理接口无需登录（调试模式）')
 
 # ==================== 日志 ====================
 log_file_path = None
@@ -845,6 +856,35 @@ def _err_json(code, message):
     """构造错误 JSON 响应体"""
     return json.dumps({'ok': False, 'code': code, 'message': message}, ensure_ascii=False).encode('utf-8')
 
+_AUTH_ERR = (401, JSON_HDR, _err_json('UNAUTHORIZED', '需要管理权限'))
+
+# 会话令牌管理（简单实现，重启全部失效）
+_admin_sessions = {}  # token -> expiry_timestamp
+
+def _check_admin(hdrs, parsed_query_string=''):
+    """验证管理权限。若未启用鉴权（未设 ADMIN_PASS），默认放行。"""
+    if not AUTH_ENABLED:
+        return True
+    # Authorization: Bearer <session_token>
+    auth = hdrs.get('authorization', '')
+    if auth.startswith('Bearer ') and auth[7:] in _admin_sessions:
+        if time.time() < _admin_sessions[auth[7:]]:
+            return True
+        else:
+            _admin_sessions.pop(auth[7:], None)  # 过期了，清理掉
+            return False
+    # 兼容 ?token=<session_token>（供浏览器使用）
+    if parsed_query_string:
+        qs = parse_qs(parsed_query_string)
+        token = qs.get('token', [''])[0]
+        if token in _admin_sessions:
+            if time.time() < _admin_sessions[token]:
+                return True
+            else:
+                _admin_sessions.pop(token, None)
+                return False
+    return False
+
 # ==================== 访问登记辅助函数 ====================
 
 def _lookup_kid(manager_name, brand='1833'):
@@ -1162,8 +1202,41 @@ async def health_check_handler(path, request_headers):
 
     # ===== 管理员标记 =====
 
+    # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
+    if path == '/api/v1/login':
+        if not AUTH_ENABLED:
+            return (200, JSON_HDR, json.dumps({'ok': True, 'token': 'noauth', 'note': '鉴权未启用'}).encode('utf-8'))
+        try:
+            body_len = int(hdrs.get('content-length', '0'))
+            if body_len > 0 and body_len < 4096:
+                # 尝试从请求体读取（websockets process_request 不支持 body，备用方案）
+                pass
+        except Exception:
+            pass
+        # 使用 ?user=xxx&pass=xxx 查询参数方式（兼容 websockets 框架）
+        qs = parse_qs(parsed.query)
+        user = qs.get('user', [''])[0].strip()
+        pwd = qs.get('pass', [''])[0].strip()
+        if user == ADMIN_USER and pwd == ADMIN_PASS:
+            token = uuid.uuid4().hex
+            _admin_sessions[token] = time.time() + 86400  # 24小时有效
+            log.info(f'ADMIN_LOGIN user={user}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'token': token}).encode('utf-8'))
+        return (401, JSON_HDR, _err_json('LOGIN_FAILED', '账号或密码错误'))
+
+    # 登出: GET /api/v1/logout?token=xxx
+    if path == '/api/v1/logout':
+        qs = parse_qs(parsed.query)
+        token = qs.get('token', [''])[0]
+        _admin_sessions.pop(token, None)
+        return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+
     # 检查是否为管理员: GET /api/v1/advisor/is_admin?pin=xxx
     if path == '/api/v1/advisor/is_admin':
+        # 如果带了 token，先验证令牌有效性（用于仪表盘检查登录状态）
+        if 'token' in parse_qs(parsed.query):
+            if not _check_admin(hdrs, parsed.query):
+                return _AUTH_ERR
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
@@ -1183,8 +1256,9 @@ async def health_check_handler(path, request_headers):
 
     # 管理员开关: GET /api/v1/advisor/set_admin?pin=xxx (设为管理)
     #          GET /api/v1/advisor/del_admin?pin=xxx (取消管理)
-    # 仪表盘手动操作，无权限校验
     if path == '/api/v1/advisor/set_admin':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
@@ -1206,6 +1280,8 @@ async def health_check_handler(path, request_headers):
                 conn.close()
 
     if path == '/api/v1/advisor/del_admin':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0].strip()
         if not pin:
@@ -1246,6 +1322,8 @@ async def health_check_handler(path, request_headers):
 
     # 设置 PIN 分组: GET /api/v1/pin/set_group?pin=xxx&group_id=N
     if path == '/api/v1/pin/set_group':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0].strip()
         gid = qs.get('group_id', [''])[0].strip()
@@ -1282,6 +1360,8 @@ async def health_check_handler(path, request_headers):
 
     # 添加分组: GET /api/v1/group/add?name=xxx
     if path == '/api/v1/group/add':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         name = qs.get('name', [''])[0].strip()
         if not name:
@@ -1303,6 +1383,8 @@ async def health_check_handler(path, request_headers):
 
     # 删除分组: GET /api/v1/group/del?id=N
     if path == '/api/v1/group/del':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         gid = qs.get('id', [''])[0]
         if not gid:
@@ -1541,6 +1623,8 @@ async def health_check_handler(path, request_headers):
 
     # 删除: GET /api/v1/visit/delete?id=N
     if path == '/api/v1/visit/delete':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         rid = qs.get('id', [''])[0]
         if not rid:
@@ -1563,6 +1647,8 @@ async def health_check_handler(path, request_headers):
 
     # 更新: GET /api/v1/visit/update?id=N&name=...&mobile=...&visit_type=...
     if path == '/api/v1/visit/update':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         rid = qs.get('id', [''])[0]
         if not rid:
@@ -1677,6 +1763,8 @@ async def health_check_handler(path, request_headers):
 
     # API: 踢出客户端 GET /api/v1/kick?pin=&role=
     if path == '/api/v1/kick':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0]
         role = qs.get('role', [''])[0]

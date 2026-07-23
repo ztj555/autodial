@@ -400,13 +400,21 @@ func (a *App) SendDial(number string) string {
 
 	// No phone connected — try cloud wake + queue
 	if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
+		// 锁定当前 activePin 为局部变量，避免定时器回调读取到切换后的新值
+		targetPin := activePin
+		if targetPin == "" {
+			pushToRenderer("error", map[string]interface{}{
+				"message": "发送失败：没有选中的手机",
+			})
+			return "error:no_device"
+		}
 		// Queue the dial for when phone reconnects
 		dialQueueMu.Lock()
-		dialQueue[activePin] = &DialQueueEntry{
+		dialQueue[targetPin] = &DialQueueEntry{
 			Number: number,
 			Timer: time.AfterFunc(DialQueueTimeout, func() {
 				dialQueueMu.Lock()
-				delete(dialQueue, activePin)
+				delete(dialQueue, targetPin)
 				dialQueueMu.Unlock()
 				pushToRenderer("dial-timeout", map[string]interface{}{
 					"number": number,
@@ -420,13 +428,13 @@ func (a *App) SendDial(number string) string {
 		if cloudWs != nil {
 			cloudWs.WriteJSON(map[string]interface{}{
 				"type":         "reconnect_request",
-				"targetDevice": activePin,
+				"targetDevice": targetPin,
 			})
 		}
 		cloudWsMu.Unlock()
 
 		pushToRenderer("dial-waking", map[string]interface{}{
-			"pin":    activePin,
+			"pin":    targetPin,
 			"number": number,
 		})
 		return "ok:waking"
