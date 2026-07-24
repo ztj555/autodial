@@ -260,14 +260,12 @@ async function registerVisit(name, phone, tabId, managerName) {
     console.warn('[AutoDial BG] Cloud relay unreachable:', e.message);
   }
 
-  // CRM 写入 + 云端记录，两者都成功才算成功
-  if (crmOk && cloudOk) {
+  // CRM 写入成功即为登记成功，云端同步失败不影响用户体验
+  if (crmOk) {
+    if (!cloudOk) console.warn('[AutoDial BG] Cloud sync skipped (server unreachable), CRM OK');
     return { success: true };
   }
-  if (crmOk && !cloudOk) {
-    return { success: false, error: '云端服务器同步失败' };
-  }
-  if (!crmOk && cloudOk) {
+  if (cloudOk) {
     return { success: false, error: 'CRM 提交失败，云端已暂存' };
   }
   return { success: false, error: crmErr || '登记失败' };
