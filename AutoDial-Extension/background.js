@@ -186,21 +186,24 @@ async function dial(phone, tabId) {
 
 // ==================== 一键登记（PIN 版） ====================
 
-async function registerVisit(name, phone, tabId) {
+async function registerVisit(name, phone, tabId, managerName) {
   const pin = await getPin();
   if (!pin) {
     notifyTab(tabId, { type: 'dialResult', ok: false, err: 'PIN未设置，请先打开CRM页面检测坐席手机号' });
     return { success: false, error: 'PIN未设置，请先打开CRM页面检测坐席手机号' };
   }
 
-  // 获取经理姓名（从存储中读取，与网页版对接）
-  const stored = await chrome.storage.local.get(['manager_name']);
-  const managerName = stored.manager_name || pin; // 兜底：没有姓名时用 PIN
+  // 获取经理姓名：优先使用弹窗传入的，否则从 storage 读取
+  let finalManagerName = managerName;
+  if (!finalManagerName) {
+    const stored = await chrome.storage.local.get(['manager_name']);
+    finalManagerName = stored.manager_name || pin; // 兜底：没有姓名时用 PIN
+  }
 
   // === 1) 直接提交到 CRM（姓名→kid→POST，不依赖云中继） ===
   let crmOk = false, crmErr = '';
   try {
-    const kid = await lookupKidFromCrm(managerName);
+    const kid = await lookupKidFromCrm(finalManagerName);
     if (kid) {
       const crmParams = new URLSearchParams({
         brand: '1833',
@@ -227,7 +230,7 @@ async function registerVisit(name, phone, tabId) {
         console.warn('[AutoDial BG] CRM direct FAIL:', crmErr);
       }
     } else {
-      crmErr = '未找到顾问「' + managerName + '」，请确认姓名与CRM一致';
+      crmErr = '未找到顾问「' + finalManagerName + '」，请确认姓名与CRM一致';
     }
   } catch (e) {
     crmErr = 'CRM 网络错误: ' + (e.message || '');
@@ -241,7 +244,7 @@ async function registerVisit(name, phone, tabId) {
     const params = new URLSearchParams({
       name: name,
       mobile: phone,
-      kefu_tel: managerName,
+      kefu_tel: finalManagerName,
       visit_type: '贷款咨询',
       source: 'plugin'
     });
@@ -298,6 +301,31 @@ async function lookupKidFromCrm(managerName) {
     console.warn('[AutoDial BG] lookupKid failed:', e.message);
   }
   return null;
+}
+
+/**
+ * 从 CRM 拉取全部顾问列表（用于一键登记弹窗下拉框）
+ */
+async function getConsultantList() {
+  try {
+    const params = new URLSearchParams({ keyword: '', brand: '1833' });
+    const res = await fetch('https://guwen.zhudaicms.com/bserve/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://guwen.zhudaicms.com',
+        'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
+      },
+      body: params.toString()
+    });
+    const data = await res.json();
+    if (data.code === 1 && data.data && data.data.length) {
+      return data.data.map(item => ({ id: String(item.id), name: item.name }));
+    }
+  } catch (e) {
+    console.warn('[AutoDial BG] getConsultantList failed:', e.message);
+  }
+  return [];
 }
 
 // ==================== 挂断 + 短信（PIN 版） ====================
@@ -374,7 +402,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // 一键登记
   if (msg.type === 'registerVisit') {
-    registerVisit(msg.name, msg.phone, tabId).then(r => sendResponse(r));
+    registerVisit(msg.name, msg.phone, tabId, msg.managerName).then(r => sendResponse(r));
+    return true;
+  }
+
+  // 获取顾问列表（用于一键登记下拉框）
+  if (msg.type === 'getConsultantList') {
+    getConsultantList().then(list => sendResponse({ list: list || [] }));
     return true;
   }
 

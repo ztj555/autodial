@@ -1474,7 +1474,10 @@
         '<div style="text-align:left;margin-bottom:16px;">' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户姓名：</span>' + escHtml(name) + '</div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户手机号：</span>' + escHtml(phone) + '</div>' +
-        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">接待顾问：</span>' + escHtml(mgrName || '未设置') + '</div>' +
+        '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">接待顾问：</span>' +
+        '<select id="autodial-register-manager" style="width:100%;padding:6px 8px;border:1px solid ' + t.text2 + ';border-radius:6px;background:' + t.bg + ';color:' + t.text + ';font-size:14px;box-sizing:border-box;margin-top:4px;">' +
+        '<option value="' + escHtml(mgrName || '') + '" selected>' + escHtml(mgrName || '加载中…') + '</option>' +
+        '</select></div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">事由：</span>贷款咨询</div>' +
         '</div>' +
         '<div style="display:flex;gap:12px;">' +
@@ -1486,15 +1489,38 @@
 
       document.body.appendChild(overlay);
 
+      // 异步拉取 CRM 顾问列表，填充下拉框
+      chrome.runtime.sendMessage({ type: 'getConsultantList' }, function(resp) {
+        var select = document.getElementById('autodial-register-manager');
+        if (!select) return; // 弹窗已被关闭
+        var list = (resp && resp.list) || [];
+        if (!list.length) return; // 拉取失败时保留默认选项
+        var html = '';
+        var mgrInList = false;
+        for (var i = 0; i < list.length; i++) {
+          var sel = (list[i].name === mgrName) ? ' selected' : '';
+          if (list[i].name === mgrName) mgrInList = true;
+          html += '<option value="' + escHtml(list[i].name) + '"' + sel + '>' + escHtml(list[i].name) + '</option>';
+        }
+        // 若当前姓名不在 CRM 列表中，保留为第一项
+        if (!mgrInList && mgrName) {
+          html = '<option value="' + escHtml(mgrName) + '" selected>' + escHtml(mgrName) + '</option>' + html;
+        }
+        select.innerHTML = html;
+      });
+
       document.getElementById('autodial-register-cancel').onclick = function() {
         overlay.remove();
       };
       document.getElementById('autodial-register-confirm').onclick = function() {
+        var mgrSelect = document.getElementById('autodial-register-manager');
+        var finalMgrName = mgrSelect ? mgrSelect.value.trim() : '';
         overlay.remove();
         chrome.runtime.sendMessage({
           type: 'registerVisit',
           name: name,
-          phone: phone
+          phone: phone,
+          managerName: finalMgrName || undefined
         }, function(resp) {
           if (resp && resp.success) {
             showToast('✅ 已登记 ' + name);
