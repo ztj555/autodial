@@ -832,7 +832,7 @@ app.whenReady().then(() => {
     }
   });
 
-  server.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '127.0.0.1', () => {
     console.log('');
     console.log('========================================');
     console.log('       AutoDial PC v6 已启动');
