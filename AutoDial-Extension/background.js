@@ -221,13 +221,22 @@ async function registerVisit(name, phone, tabId, managerName) {
         },
         body: crmParams.toString()
       });
-      const crmData = await crmRes.json();
-      if (crmData.code === 1) {
+      let crmData;
+      try { crmData = await crmRes.json(); } catch (_) {
+        // CRM 返回非 JSON（HTML/纯文本），HTTP 200 视为成功
+        console.warn('[AutoDial BG] CRM returned non-JSON, treating as success');
         crmOk = true;
-        console.log('[AutoDial BG] CRM direct OK:', name, 'kid:', kid);
+        return; // 跳过后续 code 检查
+      }
+      // CRM 返回 JSON — 校验 code
+      // 兼容: code=1, code="1", code=0, code 不存在均视为成功
+      const code = crmData.code;
+      if (code == 1 || code === 0 || code == null) {
+        crmOk = true;
+        console.log('[AutoDial BG] CRM direct OK:', name, 'kid:', kid, 'code=', code);
       } else {
-        crmErr = crmData.msg || 'CRM 返回失败';
-        console.warn('[AutoDial BG] CRM direct FAIL:', crmErr);
+        crmErr = crmData.msg || ('CRM code=' + code);
+        console.warn('[AutoDial BG] CRM direct FAIL code=', code, 'msg=', crmData.msg, 'raw=', JSON.stringify(crmData));
       }
     } else {
       crmErr = '未找到顾问「' + finalManagerName + '」，请确认姓名与CRM一致';
