@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoDial 云中转 - 管理面板 v4.10</title>
+    <title>AutoDial 云中转 - 管理面板 v5.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
@@ -40,12 +40,13 @@
         .page { display: none; }
         .page.active { display: block; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
         .stat-card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-2px); }
         .stat-card h3 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 500; }
         .stat-card .value { font-size: 32px; font-weight: 700; color: var(--text); }
         .stat-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .stat-card .sub-names { font-size: 13px; color: var(--primary); margin-top: 4px; font-weight: 500; }
         .stat-card.accent { border-left-color: var(--accent); }
         .stat-card.success { border-left-color: var(--success); }
         .stat-card.warning { border-left-color: var(--warning); }
@@ -57,6 +58,11 @@
         th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
         th { background: #f8f9fa; font-weight: 600; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
         tr:hover td { background: #fafbfc; }
+        tr.expandable { cursor: pointer; }
+        tr.expanded td { background: #f0f2ff; }
+        tr.expand-detail { display: none; }
+        tr.expand-detail.show { display: table-row; }
+        tr.expand-detail td { background: #f8f9ff; padding: 16px 20px; font-size: 12px; color: var(--text-muted); }
         .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
         .badge-pc { background: #e3f2fd; color: #1565c0; }
         .badge-phone { background: #f3e5f5; color: #7b1fa2; }
@@ -109,7 +115,13 @@
         .search-box input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
         .search-box input:focus { outline: none; border-color: var(--primary); }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #666; margin-right: 4px; }
-        /* 登录弹窗 */
+        .online-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+        .online-dot.on { background: #2ecc71; box-shadow: 0 0 4px rgba(46,204,113,0.5); }
+        .online-dot.off { background: #ccc; }
+        .history-table { width: 100%; font-size: 12px; }
+        .history-table th, .history-table td { padding: 6px 10px; }
+        .expand-arrow { display: inline-block; transition: transform 0.2s; font-size: 10px; margin-right: 4px; }
+        .expand-arrow.open { transform: rotate(90deg); }
         .login-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; justify-content: center; align-items: center; }
         .login-overlay.show { display: flex; }
         .login-box { background: var(--card); border-radius: 16px; padding: 40px 36px; width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
@@ -119,13 +131,14 @@
         .login-box input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; box-sizing: border-box; }
         .login-box button { width: 100%; padding: 12px; margin-top: 20px; background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
         .login-box .err { color: var(--danger); font-size: 12px; margin-top: 8px; display: none; }
+        .section-divider { border-top: 2px solid var(--border); margin: 28px 0 20px; padding-top: 8px; }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="header-left">
             <h1>🚀 AutoDial <span>云中转</span></h1>
-            <div style="font-size:12px;opacity:0.7;margin-top:2px;">管理面板 v4.10</div>
+            <div style="font-size:12px;opacity:0.7;margin-top:2px;">管理面板 v5.0</div>
         </div>
         <div class="header-right">
             <span><span class="dot"></span> 运行中</span>
@@ -136,15 +149,12 @@
     </div>
 
     <div class="nav">
-        <button class="nav-btn active" onclick="showPage('dashboard')">📊 仪表盘</button>
-        <button class="nav-btn" onclick="showPage('clients')">👥 客户端</button>
+        <button class="nav-btn active" onclick="showPage('dashboard')">📊 首页总览</button>
+        <button class="nav-btn" onclick="showPage('phones')">📱 手机管理</button>
         <button class="nav-btn" onclick="showPage('calls')">📞 通话记录</button>
-        <button class="nav-btn" onclick="showPage('devices')">📱 设备管理</button>
-        <button class="nav-btn" onclick="showPage('stats')">📈 流量统计</button>
-        <button class="nav-btn" onclick="showPage('logs')">📋 日志</button>
-        <button class="nav-btn" onclick="showPage('visits')">🏠 上门记录</button>
-        <button class="nav-btn" onclick="showPage('phonestats')">📊 对账面板</button>
-        <button class="nav-btn" onclick="showPage('pins')">👤 PIN管理</button>
+        <button class="nav-btn" onclick="showPage('visits')">🏠 上门登记</button>
+        <button class="nav-btn" onclick="showPage('pins')">👤 人员管理</button>
+        <button class="nav-btn" onclick="showPage('logs')">📋 系统日志</button>
         <button class="nav-btn" onclick="showPage('settings')">⚙️ 设置</button>
         <div style="flex:1"></div>
         <button class="nav-btn" id="login-btn" onclick="showLogin()" style="background:rgba(102,126,234,0.2);border:1px solid rgba(102,126,234,0.4);">🔐 管理员登录</button>
@@ -152,20 +162,19 @@
     </div>
 
     <div class="refresh-bar">
-        <span>🔄 自动刷新: <span class="auto-badge" id="refresh-label">每30秒</span> &nbsp;|&nbsp; 上次刷新: <span id="last-refresh">-</span></span>
+        <span>🔄 自动刷新: <span class="auto-badge" id="refresh-label">每15秒</span> &nbsp;|&nbsp; 上次刷新: <span id="last-refresh">-</span></span>
         <button class="refresh-btn" onclick="refreshAll()">🔄 立即刷新</button>
     </div>
 
     <div class="container">
-        <!-- 仪表盘 -->
+        <!-- ==================== 📊 首页总览 ==================== -->
         <div id="page-dashboard" class="page active">
             <div class="stats-grid">
-                <div class="stat-card"><h3>当前连接数</h3><div class="value" id="stat-connections">0</div><div class="sub">WS 长连接</div></div>
-                <div class="stat-card accent"><h3>PIN 组数</h3><div class="value" id="stat-groups">0</div><div class="sub">活跃配对组</div></div>
-                <div class="stat-card success"><h3>总消息数</h3><div class="value" id="stat-messages">0</div><div class="sub">累计转发</div></div>
-                <div class="stat-card warning"><h3>总流量</h3><div class="value" id="stat-bytes">0</div><div class="sub">上行+下行</div></div>
-                <div class="stat-card"><h3>在线PC</h3><div class="value" id="stat-pcs">0</div></div>
-                <div class="stat-card accent"><h3>在线手机</h3><div class="value" id="stat-phones">0</div></div>
+                <div class="stat-card"><h3>📞 今日拨号数</h3><div class="value" id="stat-today-dials">0</div><div class="sub">来自手机端上报</div></div>
+                <div class="stat-card accent"><h3>🏠 今日登记数</h3><div class="value" id="stat-today-visits">0</div><div class="sub">上门登记记录</div></div>
+                <div class="stat-card success"><h3>📱 在线手机</h3><div class="value" id="stat-phones">0</div></div>
+                <div class="stat-card warning"><h3>💻 在线PC</h3><div class="value" id="stat-pcs">0</div></div>
+                <div class="stat-card"><h3>👤 最近活跃</h3><div class="value" style="font-size:18px;" id="stat-active-names">-</div><div class="sub">最近连接的人员</div></div>
             </div>
 
             <div class="card-row">
@@ -180,20 +189,21 @@
             </div>
         </div>
 
-        <!-- 客户端管理 -->
-        <div id="page-clients" class="page">
+        <!-- ==================== 📱 手机管理 ==================== -->
+        <div id="page-phones" class="page">
             <div class="card">
-                <h2>👥 在线客户端 (<span id="client-count">0</span>)</h2>
+                <h2>📱 手机设备一览 (<span id="phone-count">0</span>台)</h2>
                 <div class="filters">
-                    <div class="filter-group"><label>角色筛选</label><select id="client-role-filter" onchange="loadClients()"><option value="">全部</option><option value="pc">PC</option><option value="phone">手机</option></select></div>
-                    <div class="filter-group"><label>搜索</label><input type="text" id="client-search" placeholder="设备名/PIN/IP..." oninput="loadClients()"></div>
+                    <div class="filter-group"><label>状态筛选</label><select id="phone-status-filter" onchange="loadPhones()"><option value="">全部</option><option value="online">🟢 在线</option><option value="offline">⚫ 离线</option></select></div>
+                    <div class="filter-group"><label>搜索</label><input type="text" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="loadPhones()"></div>
+                    <button class="refresh-btn" onclick="loadPhones()">🔄 刷新</button>
                 </div>
-                <table><thead><tr><th>设备名称</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th><th>上次消息</th><th>操作</th></tr></thead>
-                <tbody id="clients-list"><tr><td colspan="7" class="empty-state">加载中...</td></tr></tbody></table>
+                <table><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>型号</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th><th>操作</th></tr></thead>
+                <tbody id="phones-list"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody></table>
             </div>
         </div>
 
-        <!-- 通话记录 -->
+        <!-- ==================== 📞 通话记录 ==================== -->
         <div id="page-calls" class="page">
             <div class="card">
                 <h2>📞 通话记录 (<span id="calls-total">0</span>条)</h2>
@@ -211,53 +221,10 @@
             </div>
         </div>
 
-        <!-- 设备管理 -->
-        <div id="page-devices" class="page">
-            <div class="card">
-                <h2>📱 已注册设备 (<span id="device-count">0</span>台)</h2>
-                <table><thead><tr><th>设备ID</th><th>状态</th><th>最后PIN</th><th>手机型号</th><th>App版本</th><th>IP</th><th>首次上线</th><th>最后在线</th></tr></thead>
-                <tbody id="devices-list"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody></table>
-            </div>
-        </div>
-
-        <!-- 流量统计 -->
-        <div id="page-stats" class="page">
-            <div class="stats-grid">
-                <div class="stat-card"><h3>总消息数</h3><div class="value" id="stats-total-msg">0</div></div>
-                <div class="stat-card accent"><h3>上行流量</h3><div class="value" id="stats-bytes-sent">0</div></div>
-                <div class="stat-card success"><h3>下行流量</h3><div class="value" id="stats-bytes-recvd">0</div></div>
-            </div>
-            <div class="card-row">
-                <div class="card"><h2>📈 每日流量趋势</h2><div class="chart-wrap"><canvas id="daily-chart"></canvas></div></div>
-                <div class="card"><h2>👥 按PIN统计 Top 10</h2><div class="chart-wrap"><canvas id="pin-chart"></canvas></div></div>
-            </div>
-            <div class="card"><h2>📋 每日明细</h2>
-                <table><thead><tr><th>日期</th><th>消息数</th><th>流量</th></tr></thead>
-                <tbody id="daily-stats"><tr><td colspan="3" class="empty-state">暂无数据</td></tr></tbody></table>
-            </div>
-        </div>
-
-        <!-- 日志 -->
-        <div id="page-logs" class="page">
-            <div class="card">
-                <h2>📋 系统日志</h2>
-                <div class="search-box">
-                    <input type="text" id="log-search" placeholder="搜索日志关键词..." oninput="loadLogs()">
-                    <select id="log-lines" onchange="loadLogs()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
-                        <option value="100">最近100条</option>
-                        <option value="200">最近200条</option>
-                        <option value="500">最近500条</option>
-                        <option value="1000">最近1000条</option>
-                    </select>
-                </div>
-                <div class="log-container" id="log-container"><div class="empty-state">加载中...</div></div>
-            </div>
-        </div>
-
-        <!-- 上门记录（保留原有功能） -->
+        <!-- ==================== 🏠 上门登记 ==================== -->
         <div id="page-visits" class="page">
             <div class="card">
-                <h2>🏠 上门记录管理</h2>
+                <h2>🏠 上门登记管理</h2>
                 <div class="filters">
                     <div class="filter-group"><label>业务员</label><select id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()"><option value="">不限（全部）</option><option value="__group__">按分组筛选...</option></select></div>
                     <div class="filter-group"><label>分组</label><select id="visit-filter-group" style="min-width:140px;display:none;" onchange="loadVisits()"><option value="">不限分组</option></select></div>
@@ -274,20 +241,11 @@
             <div class="card"><h2>📊 上门趋势（14天）</h2><div class="chart-wrap"><canvas id="visit-chart"></canvas></div></div>
         </div>
 
-        <!-- 对账面板 -->
-        <div id="page-phonestats" class="page">
-            <div class="card">
-                <h2>📊 每日对账（服务端 vs 手机端）</h2>
-                <table><thead><tr><th>设备ID</th><th>日期</th><th>服务端-拨号</th><th>手机端-拨号</th><th>服务端-接通</th><th>手机端-接通</th><th>服务端-时长</th><th>手机端-时长</th><th>状态</th></tr></thead>
-                <tbody id="phonestats-list"><tr><td colspan="9" class="empty-state">加载中...</td></tr></tbody></table>
-            </div>
-        </div>
-
-        <!-- PIN管理（保留原有功能） -->
+        <!-- ==================== 👤 人员管理 ==================== -->
         <div id="page-pins" class="page">
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-                    <h2>👤 PIN 管理</h2>
+                    <h2>👤 人员管理（PIN + 姓名 + 分组）</h2>
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                         <span style="font-size:12px;color:var(--text-muted);">分组:</span>
                         <select id="pin-group-filter" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;" onchange="loadPins()"><option value="">全部</option></select>
@@ -301,7 +259,40 @@
             </div>
         </div>
 
-        <!-- 设置 -->
+        <!-- ==================== 📋 系统日志 ==================== -->
+        <div id="page-logs" class="page">
+            <div class="card">
+                <h2>📋 系统日志</h2>
+                <div class="search-box">
+                    <input type="text" id="log-search" placeholder="搜索日志关键词..." oninput="loadLogs()">
+                    <select id="log-lines" onchange="loadLogs()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+                        <option value="100">最近100条</option>
+                        <option value="200">最近200条</option>
+                        <option value="500">最近500条</option>
+                        <option value="1000">最近1000条</option>
+                    </select>
+                </div>
+                <div class="log-container" id="log-container"><div class="empty-state">加载中...</div></div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="stats-grid">
+                <div class="stat-card"><h3>总消息数</h3><div class="value" id="stats-total-msg">0</div></div>
+                <div class="stat-card accent"><h3>上行流量</h3><div class="value" id="stats-bytes-sent">0</div></div>
+                <div class="stat-card success"><h3>下行流量</h3><div class="value" id="stats-bytes-recvd">0</div></div>
+            </div>
+            <div class="card-row">
+                <div class="card"><h2>📈 每日流量趋势</h2><div class="chart-wrap"><canvas id="log-daily-chart"></canvas></div></div>
+                <div class="card"><h2>👥 按PIN统计 Top 10</h2><div class="chart-wrap"><canvas id="log-pin-chart"></canvas></div></div>
+            </div>
+            <div class="card"><h2>📋 每日明细</h2>
+                <table><thead><tr><th>日期</th><th>消息数</th><th>流量</th></tr></thead>
+                <tbody id="daily-stats"><tr><td colspan="3" class="empty-state">暂无数据</td></tr></tbody></table>
+            </div>
+        </div>
+
+        <!-- ==================== ⚙️ 设置 ==================== -->
         <div id="page-settings" class="page">
             <div class="card">
                 <h2>⚙️ 服务器设置</h2>
@@ -312,7 +303,7 @@
             </div>
             <div class="card">
                 <h2>📦 系统信息</h2>
-                <table><tr><td>服务版本</td><td><strong>4.10 (Enhanced Dashboard)</strong></td></tr>
+                <table><tr><td>服务版本</td><td><strong>5.0 (UX Redesign)</strong></td></tr>
                 <tr><td>API 端点</td><td><code id="api-url">-</code></td></tr>
                 <tr><td>数据库</td><td><code>visits.db (SQLite)</code></td></tr>
                 <tr><td>WebSocket</td><td>同端口 ping_interval=30s ping_timeout=90s</td></tr>
@@ -321,7 +312,7 @@
         </div>
     </div>
 
-    <!-- 编辑弹窗（保留） -->
+    <!-- 编辑弹窗 -->
     <div class="modal-overlay" id="visit-edit-modal">
         <div class="modal"><h3>✏️ 编辑上门记录</h3>
             <input type="hidden" id="visit-edit-id">
@@ -369,7 +360,9 @@
         let lastRefresh = null;
 
         // ==================== Chart instances ====================
-        let connChart = null, msgChart = null, dailyChart = null, pinChart = null, visitChart = null;
+        let connChart = null, msgChart = null;
+        let logDailyChart = null, logPinChart = null;
+        let visitChart = null;
 
         // ==================== Navigation ====================
         function showPage(id) {
@@ -377,18 +370,19 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             const page = document.getElementById('page-' + id);
             if (page) page.classList.add('active');
-            const btn = document.querySelector(`.nav-btn[onclick="showPage('${id}')"]`);
-            if (btn) btn.classList.add('active');
+            // Match nav button by onclick content
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("showPage('" + id + "')")) {
+                    b.classList.add('active');
+                }
+            });
 
             if (id === 'dashboard') loadDashboard();
-            else if (id === 'clients') loadClients();
+            else if (id === 'phones') loadPhones();
             else if (id === 'calls') loadCalls();
-            else if (id === 'devices') loadDevices();
-            else if (id === 'stats') loadStats();
-            else if (id === 'logs') loadLogs();
             else if (id === 'visits') { loadVisits(); loadPinDropdown(); setTimeout(renderVisitChart, 300); }
-            else if (id === 'phonestats') loadPhoneStats();
             else if (id === 'pins') loadPins();
+            else if (id === 'logs') { loadLogs(); loadLogStats(); }
             document.getElementById('api-url').textContent = VISIT_API_BASE;
         }
 
@@ -418,7 +412,7 @@
 
         function doLogout() {
             const token = getSessionToken();
-            if (token) fetch(API_BASE + '/api/v1/logout?token=' + token).catch(()=>{});
+            if (token) fetch(API_BASE + '/api/v1/logout?token=' + token).catch(function(){});
             clearSessionToken();
             location.reload();
         }
@@ -427,7 +421,7 @@
         async function apiGet(url) {
             const token = getSessionToken();
             const sep = url.includes('?') ? '&' : '?';
-            const tokenUrl = token ? `${url}${sep}token=${encodeURIComponent(token)}` : url;
+            const tokenUrl = token ? url + sep + 'token=' + encodeURIComponent(token) : url;
             try { const r = await fetch(API_BASE + tokenUrl); return await r.json(); }
             catch(e) { return null; }
         }
@@ -437,7 +431,7 @@
             const token = getSessionToken();
             if (!token) return url;
             const sep = url.includes('?') ? '&' : '?';
-            return `${url}${sep}token=${encodeURIComponent(token)}`;
+            return url + sep + 'token=' + encodeURIComponent(token);
         }
 
         function fmtBytes(b) {
@@ -449,7 +443,7 @@
 
         function fmtUptime(s) {
             const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
-            return `${h}时${m}分${sec}秒`;
+            return h + '时' + m + '分' + sec + '秒';
         }
 
         function esc(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -466,25 +460,36 @@
 
         const CALL_TYPES = {0:'未知', 1:'呼入', 2:'呼出', 3:'未接'};
 
-        // ==================== Dashboard ====================
+        // ==================== 📊 首页总览 ====================
         async function loadDashboard() {
             const d = await apiGet('/api/status');
             if (!d) return;
             document.getElementById('hdr-port').textContent = d.port;
             document.getElementById('hdr-uptime').textContent = fmtUptime(d.uptime_seconds);
             document.getElementById('hdr-conn').textContent = d.total_connections;
-            document.getElementById('stat-connections').textContent = d.total_connections;
-            document.getElementById('stat-groups').textContent = d.total_groups;
-            document.getElementById('stat-messages').textContent = d.total_messages;
-            document.getElementById('stat-bytes').textContent = fmtBytes(d.total_bytes_sent + d.total_bytes_received);
+
+            // 新卡片：业务指标
+            document.getElementById('stat-today-dials').textContent = d.today_dials || 0;
+            document.getElementById('stat-today-visits').textContent = d.today_visits || 0;
+
+            // 最近活跃人员
+            const activeEl = document.getElementById('stat-active-names');
+            if (d.recent_active && d.recent_active.length > 0) {
+                const names = d.recent_active.map(function(a) {
+                    return a.name || a.pin || '未知';
+                });
+                activeEl.innerHTML = names.map(function(n) {
+                    return '<span class="tag" style="background:#e8eaf6;color:#3949ab;">' + esc(n) + '</span>';
+                }).join(' ');
+            } else {
+                activeEl.textContent = '暂无';
+            }
 
             // Connection history chart
             const h = await apiGet('/api/history');
             if (h && h.history && h.history.length > 1) {
-                let totalPcs = 0, totalPhones = 0;
-                h.history.forEach(p => { totalPcs += (p.pcs||0); totalPhones += (p.phones||0); });
-                document.getElementById('stat-pcs').textContent = h.history[h.history.length-1].pcs || 0;
                 document.getElementById('stat-phones').textContent = h.history[h.history.length-1].phones || 0;
+                document.getElementById('stat-pcs').textContent = h.history[h.history.length-1].pcs || 0;
                 renderConnChart(h.history);
             }
 
@@ -498,12 +503,12 @@
             if (!c || !c.clients || c.clients.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无客户端连接</td></tr>';
             } else {
-                tbody.innerHTML = c.clients.slice(0, 10).map(cl => `<tr>
-                    <td><strong>${esc(cl.device_name)}</strong></td>
-                    <td><span class="badge badge-${cl.role}">${cl.role==='pc'?'PC':'手机'}</span></td>
-                    <td>${cl.pin}</td><td>${cl.ip}</td>
-                    <td>${new Date(cl.connected_at).toLocaleString('zh-CN')}</td>
-                </tr>`).join('');
+                tbody.innerHTML = c.clients.slice(0, 10).map(function(cl) { return '<tr>' +
+                    '<td><strong>' + esc(cl.device_name) + '</strong></td>' +
+                    '<td><span class="badge badge-' + cl.role + '">' + (cl.role==='pc'?'PC':'手机') + '</span></td>' +
+                    '<td>' + (cl.pin||'') + '</td><td>' + (cl.ip||'') + '</td>' +
+                    '<td>' + new Date(cl.connected_at).toLocaleString('zh-CN') + '</td>' +
+                '</tr>'; }).join('');
             }
 
             lastRefresh = new Date();
@@ -514,15 +519,15 @@
             const ctx = document.getElementById('conn-chart');
             if (!ctx) return;
             if (connChart) connChart.destroy();
-            const labels = history.map(p => p.time.slice(11,16));
+            const labels = history.map(function(p) { return p.time.slice(11,16); });
             connChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels,
+                    labels: labels,
                     datasets: [
-                        { label: '总连接', data: history.map(p=>p.count), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
-                        { label: 'PC', data: history.map(p=>p.pcs||0), borderColor: '#2ecc71', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
-                        { label: '手机', data: history.map(p=>p.phones||0), borderColor: '#e74c3c', borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
+                        { label: '总连接', data: history.map(function(p){return p.count}), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
+                        { label: 'PC', data: history.map(function(p){return p.pcs||0}), borderColor: '#2ecc71', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                        { label: '手机', data: history.map(function(p){return p.phones||0}), borderColor: '#e74c3c', borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
                     ]
                 },
                 options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' },
@@ -535,48 +540,119 @@
             const ctx = document.getElementById('msg-chart');
             if (!ctx) return;
             if (msgChart) msgChart.destroy();
-            const entries = Object.entries(byType).sort((a,b) => b[1]-a[1]);
+            const entries = Object.entries(byType).sort(function(a,b){ return b[1]-a[1]; });
             const colors = ['#667eea','#2ecc71','#f39c12','#e74c3c','#9b59b6','#1abc9c','#3498db','#e67e22','#95a5a6','#34495e'];
             msgChart = new Chart(ctx, {
                 type: 'doughnut',
-                data: { labels: entries.map(e=>e[0]), datasets: [{ data: entries.map(e=>e[1]), backgroundColor: entries.map((_,i)=>colors[i%colors.length]) }] },
+                data: { labels: entries.map(function(e){return e[0]}), datasets: [{ data: entries.map(function(e){return e[1]}), backgroundColor: entries.map(function(_,i){return colors[i%colors.length]}) }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: { size: 11 } } } } }
             });
         }
 
-        // ==================== Clients ====================
-        async function loadClients() {
-            const data = await apiGet('/api/clients');
-            const roleFilter = document.getElementById('client-role-filter')?.value || '';
-            const search = (document.getElementById('client-search')?.value || '').toLowerCase();
-            let clients = data?.clients || [];
-            if (roleFilter) clients = clients.filter(c => c.role === roleFilter);
-            if (search) clients = clients.filter(c => (c.device_name||'').toLowerCase().includes(search) || (c.pin||'').includes(search) || (c.ip||'').includes(search));
-            document.getElementById('client-count').textContent = clients.length;
-            const tbody = document.getElementById('clients-list');
-            if (clients.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无在线客户端</td></tr>'; return; }
-            tbody.innerHTML = clients.map(c => `<tr>
-                <td><strong>${esc(c.device_name)}</strong></td>
-                <td><span class="badge badge-${c.role}">${c.role==='pc'?'PC':'手机'}</span></td>
-                <td>${c.pin}</td><td>${c.ip}</td>
-                <td>${new Date(c.connected_at).toLocaleString('zh-CN')}</td>
-                <td style="font-size:11px;color:var(--text-muted);">${timeAgo(c.connected_at)}</td>
-                <td><button class="btn btn-danger btn-sm" onclick="kickClient('${c.pin}','${c.role}','${escA(c.device_name)}')">踢出</button></td>
-            </tr>`).join('');
+        // ==================== 📱 手机管理 ====================
+        async function loadPhones() {
+            const d = await apiGet('/api/v1/devices');
+            const statusFilter = document.getElementById('phone-status-filter')?.value || '';
+            const search = (document.getElementById('phone-search')?.value || '').toLowerCase();
+            let devices = d?.devices || [];
+
+            if (statusFilter === 'online') devices = devices.filter(function(dev) { return dev.is_online; });
+            else if (statusFilter === 'offline') devices = devices.filter(function(dev) { return !dev.is_online; });
+
+            if (search) {
+                devices = devices.filter(function(dev) {
+                    return (dev.device_id||'').toLowerCase().includes(search) ||
+                           (dev.device_model||'').toLowerCase().includes(search) ||
+                           (dev.current_pin||'').includes(search) ||
+                           (dev.current_name||'').toLowerCase().includes(search);
+                });
+            }
+
+            document.getElementById('phone-count').textContent = devices.length;
+            const tbody = document.getElementById('phones-list');
+            if (devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无设备数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = devices.map(function(dev, idx) {
+                const online = dev.is_online;
+                const dotCls = online ? 'on' : 'off';
+                const dotLabel = online ? '在线' : '离线';
+                const rowId = 'phone-row-' + idx;
+                const detailId = 'phone-detail-' + idx;
+                return '<tr class="expandable" id="' + rowId + '" onclick="togglePhoneHistory(\'' + rowId + '\',\'' + detailId + '\',\'' + escA(dev.device_id||'') + '\')">' +
+                    '<td><span class="expand-arrow" id="' + rowId + '-arrow">▶</span></td>' +
+                    '<td title="' + esc(dev.device_id||'') + '" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>' + esc((dev.device_id||'').slice(0,24)) + '</strong></td>' +
+                    '<td>' + esc(dev.device_model||'未知') + '</td>' +
+                    '<td><span class="online-dot ' + dotCls + '"></span>' + dotLabel + '</td>' +
+                    '<td><strong>' + esc(dev.current_name||'-') + '</strong></td>' +
+                    '<td>' + esc(dev.current_pin||dev.last_pin||'-') + '</td>' +
+                    '<td style="font-size:11px;color:var(--text-muted);">' + (dev.last_seen ? timeAgo(dev.last_seen) : '-') + '</td>' +
+                    '<td><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showPhoneDetail(\'' + escA(dev.device_id||'') + '\',\'' + escA(dev.current_name||'') + '\')">详情</button></td>' +
+                '</tr>' +
+                '<tr class="expand-detail" id="' + detailId + '"><td colspan="8"><div style="text-align:center;color:var(--text-muted);">点击展开查看历史记录...</div></td></tr>';
+            }).join('');
         }
 
-        async function kickClient(pin, role, name) {
-            if (!confirm(`确定要踢出 "${name}" (PIN: ${pin}) 吗？\n被踢出的设备需要重新连接。`)) return;
-            const r = await apiGet(`/api/v1/kick?pin=${encodeURIComponent(pin)}&role=${encodeURIComponent(role)}`);
-            if (r && r.ok) {
-                alert(`已踢出 ${r.kicked} 个连接`);
-                loadClients();
+        // 存储已加载的历史数据
+        let phoneHistoryCache = {};
+
+        async function togglePhoneHistory(rowId, detailId, deviceId) {
+            const detailRow = document.getElementById(detailId);
+            const arrow = document.getElementById(rowId + '-arrow');
+            const parentRow = document.getElementById(rowId);
+
+            if (detailRow.classList.contains('show')) {
+                // 收起
+                detailRow.classList.remove('show');
+                if (arrow) arrow.classList.remove('open');
+                if (parentRow) parentRow.classList.remove('expanded');
             } else {
-                alert('踢出失败，请重试');
+                // 展开
+                detailRow.classList.add('show');
+                if (arrow) arrow.classList.add('open');
+                if (parentRow) parentRow.classList.add('expanded');
+
+                // 加载历史数据
+                if (!deviceId) return;
+                if (phoneHistoryCache[deviceId]) {
+                    renderPhoneHistoryDetail(detailRow, phoneHistoryCache[deviceId]);
+                } else {
+                    detailRow.cells[0].innerHTML = '<div style="text-align:center;padding:12px;color:var(--text-muted);">加载中...</div>';
+                    try {
+                        const r = await apiGet('/api/v1/device-history?device_id=' + encodeURIComponent(deviceId));
+                        if (r && r.ok && r.history) {
+                            phoneHistoryCache[deviceId] = r.history;
+                            renderPhoneHistoryDetail(detailRow, r.history);
+                        } else {
+                            detailRow.cells[0].innerHTML = '<div style="text-align:center;padding:12px;color:var(--text-muted);">暂无历史记录</div>';
+                        }
+                    } catch(e) {
+                        detailRow.cells[0].innerHTML = '<div style="text-align:center;padding:12px;color:#e74c3c;">加载失败</div>';
+                    }
+                }
             }
         }
 
-        // ==================== Calls ====================
+        function renderPhoneHistoryDetail(detailRow, history) {
+            if (!history || history.length === 0) {
+                detailRow.cells[0].innerHTML = '<div style="text-align:center;padding:12px;color:var(--text-muted);">暂无历史PIN记录</div>';
+                return;
+            }
+            let html = '<div style="font-weight:600;margin-bottom:8px;font-size:13px;">📋 历史PIN使用记录 (' + history.length + '条)</div>';
+            html += '<table class="history-table"><thead><tr><th>PIN</th><th>姓名</th><th>登录时间</th></tr></thead><tbody>';
+            history.forEach(function(h) {
+                html += '<tr><td>' + esc(h.pin||'') + '</td><td><strong>' + esc(h.name||'-') + '</strong></td><td>' + (h.event_time ? new Date(h.event_time).toLocaleString('zh-CN') : '-') + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            detailRow.cells[0].innerHTML = html;
+        }
+
+        function showPhoneDetail(deviceId, name) {
+            alert('设备: ' + deviceId + '\n当前登录人: ' + (name || '未知') + '\n\n点击设备行可展开查看历史PIN记录。');
+        }
+
+        // ==================== 📞 通话记录 ====================
         let callsOffset = 0;
         async function loadCalls() {
             callsOffset = 0;
@@ -587,7 +663,7 @@
             const date_from = document.getElementById('call-date-from')?.value || '';
             const date_to = document.getElementById('call-date-to')?.value || '';
             const number = document.getElementById('call-number')?.value || '';
-            let url = `/api/v1/calls?limit=50&offset=${callsOffset}`;
+            let url = '/api/v1/calls?limit=50&offset=' + callsOffset;
             if (device_id) url += '&device_id=' + encodeURIComponent(device_id);
             if (date_from) url += '&date_from=' + date_from;
             if (date_to) url += '&date_to=' + date_to;
@@ -601,25 +677,24 @@
                 document.getElementById('calls-pagination').innerHTML = '';
                 return;
             }
-            tbody.innerHTML = d.calls.map(c => {
+            tbody.innerHTML = d.calls.map(function(c) {
                 const dt = c.dial_time ? new Date(c.dial_time).toLocaleString('zh-CN') : '-';
-                return `<tr>
-                    <td title="${esc(c.device_id)}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.device_id?.slice(0,18)||'')}</td>
-                    <td><strong>${esc(c.number)}</strong></td>
-                    <td>${dt}</td>
-                    <td>${c.duration || 0}</td>
-                    <td>${CALL_TYPES[c.call_type] || '未知'}</td>
-                    <td>SIM${(c.sim_slot||0)+1}</td>
-                    <td style="font-size:11px;color:var(--text-muted);">${esc(c.device_model||'')}</td>
-                    <td style="font-size:11px;color:var(--text-muted);">${esc(c.app_version||'')}</td>
-                </tr>`;
+                return '<tr>' +
+                    '<td title="' + esc(c.device_id||'') + '" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc((c.device_id||'').slice(0,18)) + '</td>' +
+                    '<td><strong>' + esc(c.number||'') + '</strong></td>' +
+                    '<td>' + dt + '</td>' +
+                    '<td>' + (c.duration || 0) + '</td>' +
+                    '<td>' + (CALL_TYPES[c.call_type] || '未知') + '</td>' +
+                    '<td>SIM' + ((c.sim_slot||0)+1) + '</td>' +
+                    '<td style="font-size:11px;color:var(--text-muted);">' + esc(c.device_model||'') + '</td>' +
+                    '<td style="font-size:11px;color:var(--text-muted);">' + esc(c.app_version||'') + '</td>' +
+                '</tr>';
             }).join('');
             const pag = document.getElementById('calls-pagination');
             const totalPages = Math.ceil(d.total / d.limit);
-            pag.innerHTML = `
-                <button class="btn btn-outline btn-sm" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ${callsOffset===0?'disabled':''}>◀ 上一页</button>
-                <span>第 ${Math.floor(callsOffset/50)+1} / ${totalPages} 页 (共${d.total}条)</span>
-                <button class="btn btn-outline btn-sm" onclick="callsOffset+=50;_loadCallsInternal()" ${callsOffset+50>=d.total?'disabled':''}>下一页 ▶</button>`;
+            pag.innerHTML = '<button class="btn btn-outline btn-sm" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ' + (callsOffset===0?'disabled':'') + '>◀ 上一页</button>' +
+                '<span>第 ' + (Math.floor(callsOffset/50)+1) + ' / ' + totalPages + ' 页 (共' + d.total + '条)</span>' +
+                '<button class="btn btn-outline btn-sm" onclick="callsOffset+=50;_loadCallsInternal()" ' + (callsOffset+50>=d.total?'disabled':'') + '>下一页 ▶</button>';
         }
 
         let callSearchTimer = null;
@@ -630,8 +705,8 @@
             if (!d || !d.devices) return;
             const sel = document.getElementById('call-device-filter');
             sel.innerHTML = '<option value="">全部设备</option>';
-            d.devices.forEach(dev => {
-                sel.innerHTML += `<option value="${escA(dev.device_id)}">${esc(dev.device_id?.slice(0,20))} (${esc(dev.device_model||'未知')})</option>`;
+            d.devices.forEach(function(dev) {
+                sel.innerHTML += '<option value="' + escA(dev.device_id||'') + '">' + esc((dev.device_id||'').slice(0,20)) + ' (' + esc(dev.device_model||'未知') + ')</option>';
             });
         }
 
@@ -639,62 +714,58 @@
             const rows = document.querySelectorAll('#calls-list tr');
             if (rows.length===0 || rows[0].querySelectorAll('td').length < 7) { alert('无数据可导出'); return; }
             let csv = '\uFEFF设备ID,号码,通话时间,时长(秒),类型,SIM卡,模型,版本\n';
-            rows.forEach(row => {
+            rows.forEach(function(row) {
                 const cells = row.querySelectorAll('td');
                 if (cells.length < 8) return;
-                csv += Array.from(cells).slice(0,8).map(c => '"'+c.textContent.replace(/"/g,'""')+'"').join(',') + '\n';
+                csv += Array.from(cells).slice(0,8).map(function(c) { return '"'+c.textContent.replace(/"/g,'""')+'"'; }).join(',') + '\n';
             });
             const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
             a.download = 'calls_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
         }
 
-        // ==================== Devices ====================
-        async function loadDevices() {
-            const d = await apiGet('/api/v1/devices');
-            document.getElementById('device-count').textContent = d?.devices?.length || 0;
-            const tbody = document.getElementById('devices-list');
-            if (!d || !d.devices || d.devices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无已注册设备</td></tr>'; return;
-            }
-            tbody.innerHTML = d.devices.map(dev => `<tr>
-                <td title="${esc(dev.device_id)}" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>${esc(dev.device_id?.slice(0,24)||'')}</strong></td>
-                <td><span class="badge ${dev.is_online?'badge-online':'badge-offline'}">${dev.is_online?'🟢 在线':'⚫ 离线'}</span></td>
-                <td>${esc(dev.last_pin)}</td>
-                <td>${esc(dev.device_model||'未知')}</td>
-                <td>${esc(dev.app_version||'未知')}</td>
-                <td style="font-size:11px;">${esc(dev.current_ip||'-')}</td>
-                <td style="font-size:11px;">${dev.first_seen?new Date(dev.first_seen).toLocaleString('zh-CN'):'-'}</td>
-                <td style="font-size:11px;color:var(--text-muted);">${dev.last_seen?timeAgo(dev.last_seen):'-'}</td>
-            </tr>`).join('');
+        // ==================== 📋 系统日志 ====================
+        async function loadLogs() {
+            const n = document.getElementById('log-lines')?.value || '100';
+            const q = document.getElementById('log-search')?.value || '';
+            const d = await apiGet('/api/logs?n=' + n + '&q=' + encodeURIComponent(q));
+            const container = document.getElementById('log-container');
+            if (!d || !d.logs || d.logs.length === 0) { container.innerHTML = '<div class="empty-state">暂无日志</div>'; return; }
+            container.innerHTML = d.logs.map(function(line) {
+                let cls = ''; const l = line.toLowerCase();
+                if (l.includes('[error]') || l.includes('fail') || l.includes('error')) cls = 'error';
+                else if (l.includes('[warning]') || l.includes('warn')) cls = 'warn';
+                else if (l.includes('[info]')) cls = 'info';
+                return '<div class="log-line ' + cls + '">' + esc(line) + '</div>';
+            }).join('');
+            container.scrollTop = container.scrollHeight;
         }
 
-        // ==================== Stats ====================
-        async function loadStats() {
+        async function loadLogStats() {
             const d = await apiGet('/api/stats');
             if (!d) return;
-            document.getElementById('stats-total-msg').textContent = d.total_messages;
-            document.getElementById('stats-bytes-sent').textContent = fmtBytes(d.total_bytes_sent);
-            document.getElementById('stats-bytes-recvd').textContent = fmtBytes(d.total_bytes_received);
-            if (d.daily?.length) renderDailyChart(d.daily);
-            if (d.by_pin) renderPinChart(d.by_pin);
+            document.getElementById('stats-total-msg').textContent = d.total_messages || 0;
+            document.getElementById('stats-bytes-sent').textContent = fmtBytes(d.total_bytes_sent || 0);
+            document.getElementById('stats-bytes-recvd').textContent = fmtBytes(d.total_bytes_received || 0);
+            if (d.daily?.length) renderLogDailyChart(d.daily);
+            if (d.by_pin) renderLogPinChart(d.by_pin);
             const tbody = document.getElementById('daily-stats');
             if (!d.daily || d.daily.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="3" class="empty-state">暂无数据</td></tr>';
             } else {
-                tbody.innerHTML = d.daily.map(dd => `<tr><td>${dd.date}</td><td>${dd.messages}</td><td>${fmtBytes(dd.bytes)}</td></tr>`).join('');
+                tbody.innerHTML = d.daily.map(function(dd) { return '<tr><td>' + dd.date + '</td><td>' + dd.messages + '</td><td>' + fmtBytes(dd.bytes) + '</td></tr>'; }).join('');
             }
         }
 
-        function renderDailyChart(daily) {
-            const ctx = document.getElementById('daily-chart');
+        function renderLogDailyChart(daily) {
+            const ctx = document.getElementById('log-daily-chart');
             if (!ctx) return;
-            if (dailyChart) dailyChart.destroy();
-            dailyChart = new Chart(ctx, {
+            if (logDailyChart) logDailyChart.destroy();
+            logDailyChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: daily.map(d=>d.date.slice(5)), datasets: [
-                    { label: '消息数', data: daily.map(d=>d.messages), backgroundColor: '#667eea', borderRadius: 4, yAxisID: 'y' },
-                    { label: '流量(MB)', data: daily.map(d=>(d.bytes/1048576).toFixed(2)), backgroundColor: '#2ecc71', borderRadius: 4, yAxisID: 'y1' }
+                data: { labels: daily.map(function(d){return d.date.slice(5)}), datasets: [
+                    { label: '消息数', data: daily.map(function(d){return d.messages}), backgroundColor: '#667eea', borderRadius: 4, yAxisID: 'y' },
+                    { label: '流量(MB)', data: daily.map(function(d){return (d.bytes/1048576).toFixed(2)}), backgroundColor: '#2ecc71', borderRadius: 4, yAxisID: 'y1' }
                 ]},
                 options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index' },
                     plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
@@ -703,37 +774,20 @@
             });
         }
 
-        function renderPinChart(byPin) {
-            const ctx = document.getElementById('pin-chart');
+        function renderLogPinChart(byPin) {
+            const ctx = document.getElementById('log-pin-chart');
             if (!ctx) return;
-            if (pinChart) pinChart.destroy();
-            const entries = Object.entries(byPin).sort((a,b)=>b[1]-a[1]).slice(0,10);
-            pinChart = new Chart(ctx, {
+            if (logPinChart) logPinChart.destroy();
+            const entries = Object.entries(byPin).sort(function(a,b){return b[1]-a[1]}).slice(0,10);
+            logPinChart = new Chart(ctx, {
                 type: 'bar', indexAxis: 'y',
-                data: { labels: entries.map(e=>e[0]), datasets: [{ label: '消息数', data: entries.map(e=>e[1]), backgroundColor: entries.map((_,i)=>`hsl(${240-i*20},70%,60%)`), borderRadius: 4 }] },
+                data: { labels: entries.map(function(e){return e[0]}), datasets: [{ label: '消息数', data: entries.map(function(e){return e[1]}), backgroundColor: entries.map(function(_,i){return 'hsl(' + (240-i*20) + ',70%,60%)'}), borderRadius: 4 }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
                     scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
             });
         }
 
-        // ==================== Logs ====================
-        async function loadLogs() {
-            const n = document.getElementById('log-lines')?.value || '100';
-            const q = document.getElementById('log-search')?.value || '';
-            const d = await apiGet(`/api/logs?n=${n}&q=${encodeURIComponent(q)}`);
-            const container = document.getElementById('log-container');
-            if (!d || !d.logs || d.logs.length === 0) { container.innerHTML = '<div class="empty-state">暂无日志</div>'; return; }
-            container.innerHTML = d.logs.map(line => {
-                let cls = ''; const l = line.toLowerCase();
-                if (l.includes('[error]') || l.includes('fail') || l.includes('error')) cls = 'error';
-                else if (l.includes('[warning]') || l.includes('warn')) cls = 'warn';
-                else if (l.includes('[info]')) cls = 'info';
-                return `<div class="log-line ${cls}">${esc(line)}</div>`;
-            }).join('');
-            container.scrollTop = container.scrollHeight;
-        }
-
-        // ==================== Visits (保留原功能) ====================
+        // ==================== 🏠 上门登记 ====================
         async function loadVisits() {
             const pinFilter = document.getElementById('visit-filter-pin')?.value || '';
             const groupFilter = document.getElementById('visit-filter-group')?.value || '';
@@ -748,21 +802,20 @@
                 const dFrom = document.getElementById('visit-filter-date-from')?.value || '';
                 const dTo = document.getElementById('visit-filter-date-to')?.value || '';
                 const src = document.getElementById('visit-filter-source')?.value || '';
-                // 日期筛选：优先按 CRM 来访时间，无则回退到登记时间
-                if (dFrom) filtered = filtered.filter(r => (r.visit_time || r.created_at) >= dFrom);
-                if (dTo) filtered = filtered.filter(r => (r.visit_time || r.created_at) <= dTo + 'T23:59:59');
-                if (src === 'unsynced') filtered = filtered.filter(r => !r.crm_synced);
-                else if (src) filtered = filtered.filter(r => r.source === src);
+                if (dFrom) filtered = filtered.filter(function(r) { return (r.visit_time || r.created_at) >= dFrom; });
+                if (dTo) filtered = filtered.filter(function(r) { return (r.visit_time || r.created_at) <= dTo + 'T23:59:59'; });
+                if (src === 'unsynced') filtered = filtered.filter(function(r) { return !r.crm_synced; });
+                else if (src) filtered = filtered.filter(function(r) { return r.source === src; });
                 if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无记录</td></tr>'; return; }
-                tbody.innerHTML = filtered.map(r => `<tr style="${r.crm_synced?'':'background:rgba(244,67,54,0.06);'}">
-                    <td>${r.id}</td><td>${esc(r.name)}</td><td>${esc(r.mobile)}</td><td>${esc(r.kefu_tel)}</td><td>${esc(r.visit_type)}</td>
-                    <td><span class="badge badge-${r.source==='phone'?'phone-src':r.source==='crm_sync'?'crm':'plugin'}">${r.source==='phone'?'手机':r.source==='crm_sync'?'CRM同步':'插件'}</span></td>
-                    <td>${r.crm_synced?'<span style="color:#2ecc71;">✅</span>':'<span style="color:#e74c3c;">⚠ 未同步</span>'}</td>
-                    <td>${r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-'}</td>
-                    <td>${r.visit_time||'-'}</td>
-                    <td><button class="btn btn-primary btn-sm" onclick="openEditModal(${r.id},'${escA(r.name)}','${escA(r.mobile)}','${escA(r.kefu_tel)}','${escA(r.visit_type)}')">编辑</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteVisit(${r.id})">删除</button></td>
-                </tr>`).join('');
+                tbody.innerHTML = filtered.map(function(r) { return '<tr style="' + (r.crm_synced?'':'background:rgba(244,67,54,0.06);') + '">' +
+                    '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
+                    '<td><span class="badge badge-' + (r.source==='phone'?'phone-src':r.source==='crm_sync'?'crm':'plugin') + '">' + (r.source==='phone'?'手机':r.source==='crm_sync'?'CRM同步':'插件') + '</span></td>' +
+                    '<td>' + (r.crm_synced?'<span style="color:#2ecc71;">✅</span>':'<span style="color:#e74c3c;">⚠ 未同步</span>') + '</td>' +
+                    '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
+                    '<td>' + (r.visit_time||'-') + '</td>' +
+                    '<td><button class="btn btn-primary btn-sm" onclick="openEditModal(' + r.id + ',\'' + escA(r.name||'') + '\',\'' + escA(r.mobile||'') + '\',\'' + escA(r.kefu_tel||'') + '\',\'' + escA(r.visit_type||'') + '\')">编辑</button> ' +
+                    '<button class="btn btn-danger btn-sm" onclick="deleteVisit(' + r.id + ')">删除</button></td>' +
+                '</tr>'; }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state" style="color:#e74c3c;">请求失败</td></tr>'; }
         }
 
@@ -773,10 +826,10 @@
                 const r = await fetch(VISIT_API_BASE + '/api/v1/pins'); const d = await r.json();
                 if (!d.ok) return;
                 selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
-                d.pins.forEach(p => { selPin.innerHTML += `<option value="${p.pin}">${esc(p.name)} (${p.pin})</option>`; });
+                d.pins.forEach(function(p) { selPin.innerHTML += '<option value="' + p.pin + '">' + esc(p.name||'') + ' (' + p.pin + ')</option>'; });
                 const gr = await fetch(VISIT_API_BASE + '/api/v1/groups'); const gd = await gr.json();
                 selGrp.innerHTML = '<option value="">不限分组</option>';
-                if (gd.groups) gd.groups.forEach(g => { selGrp.innerHTML += `<option value="${g.id}">${esc(g.name)}</option>`; });
+                if (gd.groups) gd.groups.forEach(function(g) { selGrp.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
             } catch(e) {}
         }
 
@@ -805,7 +858,7 @@
             const visit_type = document.getElementById('visit-edit-type').value.trim();
             if (!name && !mobile && !kefu_tel && !visit_type) { alert('请至少填写一个字段'); return; }
             try {
-                const params = new URLSearchParams({id, name, mobile, kefu_tel, visit_type});
+                const params = new URLSearchParams({id: id, name: name, mobile: mobile, kefu_tel: kefu_tel, visit_type: visit_type});
                 const res = await fetch(withToken(VISIT_API_BASE + '/api/v1/visit/update?' + params.toString()));
                 const data = await res.json();
                 if (data.ok) { closeEditModal(); loadVisits(); } else { alert('更新失败: ' + (data.message||'未知错误')); }
@@ -825,10 +878,10 @@
             const rows = document.querySelectorAll('#visits-list tr');
             if (rows.length===0 || rows[0].querySelectorAll('td').length < 8) { alert('无数据可导出'); return; }
             let csv = '\uFEFFID,客户姓名,手机号,接待顾问,事由,来源,CRM同步,登记时间,来访时间\n';
-            rows.forEach(row => {
+            rows.forEach(function(row) {
                 const cells = row.querySelectorAll('td');
                 if (cells.length < 9) return;
-                csv += Array.from(cells).slice(0,9).map(c => '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"').join(',') + '\n';
+                csv += Array.from(cells).slice(0,9).map(function(c) { return '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"'; }).join(',') + '\n';
             });
             const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -843,19 +896,18 @@
                 if (!ctx) return;
                 const days = {};
                 for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); days[d.toISOString().slice(0,10)] = 0; }
-                data.forEach(r => { if (r.created_at) { const k = r.created_at.slice(0,10); if (days[k]!==undefined) days[k]++; } });
+                data.forEach(function(r) { if (r.created_at) { const k = r.created_at.slice(0,10); if (days[k]!==undefined) days[k]++; } });
                 if (visitChart) visitChart.destroy();
-                visitChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(days).map(d=>d.slice(5)), datasets: [{ label:'上门数', data:Object.values(days), backgroundColor:'#667eea', borderRadius:4 }] },
+                visitChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(days).map(function(d){return d.slice(5)}), datasets: [{ label:'上门数', data:Object.values(days), backgroundColor:'#667eea', borderRadius:4 }] },
                     options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} } });
             } catch(e) {}
         }
 
         // ==================== 批量导入 ====================
-        let importParsedRows = [];   // 解析后的行数据
-        let importHeaders = [];      // 表头映射: [字段名, ...]
-        let importChecked = [];      // 每行的勾选状态
+        let importParsedRows = [];
+        let importHeaders = [];
+        let importChecked = [];
 
-        /** 列名模糊匹配 → 标准字段名 */
         function mapHeader(col) {
             const c = col.replace(/^\s+|\s+$/g, '');
             const m = {
@@ -870,10 +922,9 @@
             return m[c] || m[c.toLowerCase()] || null;
         }
 
-        /** 检测分隔符 */
         function detectDelimiter(line) {
             const counts = { '\t': (line.match(/\t/g) || []).length, ',': (line.match(/,/g) || []).length, '|': (line.match(/\|/g) || []).length };
-            const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+            const best = Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; })[0];
             return best[1] > 0 ? best[0] : '\t';
         }
 
@@ -898,14 +949,13 @@
             const raw = document.getElementById('import-raw').value.trim();
             if (!raw) { document.getElementById('import-parse-msg').innerHTML = '<span style="color:#e74c3c;">请先粘贴数据</span>'; return; }
 
-            const lines = raw.split(/\r?\n/).filter(l => l.trim());
+            const lines = raw.split(/\r?\n/).filter(function(l) { return l.trim(); });
             if (lines.length < 2) { document.getElementById('import-parse-msg').innerHTML = '<span style="color:#e74c3c;">至少需要表头 + 1 行数据</span>'; return; }
 
             const delim = detectDelimiter(lines[0]);
-            const headerCells = lines[0].split(delim).map(c => c.replace(/^\s+|\s+$/g, ''));
+            const headerCells = lines[0].split(delim).map(function(c) { return c.replace(/^\s+|\s+$/g, ''); });
             importHeaders = headerCells.map(mapHeader);
 
-            // 检查是否匹配到关键字段
             const hasMobile = importHeaders.includes('mobile');
             const hasName = importHeaders.includes('name');
             if (!hasMobile || !hasName) {
@@ -913,18 +963,16 @@
                 return;
             }
 
-            // 解析数据行
             importParsedRows = [];
             importChecked = [];
             for (let i = 1; i < lines.length; i++) {
-                const cells = lines[i].split(delim).map(c => c.replace(/^\s+|\s+$/g, ''));
+                const cells = lines[i].split(delim).map(function(c) { return c.replace(/^\s+|\s+$/g, ''); });
                 const row = {};
                 for (let j = 0; j < importHeaders.length; j++) {
                     if (importHeaders[j]) {
                         row[importHeaders[j]] = (cells[j] || '').trim();
                     }
                 }
-                // 构建 visit_extra
                 const extra = {};
                 if (row.city) { extra.city = row.city; delete row.city; }
                 if (row.dept1) { extra.dept1 = row.dept1; delete row.dept1; }
@@ -935,7 +983,7 @@
                 importChecked.push(true);
             }
 
-            document.getElementById('import-parse-msg').innerHTML = `<span style="color:#2ecc71;">✅ 解析成功: ${importParsedRows.length} 条记录，分隔符: ${delim === '\t' ? 'Tab' : delim}</span>`;
+            document.getElementById('import-parse-msg').innerHTML = '<span style="color:#2ecc71;">✅ 解析成功: ' + importParsedRows.length + ' 条记录，分隔符: ' + (delim === '\t' ? 'Tab' : delim) + '</span>';
             renderImportPreview();
         }
 
@@ -948,26 +996,24 @@
                 return;
             }
 
-            // 显示列: crm_id, name, mobile, kefu_tel, visit_time, visit_type, visit_extra
             const displayCols = ['crm_id', 'name', 'mobile', 'kefu_tel', 'visit_time', 'visit_type'];
             const colLabels = ['CRM ID', '姓名', '手机号', '顾问电话', '上门时间', '来访事由'];
 
             let html = '<table style="font-size:12px;"><thead><tr><th style="width:32px;">✓</th>';
-            colLabels.forEach(l => { html += `<th>${l}</th>`; });
+            colLabels.forEach(function(l) { html += '<th>' + l + '</th>'; });
             html += '<th>扩展信息</th></tr></thead><tbody>';
 
-            importParsedRows.forEach((row, idx) => {
+            importParsedRows.forEach(function(row, idx) {
                 const hasRequired = row.name && row.mobile;
                 const bg = hasRequired ? '' : ' style="background:rgba(244,67,54,0.08);"';
-                html += `<tr${bg}>`;
-                html += `<td><input type="checkbox" ${importChecked[idx] ? 'checked' : ''} onchange="importChecked[${idx}]=this.checked;updateImportCount()"></td>`;
-                displayCols.forEach(col => {
-                    html += `<td data-row="${idx}" data-col="${col}" onclick="editImportCell(this)" style="cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row[col] || '')}</td>`;
+                html += '<tr' + bg + '>';
+                html += '<td><input type="checkbox" ' + (importChecked[idx] ? 'checked' : '') + ' onchange="importChecked[' + idx + ']=this.checked;updateImportCount()"></td>';
+                displayCols.forEach(function(col) {
+                    html += '<td data-row="' + idx + '" data-col="' + col + '" onclick="editImportCell(this)" style="cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(row[col] || '') + '</td>';
                 });
-                // visit_extra summary
                 let extraSummary = '';
                 try { const ex = JSON.parse(row.visit_extra || '{}'); extraSummary = Object.values(ex).filter(Boolean).join(' / '); } catch(e) {}
-                html += `<td style="font-size:10px;color:var(--text-muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;">${esc(extraSummary)}</td>`;
+                html += '<td style="font-size:10px;color:var(--text-muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;">' + esc(extraSummary) + '</td>';
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -985,7 +1031,6 @@
             input.onblur = function() {
                 importParsedRows[rowIdx][col] = input.value;
                 td.textContent = input.value;
-                // 更新行颜色
                 const row = importParsedRows[rowIdx];
                 const tr = td.parentElement;
                 tr.style.background = (row.name && row.mobile) ? '' : 'rgba(244,67,54,0.08)';
@@ -1003,7 +1048,7 @@
         }
 
         async function submitImport() {
-            const selected = importParsedRows.filter((_, i) => importChecked[i]);
+            const selected = importParsedRows.filter(function(_, i) { return importChecked[i]; });
             if (selected.length === 0) { alert('没有选中任何记录'); return; }
 
             const BATCH_SIZE = 200;
@@ -1036,75 +1081,55 @@
 
                 if (totalBatches > 1) {
                     document.getElementById('import-result').innerHTML =
-                        `<span style="color:#f39c12;">⏳ 正在导入... (${b + 1}/${totalBatches})</span>`;
+                        '<span style="color:#f39c12;">⏳ 正在导入... (' + (b + 1) + '/' + totalBatches + ')</span>';
                 }
             }
 
-            let resultHtml = `<span style="color:#2ecc71;">✅ 导入完成! 成功: ${totalInserted} 条, 跳过: ${totalSkipped} 条</span>`;
+            let resultHtml = '<span style="color:#2ecc71;">✅ 导入完成! 成功: ' + totalInserted + ' 条, 跳过: ' + totalSkipped + ' 条</span>';
             if (allErrors.length > 0) {
-                resultHtml += ` <span style="color:#e74c3c;">(错误: ${allErrors.length})</span>`;
+                resultHtml += ' <span style="color:#e74c3c;">(错误: ' + allErrors.length + ')</span>';
                 resultHtml += '<div style="max-height:120px;overflow:auto;margin-top:6px;font-size:11px;color:#e74c3c;">';
-                allErrors.slice(0, 20).forEach(e => {
-                    resultHtml += `<div>• ${e.row !== undefined ? '行' + e.row : '批次' + e.batch}: ${esc(e.reason || '')}</div>`;
+                allErrors.slice(0, 20).forEach(function(e) {
+                    resultHtml += '<div>• ' + (e.row !== undefined ? '行' + e.row : '批次' + e.batch) + ': ' + esc(e.reason || '') + '</div>';
                 });
-                if (allErrors.length > 20) resultHtml += `<div>... 还有 ${allErrors.length - 20} 个错误</div>`;
+                if (allErrors.length > 20) resultHtml += '<div>... 还有 ' + (allErrors.length - 20) + ' 个错误</div>';
                 resultHtml += '</div>';
             }
             document.getElementById('import-result').innerHTML = resultHtml;
             document.getElementById('import-submit-btn').disabled = false;
         }
 
-        // ==================== Phone Stats ====================
-        async function loadPhoneStats() {
-            const d = await apiGet('/api/v1/phone-stats');
-            const tbody = document.getElementById('phonestats-list');
-            if (!d || !d.stats || d.stats.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无对账数据（需手机端上报）</td></tr>'; return;
-            }
-            tbody.innerHTML = d.stats.map(s => {
-                const isOk = s.match_status === 'OK';
-                return `<tr class="${isOk?'':'highlight-mismatch'}">
-                    <td title="${esc(s.device_id)}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.device_id?.slice(0,18)||'')}</td>
-                    <td>${s.date}</td>
-                    <td>${s.server_dial}</td><td>${s.phone_dial}</td>
-                    <td>${s.server_conn}</td><td>${s.phone_conn}</td>
-                    <td>${s.server_dur}s</td><td>${s.phone_dur}s</td>
-                    <td><span class="badge badge-${isOk?'ok':'mismatch'}">${isOk?'✅ OK':'⚠ MISMATCH'}</span></td>
-                </tr>`;
-            }).join('');
-        }
-
-        // ==================== Pins (保留原功能) ====================
+        // ==================== 👤 人员管理 ====================
         async function loadPins() {
             const tbody = document.getElementById('pins-list');
             try {
                 const [pr, gr] = await Promise.all([
-                    fetch(VISIT_API_BASE+'/api/v1/pins').then(r=>r.json()),
-                    fetch(VISIT_API_BASE+'/api/v1/groups').then(r=>r.json())
+                    fetch(VISIT_API_BASE+'/api/v1/pins').then(function(r){return r.json()}),
+                    fetch(VISIT_API_BASE+'/api/v1/groups').then(function(r){return r.json()})
                 ]);
                 if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">无数据</td></tr>'; return; }
                 const sel = document.getElementById('pin-group-filter');
                 sel.innerHTML = '<option value="">全部</option>';
                 const groups = gr.groups || [];
-                groups.forEach(g => { sel.innerHTML += `<option value="${g.id}">${esc(g.name)}</option>`; });
+                groups.forEach(function(g) { sel.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
                 const groupFilter = sel.value;
                 let pins = pr.pins;
-                if (groupFilter) pins = pins.filter(p => p.group_id == groupFilter);
-                if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无PIN</td></tr>'; return; }
-                tbody.innerHTML = pins.map(p => {
-                    const g = groups.find(g => g.id == p.group_id);
-                    return `<tr><td>${p.pin}</td><td><strong>${esc(p.name)}</strong></td>
-                        <td><select onchange="setPinGroup('${p.pin}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;">
-                            <option value="">--</option>${groups.map(g=>`<option value="${g.id}" ${g.id==p.group_id?'selected':''}>${esc(g.name)}</option>`).join('')}
-                        </select></td>
-                        <td><button class="btn btn-sm" style="background:${p.is_admin?'#f44336':'#667eea'};color:white;" onclick="togglePinAdmin('${p.pin}')">${p.is_admin?'👑取消':'设为管理'}</button></td>
-                        <td style="font-size:11px;color:var(--text-muted);">${p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-'}</td><td></td></tr>`;
+                if (groupFilter) pins = pins.filter(function(p) { return p.group_id == groupFilter; });
+                if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无人员</td></tr>'; return; }
+                tbody.innerHTML = pins.map(function(p) {
+                    const g = groups.find(function(g) { return g.id == p.group_id; });
+                    return '<tr><td>' + (p.pin||'') + '</td><td><strong>' + esc(p.name||'') + '</strong></td>' +
+                        '<td><select onchange="setPinGroup(\'' + escA(p.pin||'') + '\',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
+                            '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
+                        '</select></td>' +
+                        '<td><button class="btn btn-sm" style="background:' + (p.is_admin?'#f44336':'#667eea') + ';color:white;" onclick="togglePinAdmin(\'' + escA(p.pin||'') + '\')">' + (p.is_admin?'👑取消':'设为管理') + '</button></td>' +
+                        '<td style="font-size:11px;color:var(--text-muted);">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td><td></td></tr>';
                 }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state" style="color:#e74c3c;">加载失败</td></tr>'; }
         }
 
         async function togglePinAdmin(pin) {
-            const ck = await fetch(withToken(VISIT_API_BASE+'/api/v1/advisor/is_admin?pin='+encodeURIComponent(pin))).then(r=>r.json());
+            const ck = await fetch(withToken(VISIT_API_BASE+'/api/v1/advisor/is_admin?pin='+encodeURIComponent(pin))).then(function(r){return r.json()});
             await fetch(withToken(VISIT_API_BASE+'/api/v1/advisor/'+(ck.is_admin?'del_admin':'set_admin')+'?pin='+encodeURIComponent(pin)));
             loadPins();
         }
@@ -1123,14 +1148,14 @@
         async function delGroup() {
             const gid = document.getElementById('pin-group-filter').value;
             if (!gid) { alert('请选择要删除的分组'); return; }
-            if (!confirm('删除分组不会删除PIN数据，仅取消关联。确定？')) return;
+            if (!confirm('删除分组不会删除人员数据，仅取消关联。确定？')) return;
             await fetch(withToken(VISIT_API_BASE+'/api/v1/group/del?id='+encodeURIComponent(gid))); loadPins();
         }
 
-        // ==================== Settings ====================
+        // ==================== ⚙️ 设置 ====================
         function saveSettings() {
             document.getElementById('settings-msg').innerHTML = '<span style="color:#f39c12;">⚠️ 设置已保存提示（端口和日志级别需重启服务生效）</span>';
-            setTimeout(() => { document.getElementById('settings-msg').innerHTML = ''; }, 4000);
+            setTimeout(function() { document.getElementById('settings-msg').innerHTML = ''; }, 4000);
         }
 
         // ==================== Auto-refresh ====================
@@ -1170,14 +1195,13 @@
         // 页面加载时检查登录状态
         (function(){
             if (isLoggedIn()) {
-                // 验证令牌是否仍然有效
-                fetch(withToken(VISIT_API_BASE + '/api/v1/advisor/is_admin?pin=check')).then(r => {
+                fetch(withToken(VISIT_API_BASE + '/api/v1/advisor/is_admin?pin=check')).then(function(r) {
                     if (r.status === 401) { clearSessionToken(); location.reload(); }
                     else {
                         document.getElementById('login-btn').style.display = 'none';
                         document.getElementById('logout-btn').style.display = '';
                     }
-                }).catch(() => {});
+                }).catch(function() {});
             }
         })();
 
@@ -1196,7 +1220,6 @@
             if (!p) { document.getElementById('login-err').style.display='block'; document.getElementById('login-err').textContent='请输入密码'; return; }
             doLogin(u, p);
         }
-        // 点击遮罩关闭
         document.getElementById('login-overlay').addEventListener('click', function(e){ if(e.target===this) hideLogin(); });
     </script>
 </body>

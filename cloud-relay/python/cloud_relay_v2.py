@@ -1038,6 +1038,58 @@ async def health_check_handler(path, request_headers):
     
     # API: 状态
     if path == '/api/status':
+        # 今日拨号数和登记数
+        today_dials = 0
+        today_visits = 0
+        recent_active = []
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            c.execute("SELECT COUNT(*) FROM call_records_raw WHERE date(server_time)=?", (today_str,))
+            row = c.fetchone()
+            if row:
+                today_dials = row[0]
+            c.execute("SELECT COUNT(*) FROM visits WHERE date(created_at)=?", (today_str,))
+            row = c.fetchone()
+            if row:
+                today_visits = row[0]
+            conn.close()
+        except Exception:
+            pass
+        # 最近活跃人员（从在线连接中提取，取最近3个不同PIN）
+        seen_pins = set()
+        active_list = []
+        try:
+            snapshot = list(ws_meta.items())
+        except Exception:
+            snapshot = []
+        for _ws, _meta in snapshot:
+            _pin = _meta.get('pin', '')
+            if _pin and _pin not in seen_pins:
+                seen_pins.add(_pin)
+                active_list.append({
+                    'pin': _pin,
+                    'name': _meta.get('device_name', '') if _meta.get('role') == 'pc' else '',
+                    'role': _meta.get('role', ''),
+                    'connected_at': _meta.get('connected_at', '')
+                })
+        # 尝试从 advisor_names 补全姓名
+        if active_list:
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                for a in active_list:
+                    c.execute("SELECT name FROM advisor_names WHERE pin=?", (a['pin'],))
+                    row = c.fetchone()
+                    if row:
+                        a['name'] = row[0]
+                conn.close()
+            except Exception:
+                pass
+        active_list.sort(key=lambda x: x.get('connected_at', ''), reverse=True)
+        recent_active = active_list[:3]
+
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
             'version': '4.10',
@@ -1047,7 +1099,10 @@ async def health_check_handler(path, request_headers):
             'total_groups': len(pin_groups),
             'total_messages': total_messages,
             'total_bytes_sent': total_bytes_sent,
-            'total_bytes_received': total_bytes_received
+            'total_bytes_received': total_bytes_received,
+            'today_dials': today_dials,
+            'today_visits': today_visits,
+            'recent_active': recent_active
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
     
@@ -1784,16 +1839,69 @@ async def health_check_handler(path, request_headers):
             c = conn.cursor()
             c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
             rows = [dict(r) for r in c.fetchall()]
-            # 标注在线状态 + IP
-            online_map = {}
-            for _ws, _meta in ws_meta.items():
+            # 标注在线状态 + IP + 当前PIN
+            online_map = {}      # device_name -> {ip, pin}
+            try:
+                snapshot = list(ws_meta.items())
+            except Exception:
+                snapshot = []
+            for _ws, _meta in snapshot:
                 if _meta.get('role') == 'phone' and _meta.get('device_name'):
-                    online_map[_meta['device_name']] = _meta.get('ip', '')
+                    online_map[_meta['device_name']] = {
+                        'ip': _meta.get('ip', ''),
+                        'pin': _meta.get('pin', '')
+                    }
+            # 收集所有 PIN 用于查询姓名
+            all_pins = set()
             for row in rows:
                 did = row.get('device_id', '')
                 row['is_online'] = did in online_map
-                row['current_ip'] = online_map.get(did, '')
+                row['current_ip'] = online_map.get(did, {}).get('ip', '')
+                pin = online_map.get(did, {}).get('pin', '') or row.get('last_pin', '')
+                row['current_pin'] = pin
+                row['current_name'] = ''
+                if pin:
+                    all_pins.add(pin)
+            # 批量查询姓名
+            if all_pins:
+                placeholders = ','.join(['?'] * len(all_pins))
+                c.execute(f"SELECT pin, name FROM advisor_names WHERE pin IN ({placeholders})", list(all_pins))
+                pin_name_map = {r['pin']: r['name'] for r in c.fetchall()}
+                for row in rows:
+                    if row.get('current_pin') and row['current_pin'] in pin_name_map:
+                        row['current_name'] = pin_name_map[row['current_pin']]
             return (200, JSON_HDR, json.dumps({'ok': True, 'devices': rows}, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 设备PIN历史 GET /api/v1/device-history?device_id=xxx
+    if path == '/api/v1/device-history':
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0].strip()
+        if not device_id:
+            return (200, JSON_HDR, _err_json('MISSING', 'device_id 不能为空'))
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute(
+                "SELECT pin, event_time FROM phone_events WHERE device_id=? AND event_type='login' AND pin!='' ORDER BY event_time DESC LIMIT 50",
+                (device_id,)
+            )
+            events = [dict(r) for r in c.fetchall()]
+            # 补全姓名
+            pins = list(set(e['pin'] for e in events))
+            if pins:
+                placeholders = ','.join(['?'] * len(pins))
+                c.execute(f"SELECT pin, name FROM advisor_names WHERE pin IN ({placeholders})", pins)
+                pin_name_map = {r['pin']: r['name'] for r in c.fetchall()}
+                for e in events:
+                    e['name'] = pin_name_map.get(e['pin'], '')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'history': events}, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:
