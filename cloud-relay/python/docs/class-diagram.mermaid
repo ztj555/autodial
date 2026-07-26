@@ -1,0 +1,67 @@
+classDiagram
+    class VisitRecord {
+        +int id PK
+        +str pin
+        +str name
+        +str mobile
+        +str kefu_tel
+        +str visit_type
+        +str source
+        +int crm_synced
+        +str visit_time
+        +str crm_id UNIQUE
+        +str created_at
+        +str updated_at
+    }
+
+    class CrmImportRequest {
+        +str crm_id
+        +str name
+        +str mobile
+        +str kefu_tel
+        +str visit_time
+        +str visit_type
+        +str city
+    }
+
+    class CrmImportResponse {
+        +bool ok
+        +int inserted
+        +int skipped
+        +int total
+        +List~CrmImportError~ errors
+    }
+
+    class CrmImportError {
+        +int index
+        +str crm_id
+        +str reason
+    }
+
+    class ImportHandler {
+        +handle_import(data_json, hdrs, parsed_query) Tuple
+        -_check_admin(hdrs, parsed_query) bool
+        -_insert_batch(records) CrmImportResponse
+        -_validate_record(row) Optional~str~
+    }
+
+    class FrontendParser {
+        +detectSeparator(rawText) str
+        +parseCrmText(rawText) List~Object~
+        +mapFieldName(crmHeader) str
+        +renderTable(rows) void
+    }
+
+    class ImportExecutor {
+        +doImport(selectedRows, token) void
+        +sliceBatches(rows, size) List~List~
+        +fetchBatch(batch, token) Promise
+        +showToast(message, type) void
+    }
+
+    CrmImportRequest --> VisitRecord : maps to (source="crm_import", pin="", crm_synced=1)
+    ImportHandler --> CrmImportResponse : returns
+    CrmImportResponse --> CrmImportError : contains
+    FrontendParser --> CrmImportRequest : produces
+    ImportExecutor --> ImportHandler : calls via HTTP
+    ImportExecutor --> CrmImportResponse : receives

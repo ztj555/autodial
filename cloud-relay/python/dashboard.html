@@ -266,6 +266,7 @@
                     <div class="filter-group"><label>来源</label><select id="visit-filter-source" onchange="loadVisits()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">⚠ 未同步</option></select></div>
                     <button class="refresh-btn" onclick="loadVisits()">🔄 刷新</button>
                     <button class="btn btn-success" onclick="exportCSV()">📥 导出CSV</button>
+                    <button class="btn btn-primary" onclick="showImportModal()">📥 批量导入</button>
                 </div>
                 <table><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>接待顾问</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
                 <tbody id="visits-list"><tr><td colspan="10" class="empty-state">请选择筛选条件</td></tr></tbody></table>
@@ -329,6 +330,34 @@
             <div class="form-group"><label>接待顾问</label><input type="text" id="visit-edit-kefu_tel"></div>
             <div class="form-group"><label>事由</label><input type="text" id="visit-edit-type"></div>
             <div class="form-actions"><button class="btn btn-outline" onclick="closeEditModal()">取消</button><button class="btn btn-primary" onclick="saveVisitEdit()">💾 保存</button></div>
+        </div>
+    </div>
+
+    <!-- 批量导入弹窗 -->
+    <div class="modal-overlay" id="import-modal" style="z-index:1001;">
+        <div class="modal" style="min-width:680px;max-width:95%;max-height:90vh;overflow-y:auto;">
+            <h3>📥 批量导入 CRM 上门记录</h3>
+            <div class="form-group">
+                <label>粘贴 CRM 导出数据（支持 Tab / 逗号 / 竖线分隔，第一行为表头）</label>
+                <textarea id="import-raw" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;" placeholder="ID	姓名	客户手机号	顾问电话	上门时间	来访事由	城市	一级部门	二级部门
+1001	张三	13800138000	李顾问	2024-01-15	贷款咨询	深圳	销售部	一组
+1002	李四	13900139000	王顾问	2024-01-16	理财咨询	广州	理财部	二组"></textarea>
+            </div>
+            <div style="margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="parseImportData()">🔍 解析预览</button>
+                <span id="import-parse-msg" style="font-size:12px;color:var(--text-muted);"></span>
+            </div>
+            <div style="max-height:350px;overflow:auto;margin-bottom:12px;" id="import-preview-area">
+                <div class="empty-state" style="padding:24px;">请粘贴数据并点击「解析预览」</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                💡 提示：每批最多 200 条，超出自动分批上传。点击单元格可编辑。取消勾选的行不会导入。标红=必填字段缺失。
+            </div>
+            <div class="form-actions">
+                <button class="btn btn-outline" onclick="closeImportModal()">取消</button>
+                <button class="btn btn-success" id="import-submit-btn" onclick="submitImport()" disabled>✅ 确认导入 (<span id="import-count-label">0</span> 条)</button>
+            </div>
+            <div id="import-result" style="margin-top:12px;font-size:13px;"></div>
         </div>
     </div>
 
@@ -819,6 +848,210 @@
                 visitChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(days).map(d=>d.slice(5)), datasets: [{ label:'上门数', data:Object.values(days), backgroundColor:'#667eea', borderRadius:4 }] },
                     options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} } });
             } catch(e) {}
+        }
+
+        // ==================== 批量导入 ====================
+        let importParsedRows = [];   // 解析后的行数据
+        let importHeaders = [];      // 表头映射: [字段名, ...]
+        let importChecked = [];      // 每行的勾选状态
+
+        /** 列名模糊匹配 → 标准字段名 */
+        function mapHeader(col) {
+            const c = col.replace(/^\s+|\s+$/g, '');
+            const m = {
+                'id': 'crm_id', '编号': 'crm_id', '客户id': 'crm_id',
+                '姓名': 'name', '客户姓名': 'name', '客户名': 'name', 'name': 'name',
+                '手机号': 'mobile', '客户手机号': 'mobile', '手机': 'mobile', '电话': 'mobile', 'mobile': 'mobile',
+                '顾问电话': 'kefu_tel', '顾问': 'kefu_tel', '接待顾问': 'kefu_tel', '客服电话': 'kefu_tel',
+                '上门时间': 'visit_time', '来访时间': 'visit_time', 'visit_time': 'visit_time', '日期': 'visit_time',
+                '来访事由': 'visit_type', '事由': 'visit_type', '类型': 'visit_type', 'visit_type': 'visit_type',
+                '城市': 'city', '一级部门': 'dept1', '二级部门': 'dept2', '部门': 'dept1'
+            };
+            return m[c] || m[c.toLowerCase()] || null;
+        }
+
+        /** 检测分隔符 */
+        function detectDelimiter(line) {
+            const counts = { '\t': (line.match(/\t/g) || []).length, ',': (line.match(/,/g) || []).length, '|': (line.match(/\|/g) || []).length };
+            const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+            return best[1] > 0 ? best[0] : '\t';
+        }
+
+        function showImportModal() {
+            document.getElementById('import-modal').classList.add('active');
+            document.getElementById('import-raw').value = '';
+            document.getElementById('import-parse-msg').textContent = '';
+            document.getElementById('import-preview-area').innerHTML = '<div class="empty-state" style="padding:24px;">请粘贴数据并点击「解析预览」</div>';
+            document.getElementById('import-result').innerHTML = '';
+            document.getElementById('import-submit-btn').disabled = true;
+            document.getElementById('import-count-label').textContent = '0';
+            importParsedRows = [];
+            importHeaders = [];
+            importChecked = [];
+        }
+
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.remove('active');
+        }
+
+        function parseImportData() {
+            const raw = document.getElementById('import-raw').value.trim();
+            if (!raw) { document.getElementById('import-parse-msg').innerHTML = '<span style="color:#e74c3c;">请先粘贴数据</span>'; return; }
+
+            const lines = raw.split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) { document.getElementById('import-parse-msg').innerHTML = '<span style="color:#e74c3c;">至少需要表头 + 1 行数据</span>'; return; }
+
+            const delim = detectDelimiter(lines[0]);
+            const headerCells = lines[0].split(delim).map(c => c.replace(/^\s+|\s+$/g, ''));
+            importHeaders = headerCells.map(mapHeader);
+
+            // 检查是否匹配到关键字段
+            const hasMobile = importHeaders.includes('mobile');
+            const hasName = importHeaders.includes('name');
+            if (!hasMobile || !hasName) {
+                document.getElementById('import-parse-msg').innerHTML = '<span style="color:#e74c3c;">未识别到「手机号」或「姓名」列，请检查表头</span>';
+                return;
+            }
+
+            // 解析数据行
+            importParsedRows = [];
+            importChecked = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cells = lines[i].split(delim).map(c => c.replace(/^\s+|\s+$/g, ''));
+                const row = {};
+                for (let j = 0; j < importHeaders.length; j++) {
+                    if (importHeaders[j]) {
+                        row[importHeaders[j]] = (cells[j] || '').trim();
+                    }
+                }
+                // 构建 visit_extra
+                const extra = {};
+                if (row.city) { extra.city = row.city; delete row.city; }
+                if (row.dept1) { extra.dept1 = row.dept1; delete row.dept1; }
+                if (row.dept2) { extra.dept2 = row.dept2; delete row.dept2; }
+                row.visit_extra = JSON.stringify(extra);
+                if (!row.visit_type) row.visit_type = '贷款咨询';
+                importParsedRows.push(row);
+                importChecked.push(true);
+            }
+
+            document.getElementById('import-parse-msg').innerHTML = `<span style="color:#2ecc71;">✅ 解析成功: ${importParsedRows.length} 条记录，分隔符: ${delim === '\t' ? 'Tab' : delim}</span>`;
+            renderImportPreview();
+        }
+
+        function renderImportPreview() {
+            const area = document.getElementById('import-preview-area');
+            if (importParsedRows.length === 0) {
+                area.innerHTML = '<div class="empty-state" style="padding:24px;">无数据</div>';
+                document.getElementById('import-submit-btn').disabled = true;
+                document.getElementById('import-count-label').textContent = '0';
+                return;
+            }
+
+            // 显示列: crm_id, name, mobile, kefu_tel, visit_time, visit_type, visit_extra
+            const displayCols = ['crm_id', 'name', 'mobile', 'kefu_tel', 'visit_time', 'visit_type'];
+            const colLabels = ['CRM ID', '姓名', '手机号', '顾问电话', '上门时间', '来访事由'];
+
+            let html = '<table style="font-size:12px;"><thead><tr><th style="width:32px;">✓</th>';
+            colLabels.forEach(l => { html += `<th>${l}</th>`; });
+            html += '<th>扩展信息</th></tr></thead><tbody>';
+
+            importParsedRows.forEach((row, idx) => {
+                const hasRequired = row.name && row.mobile;
+                const bg = hasRequired ? '' : ' style="background:rgba(244,67,54,0.08);"';
+                html += `<tr${bg}>`;
+                html += `<td><input type="checkbox" ${importChecked[idx] ? 'checked' : ''} onchange="importChecked[${idx}]=this.checked;updateImportCount()"></td>`;
+                displayCols.forEach(col => {
+                    html += `<td data-row="${idx}" data-col="${col}" onclick="editImportCell(this)" style="cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(row[col] || '')}</td>`;
+                });
+                // visit_extra summary
+                let extraSummary = '';
+                try { const ex = JSON.parse(row.visit_extra || '{}'); extraSummary = Object.values(ex).filter(Boolean).join(' / '); } catch(e) {}
+                html += `<td style="font-size:10px;color:var(--text-muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;">${esc(extraSummary)}</td>`;
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            area.innerHTML = html;
+            updateImportCount();
+        }
+
+        function editImportCell(td) {
+            const rowIdx = parseInt(td.dataset.row);
+            const col = td.dataset.col;
+            const oldVal = importParsedRows[rowIdx][col] || '';
+            const input = document.createElement('input');
+            input.value = oldVal;
+            input.style.cssText = 'width:100%;padding:2px 4px;border:1px solid #667eea;border-radius:3px;font-size:12px;';
+            input.onblur = function() {
+                importParsedRows[rowIdx][col] = input.value;
+                td.textContent = input.value;
+                // 更新行颜色
+                const row = importParsedRows[rowIdx];
+                const tr = td.parentElement;
+                tr.style.background = (row.name && row.mobile) ? '' : 'rgba(244,67,54,0.08)';
+            };
+            input.onkeydown = function(e) { if (e.key === 'Enter') input.blur(); };
+            td.textContent = '';
+            td.appendChild(input);
+            input.focus();
+        }
+
+        function updateImportCount() {
+            const count = importChecked.filter(Boolean).length;
+            document.getElementById('import-count-label').textContent = count;
+            document.getElementById('import-submit-btn').disabled = (count === 0);
+        }
+
+        async function submitImport() {
+            const selected = importParsedRows.filter((_, i) => importChecked[i]);
+            if (selected.length === 0) { alert('没有选中任何记录'); return; }
+
+            const BATCH_SIZE = 200;
+            const totalBatches = Math.ceil(selected.length / BATCH_SIZE);
+            let totalInserted = 0, totalSkipped = 0, allErrors = [];
+
+            document.getElementById('import-submit-btn').disabled = true;
+            document.getElementById('import-result').innerHTML = '<span style="color:#f39c12;">⏳ 正在导入...</span>';
+
+            for (let b = 0; b < totalBatches; b++) {
+                const batch = selected.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+                const dataJson = encodeURIComponent(JSON.stringify(batch));
+                const url = withToken(VISIT_API_BASE + '/api/v1/visits/batch?data=' + dataJson);
+
+                try {
+                    const res = await fetch(url);
+                    const result = await res.json();
+                    if (result.ok) {
+                        totalInserted += result.inserted;
+                        totalSkipped += result.skipped;
+                        if (result.errors && result.errors.length > 0) {
+                            allErrors = allErrors.concat(result.errors);
+                        }
+                    } else {
+                        allErrors.push({batch: b, reason: result.message || '请求失败'});
+                    }
+                } catch(e) {
+                    allErrors.push({batch: b, reason: '网络错误: ' + e.message});
+                }
+
+                if (totalBatches > 1) {
+                    document.getElementById('import-result').innerHTML =
+                        `<span style="color:#f39c12;">⏳ 正在导入... (${b + 1}/${totalBatches})</span>`;
+                }
+            }
+
+            let resultHtml = `<span style="color:#2ecc71;">✅ 导入完成! 成功: ${totalInserted} 条, 跳过: ${totalSkipped} 条</span>`;
+            if (allErrors.length > 0) {
+                resultHtml += ` <span style="color:#e74c3c;">(错误: ${allErrors.length})</span>`;
+                resultHtml += '<div style="max-height:120px;overflow:auto;margin-top:6px;font-size:11px;color:#e74c3c;">';
+                allErrors.slice(0, 20).forEach(e => {
+                    resultHtml += `<div>• ${e.row !== undefined ? '行' + e.row : '批次' + e.batch}: ${esc(e.reason || '')}</div>`;
+                });
+                if (allErrors.length > 20) resultHtml += `<div>... 还有 ${allErrors.length - 20} 个错误</div>`;
+                resultHtml += '</div>';
+            }
+            document.getElementById('import-result').innerHTML = resultHtml;
+            document.getElementById('import-submit-btn').disabled = false;
         }
 
         // ==================== Phone Stats ====================

@@ -92,6 +92,8 @@ def init_db():
         source TEXT DEFAULT 'plugin',
         crm_synced INTEGER DEFAULT 0,
         visit_time TEXT DEFAULT '',
+        crm_id TEXT DEFAULT NULL,
+        visit_extra TEXT DEFAULT '{}',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )'''
@@ -174,6 +176,13 @@ def init_db():
         except: pass  # column already exists
         try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
         except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN crm_id TEXT DEFAULT NULL'); conn.commit()
+        except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN visit_extra TEXT DEFAULT \'{}\''); conn.commit()
+        except: pass  # column already exists
+        # 为 crm_id 建唯一索引（SQLite ALTER TABLE 不支持 UNIQUE 列约束，需单独建索引）
+        try: c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_crm_id ON visits(crm_id)'); conn.commit()
+        except: pass
         conn.close()
         log.info(f'Visits DB initialized at {DB_PATH}')
     except Exception as e:
@@ -195,6 +204,13 @@ def init_db():
         except: pass  # column already exists
         try: c.execute('ALTER TABLE advisor_names ADD COLUMN group_id INTEGER DEFAULT NULL'); conn.commit()
         except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN crm_id TEXT DEFAULT NULL'); conn.commit()
+        except: pass  # column already exists
+        try: c.execute('ALTER TABLE visits ADD COLUMN visit_extra TEXT DEFAULT \'{}\''); conn.commit()
+        except: pass  # column already exists
+        # 为 crm_id 建唯一索引（SQLite ALTER TABLE 不支持 UNIQUE 列约束，需单独建索引）
+        try: c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_crm_id ON visits(crm_id)'); conn.commit()
+        except: pass
         conn.close()
 
 init_db()
@@ -1517,6 +1533,81 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, json.dumps({'ok': True, 'match': match}).encode('utf-8'))
         except Exception as e:
             log.error(f'STATS_REPORT error device={device_id}: {e}')
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # 批量导入: GET /api/v1/visits/batch?data=<JSON数组>&token=<admin_token>
+    if path == '/api/v1/visits/batch':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        data_str = qs.get('data', [''])[0]
+        if not data_str:
+            return (200, JSON_HDR, _err_json('MISSING_DATA', '缺少 data 参数'))
+        try:
+            records = json.loads(data_str)
+        except json.JSONDecodeError as e:
+            return (400, JSON_HDR, _err_json('INVALID_JSON', f'data JSON格式错误: {e}'))
+        if not isinstance(records, list):
+            return (400, JSON_HDR, _err_json('INVALID_JSON', 'data 必须为 JSON 数组'))
+
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            inserted = 0
+            skipped = 0
+            errors = []
+
+            for i, rec in enumerate(records):
+                try:
+                    if not isinstance(rec, dict):
+                        errors.append({'row': i, 'reason': '记录不是 JSON 对象'})
+                        skipped += 1
+                        continue
+
+                    crm_id = (rec.get('crm_id') or '').strip()
+                    name = (rec.get('name') or '').strip()
+                    mobile = (rec.get('mobile') or '').strip()
+                    kefu_tel = (rec.get('kefu_tel') or '').strip()
+                    visit_type = (rec.get('visit_type') or '贷款咨询').strip()
+                    visit_time = (rec.get('visit_time') or '').strip()
+                    visit_extra = rec.get('visit_extra', '{}')
+                    if isinstance(visit_extra, dict):
+                        visit_extra = json.dumps(visit_extra, ensure_ascii=False)
+
+                    if not name or not mobile:
+                        errors.append({'row': i, 'crm_id': crm_id, 'reason': '缺少必填字段(name/mobile)'})
+                        skipped += 1
+                        continue
+
+                    c.execute(
+                        '''INSERT OR IGNORE INTO visits
+                        (crm_id, pin, name, mobile, kefu_tel, visit_type, source, visit_time,
+                         crm_synced, visit_extra, created_at, updated_at)
+                        VALUES (?, '', ?, ?, ?, ?, 'crm_import', ?, 1, ?, ?, ?)''',
+                        (crm_id if crm_id else None, name, mobile, kefu_tel,
+                         visit_type, visit_time, visit_extra, now_str, now_str)
+                    )
+                    if c.rowcount > 0:
+                        inserted += 1
+                    else:
+                        skipped += 1
+                        errors.append({'row': i, 'crm_id': crm_id, 'reason': 'crm_id 重复，已跳过'})
+                except Exception as e:
+                    errors.append({'row': i, 'reason': str(e)})
+                    skipped += 1
+
+            conn.commit()
+            log.info(f'VISITS_BATCH inserted={inserted} skipped={skipped} errors={len(errors)}')
+            return (200, JSON_HDR, json.dumps({
+                'ok': True, 'inserted': inserted, 'skipped': skipped, 'errors': errors
+            }, ensure_ascii=False).encode('utf-8'))
+        except Exception as e:
+            log.error(f'VISITS_BATCH error: {e}')
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:
             if conn:
