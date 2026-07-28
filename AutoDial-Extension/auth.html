@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+       background: #fff; color: #333; padding: 28px 24px; text-align: center;
+       min-width: 360px; }
+.icon { font-size: 48px; margin-bottom: 12px; }
+h2 { font-size: 18px; margin-bottom: 8px; }
+.desc { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6; }
+.card { background: #f8f9fa; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; text-align: left; }
+.card .row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; }
+.card .row .label { color: #888; }
+.card .row .val { font-weight: 600; }
+.card .warn { color: #e74c3c; font-size:12px; margin-top:6px; }
+.btns { display:flex; gap:10px; justify-content:center; }
+.btns button { padding: 10px 32px; border:none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btns .btn-deny { background: #f0f0f0; color: #666; }
+.btns .btn-deny:hover { background: #e0e0e0; }
+.btns .btn-allow { background: #667eea; color: #fff; }
+.btns .btn-allow:hover { background: #5a6fd6; }
+.status { font-size: 13px; color: #888; margin-top: 14px; display: none; }
+.status.success { color: #27ae60; }
+.status.error { color: #e74c3c; }
+</style>
+</head>
+<body>
+<div class="icon">⚠️</div>
+<h2>设备授权请求</h2>
+<div class="desc">有设备正在尝试使用您的 PIN 登录，需要您确认是否授权。</div>
+<div class="card">
+  <div class="row"><span class="label">设备名称</span><span class="val" id="device">-</span></div>
+  <div class="row"><span class="label">请求使用 PIN</span><span class="val" id="pin">-</span></div>
+  <div class="row"><span class="label">设备默认 PIN</span><span class="val" id="default_pin">-</span></div>
+  <div class="warn">该设备此前使用默认 PIN 登录，现在尝试切换。</div>
+</div>
+<div class="btns">
+  <button class="btn-deny" onclick="respond(false)">拒绝</button>
+  <button class="btn-allow" onclick="respond(true)">允许</button>
+</div>
+<div class="status" id="status"></div>
+<script>
+var params = new URLSearchParams(location.search);
+var rid = params.get('request_id');
+var api = params.get('api');
+var device = params.get('device');
+var pin = params.get('pin');
+var dpin = params.get('default_pin');
+
+document.getElementById('device').textContent = device || '-';
+document.getElementById('pin').textContent = pin || '-';
+document.getElementById('default_pin').textContent = dpin || '-';
+
+async function respond(allow) {
+  document.querySelector('.btns').style.display = 'none';
+  var st = document.getElementById('status');
+  st.style.display = 'block';
+  st.textContent = allow ? '正在授权...' : '正在拒绝...';
+  try {
+    var r = await chrome.runtime.sendMessage({
+      type: 'respondAuth',
+      request_id: rid,
+      allow: allow,
+      api: api
+    });
+    if (r && r.ok) {
+      st.className = 'status success';
+      st.textContent = allow ? '✅ 已授权，设备可正常连接' : '🚫 已拒绝设备连接';
+    } else {
+      st.className = 'status error';
+      st.textContent = '操作失败: ' + ((r && r.error) || '未知错误');
+    }
+  } catch(e) {
+    st.className = 'status error';
+    st.textContent = '网络错误，请重试';
+  }
+  setTimeout(function() { window.close(); }, 2000);
+}
+</script>
+</body>
+</html>

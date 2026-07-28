@@ -1,0 +1,70 @@
+sequenceDiagram
+    actor User as 👤 管理员
+    participant FE as dashboard.html<br/>CRM导入Tab
+    participant BE as cloud_relay_v2.py<br/>health_check_handler
+    participant DB as SQLite<br/>visits.db
+
+    rect rgb(240, 248, 255)
+        Note over User,FE: Phase 1: 粘贴 & 解析
+        User->>FE: 粘贴 CRM 导出文本 (Ctrl+V)
+        FE->>FE: detectSeparator(text)<br/>统计 Tab/逗号/竖线
+        FE->>FE: 检测到分隔符: Tab
+        FE->>FE: parseCrmText(text)<br/>解析表头行 → mapFieldName()
+        FE->>FE: 解析数据行 → rows[] 数组
+        FE->>FE: renderTable(rows)<br/>生成可编辑预览表格
+        FE-->>User: 显示 "已识别 50 条记录，7 列"
+    end
+
+    rect rgb(255, 248, 240)
+        Note over User,FE: Phase 2: 预览 & 编辑
+        User->>FE: 双击单元格编辑内容
+        FE->>FE: contenteditable 直接修改
+        FE->>FE: 同步更新 rows[i][field]
+        User->>FE: 取消勾选 3 条不需要的行
+        FE->>FE: selectedRows Set 更新
+        User->>FE: 点击「删除选中行」
+        FE->>FE: rows.splice() 移除<br/>重新 renderTable()
+        FE-->>User: 表格刷新，剩余 47 条
+    end
+
+    rect rgb(240, 255, 240)
+        Note over User,BE: Phase 3: 确认导入 (分批)
+        User->>FE: 点击「确认导入」
+        FE->>FE: sliceBatches(selectedRows, 200)<br/>1 批 = 47 条
+        FE->>FE: 按钮置灰，显示"导入中..."
+        loop 每一批
+            FE->>FE: encodeURIComponent(JSON.stringify(batch))
+            FE->>BE: GET /api/v1/import_visits<br/>?data=<URL-encoded JSON>&token=abc123
+            BE->>BE: _check_admin(hdrs, parsed.query)
+            alt 鉴权失败
+                BE-->>FE: 401 {ok:false, code:"UNAUTHORIZED"}
+                FE->>FE: showToast("鉴权未通过", "error")
+            else 鉴权通过
+                BE->>BE: JSON.parse(data)
+                BE->>BE: 遍历验证每条记录
+                loop 每条记录
+                    alt 缺少必填字段
+                        BE->>BE: errors.push({index, crm_id, reason})
+                    else 字段齐全
+                        BE->>DB: INSERT OR IGNORE INTO visits<br/>(pin,name,mobile,kefu_tel,visit_type,<br/>source,visit_time,crm_id,crm_synced,<br/>created_at,updated_at)
+                        alt crm_id 冲突 (UNIQUE constraint)
+                            DB-->>BE: rowcount=0 → skipped++
+                        else 插入成功
+                            DB-->>BE: rowcount=1 → inserted++
+                        end
+                    end
+                end
+                BE-->>FE: 200 {ok:true, inserted:45, skipped:2, total:47, errors:[]}
+            end
+        end
+    end
+
+    rect rgb(255, 240, 255)
+        Note over User,FE: Phase 4: 结果反馈
+        FE->>FE: 累加: totalInserted=45, totalSkipped=2
+        FE->>FE: showToast("✅ 成功导入 45 条，跳过 2 条重复", "success")
+        FE->>FE: 清空粘贴区 textarea
+        FE->>FE: 清空预览表格
+        FE->>FE: 重置统计计数
+        FE-->>User: Toast 通知 3 秒后自动消失
+    end

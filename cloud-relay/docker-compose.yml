@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  autodial-cloud-relay:
+    build: .
+    image: autodial-cloud-relay:latest
+    container_name: autodial-cloud-relay
+    pull_policy: never
+    restart: always
+    ports:
+      - "35430:35430"
+    volumes:
+      - autodial_data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - autodial_network
+
+volumes:
+  autodial_data:
+    driver: local
+
+networks:
+  autodial_network:
+    driver: bridge

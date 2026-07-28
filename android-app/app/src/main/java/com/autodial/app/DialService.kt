@@ -1,0 +1,819 @@
+package com.autodial.app
+
+import android.Manifest
+import android.app.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
+import android.telephony.PhoneStateListener
+import android.telephony.SubscriptionInfo
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyManager
+import android.telephony.SmsManager
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import okhttp3.*
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+class DialService : Service() {
+
+    companion object {
+        private const val TAG = "DialService"
+        private const val CHANNEL_ID = "autodial_service"
+        private const val NOTIFICATION_ID = 1001
+        private const val ACTION_CONNECTION = "com.autodial.CONNECTION_CHANGE"
+        private const val ACTION_NEW_DIAL = "com.autodial.NEW_DIAL"
+        private const val ACTION_CALL_ENDED = "com.autodial.CALL_ENDED"
+        private const val ACTION_LAST_CALL_HINT = "com.autodial.LAST_CALL_HINT"
+        const val ACTION_SHOW_SIM_SELECT = "com.autodial.SHOW_SIM_SELECT"
+        const val ACTION_SHOW_SMS_CONFIRM = "com.autodial.SHOW_SMS_CONFIRM"
+        const val ACTION_CLOUD_STATUS = "com.autodial.CLOUD_STATUS"
+        const val ACTION_EXECUTE_PENDING_DIAL = "com.autodial.EXECUTE_PENDING_DIAL"
+
+        var isRunning = false
+            private set
+        @Volatile var isActivityVisible = false
+        @Volatile var wasActivityVisibleBeforeDial = false // v4.59: 记录拨号前 App 是否在前台
+        var pendingBackgroundDialNumber: String? = null
+        val isConnected: Boolean get() = _instance?.connectionManager?.isConnected ?: false
+        val serverAddress: String get() = ""
+        val isCloudConnected: Boolean get() = _instance?.connectionManager?.isCloudConnected ?: false
+        val isLanConnected: Boolean get() = _instance?.connectionManager?.isLanConnected ?: false
+        val isPcReachable: Boolean get() = _instance?.connectionManager?.isPcReachable ?: false
+        val isExtOnline: Boolean get() = _instance?.connectionManager?.extOnline ?: false
+        val transportMode: String get() = _instance?.connectionManager?.getTransportMode() ?: ""
+        val currentCloudServer: String get() = ""
+        val currentPin: String get() = _instance?.let { it.lastPin } ?: ""
+
+        fun newIntent(context: Context): Intent = Intent(context, DialService::class.java)
+
+        fun sendDialResult(number: String, status: String) {
+            _instance?._sendResultToPC(number, status)
+        }
+        fun sendSmsResult(number: String, status: String) {
+            _instance?._sendSmsResultToPC(number, status)
+        }
+        internal var _instance: DialService? = null
+    }
+
+    // ==================== ConnectionManager delegate ====================
+
+    lateinit var connectionManager: ConnectionManager
+        private set
+    var connectionMode: String = ""
+        private set
+
+    internal lateinit var dialEngine: DialEngine
+
+    private var manualConnecting = false
+    private var lastPin = ""
+    private var lastIp = ""
+    private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var callLogDb: CallLogDb
+    private var phoneStateListener: PhoneStateListener? = null
+    private var telephonyCallback: android.telephony.TelephonyCallback? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastDisconnectReason: String? = null  // 用于防止 kicked 被 disconnected 覆盖
+    private var screenOnReceiver: BroadcastReceiver? = null
+    private var syncRunnable: Runnable? = null  // 数据同步定时任务
+    private var lastSyncedCallId: Long = 0      // 已同步的最后一条呼叫记录ID
+    private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private val pendingDialQueue = ArrayDeque<String>()
+    private var pendingDialNumber: String?
+        get() = pendingDialQueue.firstOrNull()
+        set(value) {
+            // Fix: 清空队列而非只移除队首，避免多号码场景下误清
+            if (value == null) { pendingDialQueue.clear() }
+            else pendingDialQueue.addLast(value)
+        }
+
+    private var listenerRegistered = false
+
+    internal fun requestDialInForeground(number: String) {
+        Companion.pendingBackgroundDialNumber = number
+        FileLogger.i("DialService", "Background dial queued: $number")
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_EXECUTE_PENDING_DIAL
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pi = PendingIntent.getActivity(this, 0, intent, flags)
+
+        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("AutoDial")
+            .setContentText("Tap to dial $number")
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(Notification.CATEGORY_CALL)
+            .setFullScreenIntent(pi, true)
+            .setAutoCancel(true)
+            .build()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(1002, n)
+        // Auto-cancel after 3s: if fullScreenIntent didn't fire, discard silently
+        handler.postDelayed({
+            nm.cancel(1002)
+            if (Companion.pendingBackgroundDialNumber == number) {
+                Companion.pendingBackgroundDialNumber = null
+            }
+        }, 3000)
+    }
+
+    private val connectionListener = object : ConnectionManager.ConnectionStateListener {
+        override fun onStateChanged(
+            newState: ConnectionManager.ConnectionState,
+            oldState: ConnectionManager.ConnectionState
+        ) {
+            connectionMode = connectionManager.getTransportMode()
+            FileLogger.i("DialService", "\u72b6\u6001\u53d8\u5316: $oldState \u2192 $newState, \u901a\u9053=$connectionMode")
+            when (newState) {
+                ConnectionManager.ConnectionState.CONNECTED -> {
+                    updateNotification("已连接")
+                    getSharedPreferences("autodial", MODE_PRIVATE)
+                        .edit().putBoolean("was_connected", true).apply()
+                    notifyConnectionChange(true, null)
+                    notifyCloudStatus(null)
+                }
+                ConnectionManager.ConnectionState.DISCONNECTED -> {
+                    if (oldState == ConnectionManager.ConnectionState.CONNECTED) {
+                        // 如果 onError 已发送了具体原因（如 kicked），不再用通用 disconnected 覆盖
+                        if (lastDisconnectReason != "kicked") {
+                            updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
+                            notifyConnectionChange(false, "disconnected")
+                        }
+                    }
+                }
+                ConnectionManager.ConnectionState.CONNECTING -> {
+                    updateNotification("\u6b63\u5728\u8fde\u63a5...")
+                }
+                ConnectionManager.ConnectionState.DISCOVERING -> {
+                    updateNotification("\u6b63\u5728\u641c\u7d22\u7535\u8111...")
+                }
+            }
+        }
+
+        override fun onMessageReceived(msg: JSONObject) {
+            val messageId = msg.optString("messageId", "")
+            val originalType = msg.optString("type", "")
+            FileLogger.logMessage("RECV", originalType, msg.toString())
+            if (messageId.isNotEmpty()) {
+                try {
+                    sendToPC(JSONObject().apply {
+                        put("type", "ack")
+                        put("messageId", messageId)
+                        put("originalType", originalType)
+                        put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
+                    })
+                    FileLogger.i("DialService", "ACK sent for $originalType (id=$messageId)")
+                    Log.d(TAG, "ACK sent for $originalType (id=$messageId)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "ACK send failed: ${e.message}")
+                    FileLogger.e("DialService", "ACK send failed: ${e.message}")
+                }
+            }
+
+            try {
+                when (originalType) {
+                    "dial" -> {
+                        val number = msg.optString("number", "")
+                        FileLogger.i("DialService", "\u6536\u5230\u62e8\u53f7\u8bf7\u6c42: $number")
+                        if (number.isNotEmpty() && ::dialEngine.isInitialized) {
+                            Log.d(TAG, "\u62e8\u53f7\u8bf7\u6c42: $number")
+                            Companion.wasActivityVisibleBeforeDial = isActivityVisible // v4.59: 记住拨号前状态
+                            dialEngine.dialNumber(number)
+                        }
+                    }
+                    "reconnect_request" -> {
+                        FileLogger.i("DialService", "\u6536\u5230 PC \u7aef\u4e91\u7aef\u5524\u9192\u6307\u4ee4")
+                        if (::connectionManager.isInitialized) {
+                            connectionManager.onReconnectRequest()
+                        }
+                    }
+                    "sms" -> {
+                        val number = msg.optString("number", "")
+                        val content = msg.optString("content", "")
+                        FileLogger.i("DialService", "收到短信请求: $number, 内容长度=${content.length}")
+                        if (number.isNotEmpty()) {
+                            Log.d(TAG, "短信请求: $number, 内容长度=${content.length}")
+                            // v8修复: Activity 不可见时用通知替代，避免 Android 10+ 后台启动 Activity 被拦截
+                            if (isActivityVisible) {
+                                val intent = Intent(ACTION_SHOW_SMS_CONFIRM).apply {
+                                    putExtra("number", number)
+                                    putExtra("content", content)
+                                    setPackage(packageName)
+                                }
+                                sendBroadcast(intent)
+                            } else {
+                                showSmsNotification(number, content)
+                            }
+                        }
+                    }
+                    "hangup" -> {
+                        FileLogger.i("DialService", "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
+                        Log.d(TAG, "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
+                        if (::dialEngine.isInitialized) dialEngine.endCall()
+                    }
+                }
+            } catch (e: Exception) { Log.e(TAG, "\u6d88\u606f\u5904\u7406\u5931\u8d25: ${e.message}") }
+        }
+
+        override fun onError(error: ConnectionManager.ConnectionError) {
+            when (error) {
+                is ConnectionManager.ConnectionError.AuthFailed -> {
+                    updateNotification("\u914d\u5bf9\u7801\u9519\u8bef")
+                    notifyConnectionChange(false, "pin_wrong")
+                }
+                is ConnectionManager.ConnectionError.Disconnected -> {
+                    updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
+                    notifyConnectionChange(false, error.reason)
+                }
+                else -> {
+                    Log.w(TAG, "Connection error: $error")
+                }
+            }
+        }
+    }
+
+    // ==================== v4: delegate ====================
+
+    internal fun onDialResult(number: String, status: String) {
+        _sendResultToPC(number, status)
+    }
+
+    internal fun setPendingDialNumber(number: String?) {
+        pendingDialNumber = number
+    }
+
+    private fun ensureListenerRegistered() {
+        if (listenerRegistered) return
+        if (!::connectionManager.isInitialized) return
+        connectionManager.addListener(connectionListener)
+        listenerRegistered = true
+        Log.d(TAG, "ConnectionManager listener registered")
+    }
+
+    // ==================== lifecycle ====================
+
+    override fun onCreate() {
+        super.onCreate()
+        _instance = this
+        FileLogger.init(this)
+        try {
+            isRunning = true
+            callLogDb = CallLogDb.getInstance(this)
+            createNotificationChannel()
+            startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d"))
+
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "autodial:wake").apply {
+                setReferenceCounted(false)
+                acquire(12 * 60 * 60 * 1000L)
+            }
+
+            // 启动数据同步到云中转
+            startDataSync()
+
+            Thread {
+                try {
+                    val count = callLogDb.syncFromSystemCallLog(this@DialService)
+                    if (count > 0) Log.d(TAG, "SIM cache synced: $count numbers")
+                } catch (e: Exception) {
+                    Log.e(TAG, "SIM cache sync failed: ${e.message}")
+                }
+            }.start()
+
+            registerCallStateListener()
+
+            dialEngine = DialEngine(this, callLogDb)
+
+            connectionManager = ConnectionManager(this)
+            ensureListenerRegistered()
+
+            connectionManager.registerNetworkMonitor()
+
+            registerScreenOnReceiver()
+
+            connectionManager.loadSavedConfig()
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Service onCreate error: ${e.message}", e)
+            isRunning = true
+            callLogDb = CallLogDb.getInstance(this)
+            createNotificationChannel()
+            try { startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")) } catch (_: Exception) {}
+            // v9: 补全异常恢复路径 — 缺失 WakeLock/CallState/ScreenOn 会导致功能残缺
+            try {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "autodial:wake").apply {
+                    setReferenceCounted(false)
+                    acquire(12 * 60 * 60 * 1000L)
+                }
+            } catch (_: Exception) {}
+            if (!::connectionManager.isInitialized) {
+                connectionManager = ConnectionManager(this)
+            }
+            if (!::dialEngine.isInitialized) {
+                dialEngine = DialEngine(this, callLogDb)
+            }
+            ensureListenerRegistered()
+            try { connectionManager.registerNetworkMonitor() } catch (_: Exception) {}
+            try { registerCallStateListener() } catch (_: Exception) {}
+            try { registerScreenOnReceiver() } catch (_: Exception) {}
+            try { connectionManager.loadSavedConfig() } catch (_: Exception) {}
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        try {
+            if (!::connectionManager.isInitialized) {
+                connectionManager = ConnectionManager(this)
+            }
+            if (!::dialEngine.isInitialized) {
+                dialEngine = DialEngine(this, callLogDb)
+            }
+            ensureListenerRegistered()
+
+            when (intent?.action) {
+                ACTION_EXECUTE_PENDING_DIAL -> {
+                    val pending = Companion.pendingBackgroundDialNumber
+                    if (pending != null) {
+                        Companion.pendingBackgroundDialNumber = null
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(1002)
+                        if (::dialEngine.isInitialized) {
+                            dialEngine.dialNumber(pending)
+                        }
+                    }
+                }
+                "CONNECT" -> {
+                    val ip = intent.getStringExtra("ip") ?: ""
+                    val pin = intent.getStringExtra("pin") ?: ""
+                    if (pin.isNotEmpty()) {
+                        lastPin = pin
+                        lastIp = ip
+                        manualConnecting = true
+                        getSharedPreferences("autodial", MODE_PRIVATE).edit()
+                            .putString("ip", ip).putString("pin", pin).apply()
+                        val strategy = ConnectionStrategy.readFromPrefs(
+                            getSharedPreferences("autodial", MODE_PRIVATE)
+                        )
+                        connectionManager.connect(pin, ip, strategy)
+                    }
+                }
+                "DISCONNECT" -> {
+                    manualConnecting = false
+                    getSharedPreferences("autodial", MODE_PRIVATE).edit()
+                        .putBoolean("was_connected", false).apply()
+                    connectionManager.disconnect()
+                    updateNotification("运行中")
+                }
+                "DIAL_WITH_SIM" -> {
+                    val number = intent.getStringExtra("number") ?: return START_STICKY
+                    val simSlot = intent.getIntExtra("sim_slot", 0)
+                    pendingDialNumber = null
+                    dialEngine.broadcastDialSimInfo(number, simSlot)
+                    dialEngine.performDial(number, simSlot)
+                }
+                "DIAL_CANCELLED" -> {
+                    pendingDialNumber = null
+                    val number = intent.getStringExtra("number") ?: return START_STICKY
+                    _sendResultToPC(number, "cancelled")
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                telephonyCallback?.let { try { tm.unregisterTelephonyCallback(it) } catch (_: Exception) {} }
+                telephonyCallback = null
+            } else {
+                phoneStateListener?.let { try { @Suppress("DEPRECATION") tm.listen(it, PhoneStateListener.LISTEN_NONE) } catch (_: Exception) {} }
+            }
+            unregisterScreenOnReceiver()
+            if (::connectionManager.isInitialized) connectionManager.cleanup()
+            FileLogger.shutdown()
+            isRunning = false
+            wakeLock?.release(); wakeLock = null
+            syncRunnable?.let { handler.removeCallbacks(it) }
+            syncRunnable = null
+            executor.shutdown()
+            pendingDialQueue.clear()
+            _instance = null
+        } catch (_: Exception) {}
+    }
+
+    // ==================== send methods ====================
+
+    private fun sendToPC(msg: JSONObject) {
+        if (::connectionManager.isInitialized) {
+            val sent = connectionManager.send(msg)
+            FileLogger.logMessage("SEND", msg.optString("type", "?"), msg.toString())
+            if (!sent) FileLogger.w("DialService", "sendToPC failed: ${msg.optString("type", "?")}")
+        }
+    }
+
+    private fun _sendResultToPC(number: String, status: String) {
+        try {
+            FileLogger.i("DialService", "\u62e8\u53f7\u7ed3\u679c: $number \u2192 $status")
+            sendToPC(JSONObject().apply {
+                put("type", "dial_result"); put("number", number); put("status", status)
+            })
+        } catch (_: Exception) {}
+    }
+
+    private fun _sendSmsResultToPC(number: String, status: String) {
+        try {
+            FileLogger.i("DialService", "\u77ed\u4fe1\u7ed3\u679c: $number \u2192 $status")
+            sendToPC(JSONObject().apply {
+                put("type", "sms_result"); put("number", number); put("status", status)
+            })
+        } catch (_: Exception) {}
+    }
+
+    private fun notifyCloudStatus(reason: String? = null) {
+        try {
+            val intent = Intent(ACTION_CLOUD_STATUS).apply {
+                putExtra("connected", if (::connectionManager.isInitialized) connectionManager.isCloudConnected else false)
+                putExtra("mode", if (::connectionManager.isInitialized) connectionManager.getTransportMode() else "")
+                reason?.let { putExtra("reason", it) }
+                setPackage(packageName)
+            }
+            sendBroadcast(intent)
+        } catch (_: Exception) {}
+    }
+
+    // ==================== call state listener ====================
+
+    private fun registerCallStateListener() {
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                telephonyCallback = object : android.telephony.TelephonyCallback(),
+                    android.telephony.TelephonyCallback.CallStateListener {
+                    override fun onCallStateChanged(state: Int) {
+                        if (state == TelephonyManager.CALL_STATE_IDLE) {
+                            Log.d(TAG, "\u901a\u8bdd\u7ed3\u675f\uff0c\u901a\u77e5\u5237\u65b0\u901a\u8bdd\u8bb0\u5f55")
+                            notifyCallEnded()
+                        }
+                    }
+                }
+                tm.registerTelephonyCallback(mainExecutor, telephonyCallback!!)
+                Log.d(TAG, "\u5df2\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c (TelephonyCallback)")
+            } else {
+                @Suppress("DEPRECATION")
+                phoneStateListener = object : PhoneStateListener() {
+                    override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                        if (state == TelephonyManager.CALL_STATE_IDLE) {
+                            Log.d(TAG, "\u901a\u8bdd\u7ed3\u675f\uff0c\u901a\u77e5\u5237\u65b0\u901a\u8bdd\u8bb0\u5f55")
+                            notifyCallEnded()
+                        }
+                    }
+                }
+                @Suppress("DEPRECATION")
+                tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+                Log.d(TAG, "\u5df2\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c (PhoneStateListener)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "\u6ce8\u518c\u901a\u8bdd\u72b6\u6001\u76d1\u542c\u5931\u8d25: ${e.message}")
+        }
+    }
+
+    private fun notifyCallEnded() {
+        try {
+            val intent = Intent(ACTION_CALL_ENDED).apply { setPackage(packageName) }
+            sendBroadcast(intent)
+        } catch (_: Exception) {}
+        // v4.59: 只有拨号前 App 在前台，通话结束才拉回来；在桌面/其他 app 时不打扰
+        try {
+            if (Companion.wasActivityVisibleBeforeDial) {
+                Companion.wasActivityVisibleBeforeDial = false
+                val launchIntent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+                startActivity(launchIntent)
+            }
+        } catch (_: Exception) {}
+    }
+
+    // ==================== screen on health check ====================
+
+    private fun registerScreenOnReceiver() {
+        unregisterScreenOnReceiver()
+        screenOnReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == Intent.ACTION_SCREEN_ON
+                    || intent?.action == Intent.ACTION_USER_PRESENT) {
+                    Log.d(TAG, "\u5c4f\u5e55\u4eae\u8d77\uff0c\u89e6\u53d1\u8fde\u63a5\u5065\u5eb7\u68c0\u67e5")
+                    FileLogger.i(TAG, "\u4eae\u5c4f\u5065\u5eb7\u68c0\u67e5")
+                    if (::connectionManager.isInitialized) {
+                        connectionManager.wakeAndReconnect()
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenOnReceiver, filter)
+        Log.d(TAG, "\u5df2\u6ce8\u518c\u4eae\u5c4f\u5e7f\u64ad")
+    }
+
+    private fun unregisterScreenOnReceiver() {
+        screenOnReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+            screenOnReceiver = null
+        }
+    }
+
+    // ==================== SIM info ====================
+
+    private fun getSimInfoList(): List<SubscriptionInfo> {
+        return dialEngine.getSimInfoList()
+    }
+
+    private fun getPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
+        return dialEngine.getPhoneAccountHandle(simSlot)
+    }
+
+    // ==================== dial delegate ====================
+
+    private fun resolveSimSlot(number: String): Int {
+        return dialEngine.resolveSimSlot(number)
+    }
+
+    private fun getLastDialHintForPopup(number: String): Pair<Int, Long>? {
+        return dialEngine.getLastDialHintForPopup(number)
+    }
+
+    internal fun dialNumber(number: String) {
+        dialEngine.dialNumber(number)
+    }
+
+    private fun performDial(number: String, simSlot: Int) {
+        dialEngine.performDial(number, simSlot)
+    }
+
+    private fun onDialSuccess(number: String, simSlot: Int) {
+        dialEngine.onDialSuccessAfterPlaceCall(number, simSlot)
+    }
+
+    private fun copyNumberToClipboard(number: String) {
+        // moved to DialEngine
+    }
+
+    private fun showDialAnimation() {
+        // moved to DialEngine
+    }
+
+    private fun broadcastDialSimInfo(number: String, simSlot: Int) {
+        dialEngine.broadcastDialSimInfo(number, simSlot)
+    }
+
+    private fun notifyLastCallHint(number: String) {
+        // moved to DialEngine
+    }
+
+    // ==================== notification UI ====================
+
+    private fun notifyConnectionChange(connected: Boolean, reason: String?) {
+        lastDisconnectReason = if (connected) null else reason
+        val intent = Intent(ACTION_CONNECTION).apply {
+            putExtra("connected", connected)
+            putExtra("mode", connectionMode)
+            reason?.let { putExtra("reason", it) }
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun notifyNewDial(number: String) {
+        dialEngine.notifyNewDial(number)
+    }
+
+    // ==================== notification bar ====================
+
+    private fun createNotificationChannel() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // v9: 提高到 IMPORTANCE_DEFAULT，系统才把前台服务当回事，降低被杀概率
+                val channel = NotificationChannel(CHANNEL_ID, "\u8de8\u5c4f\u62e8\u53f7 \u670d\u52a1", NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply {
+                        description = "\u4fdd\u6301\u62e8\u53f7\u8fde\u63a5"
+                        setVibrationPattern(longArrayOf(0))
+                        enableVibration(false)
+                        setShowBadge(false)
+                    }
+                getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun buildNotification(text: String): Notification {
+        var titleLine = "Auto融鑫汇"
+        var bodyLine = text
+        try {
+            val today = callLogDb.getTodayCount(this)
+            val stats = callLogDb.getDailyDurationStats(this, 1)
+            if (stats.isNotEmpty()) {
+                val mins = (stats[0].totalDurationSec + 30) / 60
+                val connected = callLogDb.getTodayConnectedCount(this)
+                val rate = if (today > 0) connected * 100 / today else 0
+                val pin = getSharedPreferences("autodial", MODE_PRIVATE).getString("pin", "") ?: ""
+                titleLine = "Auto融鑫汇         今日财运：+$today"
+                bodyLine = "$text $pin           接通$connected · $rate%"
+            }
+        } catch (_: Exception) {}
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(titleLine).setContentText(bodyLine)
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setOngoing(true).setSilent(true)
+            .setVibrate(longArrayOf(0))
+            .build()
+    }
+
+    private fun updateNotification(text: String) {
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(NOTIFICATION_ID, buildNotification(text))
+        } catch (_: Exception) {}
+    }
+
+    /** v8: 后台短信通知 — 通过通知栏提示用户确认发送 */
+    private fun showSmsNotification(number: String, content: String) {
+        val intent = Intent(this, SmsConfirmActivity::class.java).apply {
+            putExtra("number", number)
+            putExtra("content", content)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 2001, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("AutoDial 短信确认")
+            .setContentText("发给 $number: ${content.take(30)}...")
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(2001, notification)
+        } catch (_: Exception) {}
+        FileLogger.i("DialService", "已发送后台短信通知: $number")
+    }
+
+    // ==================== 云中转数据同步 ====================
+
+    private fun startDataSync() {
+        lastSyncedCallId = getSharedPreferences("autodial", MODE_PRIVATE).getLong("last_synced_call_id", 0)
+        syncRunnable = object : Runnable {
+            override fun run() {
+                if (!isConnected) { scheduleNextSync(); return }
+                executor.execute { syncCallRecords(); syncDailyStats(); scheduleNextSync() }
+            }
+        }
+        handler.post(syncRunnable!!)
+    }
+
+    private fun scheduleNextSync() {
+        syncRunnable?.let { handler.postDelayed(it, 5 * 60 * 1000L) }  // 每5分钟
+    }
+
+    private fun syncCallRecords() {
+        try {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+            val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+            val deviceId = PrefCtrl(this@DialService).getDeviceId()
+            val pin = prefs.getString("pin", "") ?: return
+            val serverUrl = prefs.getString("cloud_server", "") ?: return
+            if (serverUrl.isEmpty()) return
+            val baseUrl = normalizeHttpUrl(serverUrl)
+
+            val cursor = contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls._ID, android.provider.CallLog.Calls.NUMBER,
+                    android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.DURATION,
+                    android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.PHONE_ACCOUNT_ID),
+                "${android.provider.CallLog.Calls._ID} > ?",
+                arrayOf(lastSyncedCallId.toString()),
+                "${android.provider.CallLog.Calls._ID} ASC LIMIT 20"
+            ) ?: return
+            val records = JSONArray()
+            var maxId = lastSyncedCallId
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                maxId = id
+                val simSlot = try {
+                    val accountId = cursor.getString(5) ?: ""
+                    if (accountId.contains("@0")) 0 else if (accountId.contains("@1")) 1 else 0
+                } catch (_: Exception) { 0 }
+                records.put(JSONObject().apply {
+                    put("local_id", id)
+                    put("number", cursor.getString(1) ?: "")
+                    put("dial_time", cursor.getLong(2))
+                    put("duration", cursor.getLong(3))
+                    put("call_type", cursor.getInt(4))
+                    put("sim_slot", simSlot)
+                })
+            }
+            cursor.close()
+            if (records.length() == 0) return
+
+            // 限制单批最多 20 条，避免 URL 超长（URL 约 4KB，20条约 2KB，远低于限制）
+            val dataStr = java.net.URLEncoder.encode(records.toString(), "UTF-8")
+            val urlStr = "$baseUrl/api/v1/calls/batch?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&data=$dataStr"
+            val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000; conn.readTimeout = 5000
+            if (conn.responseCode in 200..299) {
+                lastSyncedCallId = maxId
+                prefs.edit().putLong("last_synced_call_id", maxId).apply()
+            }
+            conn.disconnect()
+        } catch (_: Exception) {}
+    }
+
+    private fun syncDailyStats() {
+        try {
+            val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+            val deviceId = PrefCtrl(this@DialService).getDeviceId()
+            val pin = prefs.getString("pin", "") ?: return
+            val serverUrl = prefs.getString("cloud_server", "") ?: return
+            if (serverUrl.isEmpty()) return
+            val baseUrl = normalizeHttpUrl(serverUrl)
+            val today = callLogDb.getTodayCount(this)
+            val stats = callLogDb.getDailyDurationStats(this, 1)
+            val dur = if (stats.isNotEmpty()) stats[0].totalDurationSec else 0L
+            val connected = callLogDb.getTodayConnectedCount(this)
+            val model = android.os.Build.MODEL ?: ""
+            val urlStr = "$baseUrl/api/v1/stats/report?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&count=$today&duration=$dur&connected=$connected" +
+                "&model=${java.net.URLEncoder.encode(model, "UTF-8")}&version=2.1"
+            val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000; conn.readTimeout = 5000
+            conn.connect(); conn.disconnect()
+        } catch (_: Exception) {}
+    }
+
+    fun logEvent(eventType: String, detail: String = "") {
+        executor.execute {
+            try {
+                val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
+                val deviceId = PrefCtrl(this@DialService).getDeviceId()
+                val pin = prefs.getString("pin", "") ?: return@execute
+                val serverUrl = prefs.getString("cloud_server", "") ?: return@execute
+                if (serverUrl.isEmpty()) return@execute
+                val baseUrl = normalizeHttpUrl(serverUrl)
+                val urlStr = "$baseUrl/api/v1/events/log?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
+                    "&event_type=${java.net.URLEncoder.encode(eventType, "UTF-8")}" +
+                    "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}" +
+                    "&detail=${java.net.URLEncoder.encode(detail, "UTF-8")}"
+                val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000; conn.readTimeout = 5000
+                conn.connect(); conn.disconnect()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun normalizeHttpUrl(wsUrl: String): String {
+        return when {
+            wsUrl.startsWith("wss://") -> wsUrl.replace("wss://", "https://")
+            wsUrl.startsWith("ws://") -> wsUrl.replace("ws://", "http://")
+            else -> "http://$wsUrl"
+        }.removeSuffix("/")
+    }
+}

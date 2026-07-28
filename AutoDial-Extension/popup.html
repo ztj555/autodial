@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 300px; min-height: 200px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: #111318; color: #E8DCC8; padding: 12px; font-size: 13px;
+}
+.header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.header h1 { font-size: 15px; font-weight: 600; color: #C9A84C; }
+input {
+  width: 100%; padding: 8px 10px; margin-bottom: 6px;
+  background: #1A1D24; border: 1px solid #2A2E38; border-radius: 6px;
+  color: #E8DCC8; font-size: 13px; outline: none;
+}
+input:focus { border-color: #C9A84C; }
+button {
+  padding: 7px 12px; border: none; border-radius: 6px;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.btn-sm { width: auto; font-size: 11px; padding: 4px 10px; background: #2A2E38; color: #A09070; }
+.btn-sm:hover { background: #3A3E48; }
+.btn-primary { background: #C9A84C; color: #111318; font-weight: 600; }
+.btn-primary:hover { background: #D4B35A; }
+.status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1A1D24; border-radius: 6px; margin-bottom: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.online { background: #2ECC71; box-shadow: 0 0 6px #2ECC71; }
+.status-dot.offline { background: #E74C3C; }
+.info-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: #A09070; }
+.server-row { display: flex; gap: 6px; align-items: center; }
+.server-row input { flex: 1; margin-bottom: 0; }
+.server-status { font-size: 11px; margin-left: 4px; white-space: nowrap; }
+.server-status.ok { color: #2ECC71; }
+.server-status.err { color: #E74C3C; }
+.section-title { font-size: 11px; color: #707070; margin: 8px 0 4px; }
+.hint { font-size: 11px; color: #707070; text-align: center; margin-top: 6px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="header"><h1>AutoDial v4</h1></div>
+
+<!-- PIN 已设置 -->
+<div id="statusPanel" style="display:none">
+  <div class="status-bar">
+    <div class="status-dot online" id="statusDot"></div>
+    <span id="statusText">PIN 已就绪</span>
+  </div>
+  <div class="info-row"><span>PIN（坐席手机号）</span><span id="myPhone">--</span></div>
+  <div class="info-row"><span>接待顾问姓名</span><span id="myMgrName" style="cursor:pointer;color:#C9A84C" title="点击修改顾问姓名"></span></div>
+  <div class="info-row"><span>云端地址</span><span id="cloudAddr" style="cursor:pointer;color:#C9A84C" title="点击修改服务器"></span></div>
+  <div class="info-row"><span>云端状态</span><span id="cloudStatus">--</span></div>
+  <button class="btn-sm btn-primary" id="syncBtn" style="margin-top:6px;width:100%">🔄 同步登记列表</button>
+  <button class="btn-sm" id="editServerBtn" style="margin-top:6px">⚙ 修改服务器</button>
+  <button class="btn-sm" id="clearPinBtn" style="margin-top:4px;color:#E74C3C">清除 PIN</button>
+</div>
+
+<!-- 设置 PIN + 服务器 -->
+<div id="setupPanel">
+  <div class="hint" id="setupHint" style="color:#C9A84C;margin-bottom:10px">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</div>
+
+  <div class="section-title">⚙ 云中继地址</div>
+  <div class="server-row">
+    <input id="serverInput" placeholder="101.34.65.254:35430" />
+    <button class="btn-sm" id="testServerBtn">测试</button>
+  </div>
+  <span class="server-status" id="serverStatus" style="margin-left:4px"></span>
+  <button class="btn-sm" id="backToStatusBtn" style="display:none;margin-top:6px">← 返回</button>
+
+  <div class="section-title">📱 配对码（4位或11位数字）</div>
+  <div class="server-row" style="margin-top:4px">
+    <input id="pinInput" placeholder="4位或11位配对码" maxlength="11" style="flex:1" />
+    <button class="btn-sm btn-primary" id="savePinBtn">保存</button>
+  </div>
+  <span class="server-status" id="pinStatus"></span>
+
+  <div class="section-title">👤 接待顾问姓名（自动从CRM检测，也可手动覆盖）</div>
+  <div class="server-row" style="margin-top:4px">
+    <input id="mgrNameInput" placeholder="请填写您的姓名" style="flex:1" />
+    <button class="btn-sm btn-primary" id="saveMgrNameBtn">保存</button>
+  </div>
+  <span class="server-status" id="mgrNameStatus"></span>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
