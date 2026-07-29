@@ -1481,6 +1481,32 @@ async def health_check_handler(path, request_headers):
             if conn:
                 conn.close()
 
+    # API: 更新顾问姓名 GET /api/v1/advisor/update?pin=xxx&name=xxx
+    if path == '/api/v1/advisor/update':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0].strip()
+        name = qs.get('name', [''])[0].strip()
+        if not pin:
+            return (200, JSON_HDR, _err_json('MISSING_PARAM', 'pin 不能为空'))
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            c.execute('''INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?)
+                         ON CONFLICT(pin) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at''',
+                      (pin, name, now_str))
+            conn.commit()
+            log.info(f'ADVISOR_UPDATE pin={pin} name={name}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'pin': pin, 'name': name}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
     # ===== 管理员标记 =====
 
     # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
@@ -2255,6 +2281,33 @@ async def health_check_handler(path, request_headers):
             conn.commit()
             log.info(f'DEVICE_DEFAULT_PIN device={device_id} default_pin={dpin}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'device_id': device_id, 'default_pin': dpin}).encode('utf-8'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # API: 设置设备别名 GET /api/v1/device/update?device_id=xxx&label=xxx
+    if path == '/api/v1/device/update':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        device_id = qs.get('device_id', [''])[0].strip()
+        label = qs.get('label', [''])[0].strip()
+        if not device_id:
+            return (200, JSON_HDR, _err_json('MISSING_PARAM', 'device_id 不能为空'))
+        conn = None
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            c.execute('''INSERT INTO phones (device_id, label, last_seen, first_seen)
+                         VALUES (?, ?, ?, ?)
+                         ON CONFLICT(device_id) DO UPDATE SET label=excluded.label, last_seen=excluded.last_seen''',
+                      (device_id, label, now_str, now_str))
+            conn.commit()
+            log.info(f'DEVICE_LABEL device={device_id} label={label}')
+            return (200, JSON_HDR, json.dumps({'ok': True, 'device_id': device_id, 'label': label}).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:

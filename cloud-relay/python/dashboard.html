@@ -199,8 +199,8 @@
                     <div class="filter-group"><label>搜索</label><input type="text" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="loadPhones()"></div>
                     <button class="refresh-btn" onclick="loadPhones()">🔄 刷新</button>
                 </div>
-                <table><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th><th>操作</th></tr></thead>
-                <tbody id="phones-list"><tr><td colspan="9" class="empty-state">加载中...</td></tr></tbody></table>
+                <table><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th><th>操作</th></tr></thead>
+                <tbody id="phones-list"><tr><td colspan="10" class="empty-state">加载中...</td></tr></tbody></table>
             </div>
         </div>
 
@@ -649,14 +649,15 @@
                     return (dev.device_id||'').toLowerCase().includes(search) ||
                            (dev.device_model||'').toLowerCase().includes(search) ||
                            (dev.current_pin||'').includes(search) ||
-                           (dev.current_name||'').toLowerCase().includes(search);
+                           (dev.current_name||'').toLowerCase().includes(search) ||
+                           (dev.label||'').toLowerCase().includes(search);
                 });
             }
 
             document.getElementById('phone-count').textContent = devices.length;
             const tbody = document.getElementById('phones-list');
             if (devices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无设备数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无设备数据</td></tr>';
                 return;
             }
             tbody.innerHTML = devices.map(function(dev, idx) {
@@ -669,6 +670,11 @@
                 return '<tr class="expandable" id="' + rowId + '" onclick="togglePhoneHistory(\'' + rowId + '\',\'' + detailId + '\',\'' + escA(dev.device_id||'') + '\')">' +
                     '<td><span class="expand-arrow" id="' + rowId + '-arrow">▶</span></td>' +
                     '<td title="' + esc(dev.device_id||'') + '" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong>' + esc((dev.device_id||'').slice(0,20)) + '</strong></td>' +
+                    '<td><input type="text" value="' + esc(dev.label||'') + '" placeholder="备注" ' +
+                        'onclick="event.stopPropagation()" ' +
+                        'onchange="setDeviceLabel(\'' + escA(dev.device_id||'') + '\',this.value)" ' +
+                        'style="width:90px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" ' +
+                        'title="设备别名（如：杨蕊的手机）"></td>' +
                     '<td>' + esc(dev.device_model||'未知') + '</td>' +
                     '<td><input type="text" value="' + esc(dpin) + '" placeholder="未设置" ' +
                         'onclick="event.stopPropagation()" ' +
@@ -681,7 +687,7 @@
                     '<td style="font-size:11px;color:var(--text-muted);">' + (dev.last_seen ? timeAgo(dev.last_seen) : '-') + '</td>' +
                     '<td><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showPhoneDetail(\'' + escA(dev.device_id||'') + '\',\'' + escA(dev.current_name||'') + '\')">详情</button></td>' +
                 '</tr>' +
-                '<tr class="expand-detail" id="' + detailId + '"><td colspan="9"><div style="text-align:center;color:var(--text-muted);">点击展开查看历史记录...</div></td></tr>';
+                '<tr class="expand-detail" id="' + detailId + '"><td colspan="10"><div style="text-align:center;color:var(--text-muted);">点击展开查看历史记录...</div></td></tr>';
             }).join('');
         }
 
@@ -762,6 +768,15 @@
             } catch(e) {
                 alert('设置失败: 网络错误');
             }
+        }
+
+        async function setDeviceLabel(deviceId, label) {
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/device/update?device_id=' +
+                    encodeURIComponent(deviceId) + '&label=' + encodeURIComponent((label||'').trim())));
+                const d = await r.json();
+                if (!d.ok) alert('设置别名失败: ' + (d.message || '未知错误'));
+            } catch(e) { /* 静默失败，刷新时自动同步 */ }
         }
 
         // ==================== 📞 通话记录 ====================
@@ -1230,7 +1245,11 @@
                 if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无人员</td></tr>'; return; }
                 tbody.innerHTML = pins.map(function(p) {
                     const g = groups.find(function(g) { return g.id == p.group_id; });
-                    return '<tr><td>' + (p.pin||'') + '</td><td><strong>' + esc(p.name||'') + '</strong></td>' +
+                    return '<tr><td>' + (p.pin||'') + '</td>' +
+                        '<td><input type="text" value="' + esc(p.name||'') + '" placeholder="手动填写姓名" ' +
+                        'onchange="setAdvisorName(\'' + escA(p.pin||'') + '\',this.value)" ' +
+                        'style="width:110px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;" ' +
+                        'title="手动填写顾问姓名（试岗人员等）"></td>' +
                         '<td><select onchange="setPinGroup(\'' + escA(p.pin||'') + '\',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
                             '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
                         '</select></td>' +
@@ -1244,6 +1263,14 @@
 
         async function setPinGroup(pin, gid) {
             await fetch(withToken(VISIT_API_BASE+'/api/v1/pin/set_group?pin='+encodeURIComponent(pin)+'&group_id='+encodeURIComponent(gid)));
+        }
+
+        async function setAdvisorName(pin, name) {
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/advisor/update?pin='+encodeURIComponent(pin)+'&name='+encodeURIComponent((name||'').trim())));
+                const d = await r.json();
+                if (!d.ok) alert('更新姓名失败: ' + (d.message || '未知错误'));
+            } catch(e) { /* 静默失败 */ }
         }
 
         async function addGroup() {
