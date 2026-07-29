@@ -662,8 +662,10 @@ async def handle_connection(ws, path=None):
                         c2.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
                         row2 = c2.fetchone()
                         if row2: owner_name = row2[0]
-                        conn2.close()
                     except Exception: pass
+                    finally:
+                        try: conn2.close()
+                        except Exception: pass
                     # 通知手机等待授权
                     await ws.send(json.dumps({
                         'type': 'auth_pending',
@@ -688,8 +690,10 @@ async def handle_connection(ws, path=None):
                     c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
                     row = c.fetchone()
                     if row: owner_name = row[0]
-                    conn.close()
                 except Exception: pass
+                finally:
+                    try: conn.close()
+                    except Exception: pass
                 await ws.send(json.dumps({
                     'type': 'auth_ok',
                     'pin': pin,
@@ -1716,8 +1720,10 @@ async def health_check_handler(path, request_headers):
                 c3.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
                 row3 = c3.fetchone()
                 if row3: owner_name = row3[0]
-                conn3.close()
             except Exception: pass
+            finally:
+                try: conn3.close()
+                except Exception: pass
             # 通过 asyncio.run_coroutine_threadsafe 发送消息（因为 health_check_handler 在 threadsafe 模式下运行）
             async def _send_auth_ok():
                 try:
