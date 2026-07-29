@@ -2143,6 +2143,16 @@ async def health_check_handler(path, request_headers):
             else:
                 c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
             rows = [dict(r) for r in c.fetchall()]
+            # 补全顾问姓名（kefu_tel 可能是手机号或姓名，查 advisor_names 表）
+            try:
+                kefu_tels = list(set(r.get('kefu_tel','') for r in rows if r.get('kefu_tel','')))
+                if kefu_tels:
+                    ph = ','.join(['?'] * len(kefu_tels))
+                    c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
+                    name_map = {r2['pin']: r2['name'] for r2 in c.fetchall()}
+                    for r in rows:
+                        r['kefu_name'] = name_map.get(r.get('kefu_tel',''), '')
+            except Exception: pass
             return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))

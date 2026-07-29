@@ -236,8 +236,8 @@
                     <button class="btn btn-success" onclick="exportCSV()">📥 导出CSV</button>
                     <button class="btn btn-primary" onclick="showImportModal()">📥 批量导入</button>
                 </div>
-                <table><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>接待顾问</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
-                <tbody id="visits-list"><tr><td colspan="10" class="empty-state">请选择筛选条件</td></tr></tbody></table>
+                <table><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>顾问(电话)</th><th>顾问姓名</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
+                <tbody id="visits-list"><tr><td colspan="11" class="empty-state">请选择筛选条件</td></tr></tbody></table>
             </div>
             <div class="card"><h2>📊 上门趋势（14天）</h2><div class="chart-wrap"><canvas id="visit-chart"></canvas></div></div>
         </div>
@@ -933,9 +933,9 @@
                 if (dTo) filtered = filtered.filter(function(r) { return (r.visit_time || r.created_at) <= dTo + 'T23:59:59'; });
                 if (src === 'unsynced') filtered = filtered.filter(function(r) { return !r.crm_synced; });
                 else if (src) filtered = filtered.filter(function(r) { return r.source === src; });
-                if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无记录</td></tr>'; return; }
+                if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无记录</td></tr>'; return; }
                 tbody.innerHTML = filtered.map(function(r) { return '<tr style="' + (r.crm_synced?'':'background:rgba(244,67,54,0.06);') + '">' +
-                    '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
+                    '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
                     '<td><span class="badge badge-' + (r.source==='phone'?'phone-src':r.source==='crm_sync'?'crm':'plugin') + '">' + (r.source==='phone'?'手机':r.source==='crm_sync'?'CRM同步':'插件') + '</span></td>' +
                     '<td>' + (r.crm_synced?'<span style="color:#2ecc71;">✅</span>':'<span style="color:#e74c3c;">⚠ 未同步</span>') + '</td>' +
                     '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
@@ -943,7 +943,7 @@
                     '<td><button class="btn btn-primary btn-sm" onclick="openEditModal(' + r.id + ',\'' + escA(r.name||'') + '\',\'' + escA(r.mobile||'') + '\',\'' + escA(r.kefu_tel||'') + '\',\'' + escA(r.visit_type||'') + '\')">编辑</button> ' +
                     '<button class="btn btn-danger btn-sm" onclick="deleteVisit(' + r.id + ')">删除</button></td>' +
                 '</tr>'; }).join('');
-            } catch(e) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state" style="color:#e74c3c;">请求失败</td></tr>'; }
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:#e74c3c;">请求失败</td></tr>'; }
         }
 
         async function loadPinDropdown() {
@@ -1003,12 +1003,12 @@
 
         function exportCSV() {
             const rows = document.querySelectorAll('#visits-list tr');
-            if (rows.length===0 || rows[0].querySelectorAll('td').length < 8) { alert('无数据可导出'); return; }
-            let csv = '\uFEFFID,客户姓名,手机号,接待顾问,事由,来源,CRM同步,登记时间,来访时间\n';
+            if (rows.length===0 || rows[0].querySelectorAll('td').length < 9) { alert('无数据可导出'); return; }
+            let csv = '\uFEFFID,客户姓名,手机号,顾问电话,顾问姓名,事由,来源,CRM同步,登记时间,来访时间\n';
             rows.forEach(function(row) {
                 const cells = row.querySelectorAll('td');
-                if (cells.length < 9) return;
-                csv += Array.from(cells).slice(0,9).map(function(c) { return '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"'; }).join(',') + '\n';
+                if (cells.length < 10) return;
+                csv += Array.from(cells).slice(0,10).map(function(c) { return '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"'; }).join(',') + '\n';
             });
             const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
