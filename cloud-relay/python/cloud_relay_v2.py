@@ -654,11 +654,23 @@ async def handle_connection(ws, path=None):
                             await pc_ws.send(auth_msg)
                         except Exception:
                             pass
+                    # 查询手机主人姓名
+                    owner_name = ''
+                    try:
+                        conn2 = sqlite3.connect(DB_PATH)
+                        c2 = conn2.cursor()
+                        c2.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                        row2 = c2.fetchone()
+                        if row2: owner_name = row2[0]
+                        conn2.close()
+                    except Exception: pass
                     # 通知手机等待授权
                     await ws.send(json.dumps({
                         'type': 'auth_pending',
                         'request_id': req_id,
                         'pin': pin,
+                        'default_pin': default_pin,     # 手机主人的PIN
+                        'default_name': owner_name,      # 手机主人的姓名
                         'message': f'等待 PIN {pin} 的浏览器插件授权中（需 CRM 页面打开）...'
                     }))
                     log.info(f'AUTH_REQUEST id={req_id} device={device_name} pin={pin} default_pin={default_pin} ext_online=1')
@@ -668,13 +680,25 @@ async def handle_connection(ws, path=None):
 
                 group.phones.add(ws)
                 pc_online = len(group.pcs) > 0
+                # 查询手机主人的姓名（用于手机端上门同步权限）
+                owner_name = ''
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    c = conn.cursor()
+                    c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                    row = c.fetchone()
+                    if row: owner_name = row[0]
+                    conn.close()
+                except Exception: pass
                 await ws.send(json.dumps({
                     'type': 'auth_ok',
                     'pin': pin,
+                    'default_pin': default_pin,       # 手机主人的PIN
+                    'default_name': owner_name,       # 手机主人的姓名
                     'pcCount': len(group.pcs),
-                    'pc_present': pc_online,  # v8: 手机端据此判断 PC 是否可达
-                    'ext_online': is_ext_online(pin),  # 扩展是否在线（5分钟内有REST请求）
-                    'newDevice': not is_first_device  # Fix ⏳5: 通知新设备它是否是后续加入的
+                    'pc_present': pc_online,
+                    'ext_online': is_ext_online(pin),
+                    'newDevice': not is_first_device
                 }))
                 # Fix ⏳5: 如果非首设备加入已有组，广播通知给已有成员
                 if not is_first_device:
@@ -1684,12 +1708,24 @@ async def health_check_handler(path, request_headers):
                 group.phones.discard(old_phone)
             group.phones.add(phone_ws)
             pc_online = len(group.pcs) > 0
+            # 查询手机主人姓名
+            owner_name = ''
+            try:
+                conn3 = sqlite3.connect(DB_PATH)
+                c3 = conn3.cursor()
+                c3.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                row3 = c3.fetchone()
+                if row3: owner_name = row3[0]
+                conn3.close()
+            except Exception: pass
             # 通过 asyncio.run_coroutine_threadsafe 发送消息（因为 health_check_handler 在 threadsafe 模式下运行）
             async def _send_auth_ok():
                 try:
                     await phone_ws.send(json.dumps({
                         'type': 'auth_ok',
                         'pin': auth_pin,
+                        'default_pin': default_pin,     # 手机主人的PIN
+                        'default_name': owner_name,      # 手机主人的姓名
                         'pcCount': len(group.pcs),
                         'pc_present': pc_online,
                         'ext_online': is_ext_online(auth_pin),
