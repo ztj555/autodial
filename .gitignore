@@ -47,3 +47,7 @@ Desktop.ini
 
 # WorkBuddy
 .workbuddy/
+
+# 编译产物
+*.exe
+*.apk
