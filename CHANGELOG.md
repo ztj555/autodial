@@ -1,4 +1,20 @@
-# GoDial 更新日志
+# AutoDial 更新日志
+
+## 2026-07-31
+
+### 扩展端 UI 对齐手机端「天空蓝 · 亮白」(v4.13)
+
+**Chrome 扩展**
+- `popup.html` 弹窗整体改版：暗金主题 → 天空蓝亮色主题，与手机端默认主题（ThemeManager sky-blue/light）一致
+  - 页面底色 #EBF4FF、白色卡片 + #DCEAF7 描边、输入框 #F4F8FC、主按钮 #4A90E0→#1A56A8 蓝渐变
+  - 状态大盘改为浅蓝渐变卡片，在线状态点增加脉冲动画
+  - 设置项改为白卡分区 + 图标小块（#EDF5FD），与手机端设置页一致
+- `auth.html` 设备授权页同步改版为天空蓝亮色
+- `content-script.js` 新增「天空蓝」主题并设为默认（localStorage 已选主题的用户不受影响）
+  - 修复亮色主题下拨号按钮文字对比度（新增 textOnAccent 字段）
+  - 清理 5 处硬编码旧主题色（#2ECC71/#E74C3C），改用主题变量
+- `popup.js` 修复状态文字 class 名不匹配（server-status → field-status），成功/失败着色此前未生效
+- 扩展版本号 4.1.0 → 4.2.0
 
 ## 2026-07-23
 

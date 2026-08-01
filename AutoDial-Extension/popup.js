@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setServerStatus(text, cls) {
     serverStatus.textContent = text;
-    serverStatus.className = 'server-status ' + cls;
+    serverStatus.className = 'field-status ' + cls;
   }
 
   // 保存 PIN
@@ -80,12 +80,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const pin = pinInput.value.trim();
     if (!pin || !/^\d{4}$|^\d{11}$/.test(pin)) {
       pinStatus.textContent = '请输入4位或11位数字配对码';
-      pinStatus.className = 'server-status err';
+      pinStatus.className = 'field-status err';
       return;
     }
     chrome.storage.local.set({ pin: pin, self_phone: pin }, () => {
       pinStatus.textContent = '✓ PIN 已保存';
-      pinStatus.className = 'server-status ok';
+      pinStatus.className = 'field-status ok';
       showStatus(pin);
       setTimeout(() => { pinStatus.textContent = ''; }, 1500);
     });
@@ -96,12 +96,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const mgrName = document.getElementById('mgrNameInput').value.trim();
     if (!mgrName) {
       document.getElementById('mgrNameStatus').textContent = '请输入接待顾问姓名';
-      document.getElementById('mgrNameStatus').className = 'server-status err';
+      document.getElementById('mgrNameStatus').className = 'field-status err';
       return;
     }
     chrome.storage.local.set({ manager_name: mgrName }, () => {
       document.getElementById('mgrNameStatus').textContent = '✓ 姓名已保存';
-      document.getElementById('mgrNameStatus').className = 'server-status ok';
+      document.getElementById('mgrNameStatus').className = 'field-status ok';
       setTimeout(() => { document.getElementById('mgrNameStatus').textContent = ''; }, 1500);
     });
   });
@@ -205,16 +205,16 @@ document.addEventListener('DOMContentLoaded', () => {
           const pcStr = d.pcConnected ? 'PC在线' : 'PC离线';
           const phStr = d.phoneConnected ? '手机在线(' + (d.phoneCount || 0) + ')' : '手机离线';
           el.textContent = '● ' + pcStr + ' | ' + phStr;
-          el.style.color = (d.pcConnected || d.phoneConnected) ? '#2ECC71' : '#A09070';
+          el.style.color = (d.pcConnected || d.phoneConnected) ? '#40C057' : '#5880A8';
           document.getElementById('statusDot').className = 'status-dot ' + ((d.pcConnected || d.phoneConnected) ? 'online' : 'offline');
         } else {
           el.textContent = '○ 无法获取状态';
-          el.style.color = '#E74C3C';
+          el.style.color = '#F03E3E';
         }
       }).catch(() => {
         const el = document.getElementById('cloudStatus');
         el.textContent = '○ 云中继不可达';
-        el.style.color = '#E74C3C';
+        el.style.color = '#F03E3E';
       });
     });
   }
@@ -224,10 +224,10 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.runtime.sendMessage({ type: 'triggerSync' }, (resp) => {
       const st = document.getElementById('cloudStatus');
       if (resp && resp.result) {
-        st.textContent = resp.result; st.style.color = resp.ok ? '#2ECC71' : '#E74C3C';
-        setTimeout(() => { st.textContent = '--'; st.style.color = '#A09070'; }, 3000);
+        st.textContent = resp.result; st.style.color = resp.ok ? '#40C057' : '#F03E3E';
+        setTimeout(() => { st.textContent = '--'; st.style.color = '#5880A8'; }, 3000);
       } else {
-        st.textContent = '✗ 请先打开 CRM 页面'; st.style.color = '#E74C3C';
+        st.textContent = '✗ 请先打开 CRM 页面'; st.style.color = '#F03E3E';
       }
     });
   });

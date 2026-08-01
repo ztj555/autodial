@@ -60,9 +60,21 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 主题数据（精选8套，适配插件端场景）
+  // 主题数据（默认「天空蓝」与手机端默认主题一致，另精选8套暗色）
   // ═══════════════════════════════════════════════════════════════
   const EXT_THEMES = {
+    'sky-blue': {
+      name: '天空蓝', icon: '☁',
+      accent: '#2B6CC4', accentLight: '#4A90E0', accentDark: '#1A56A8',
+      bg: '#EBF4FF', bg2: '#FFFFFF', bg3: '#D8ECFC',
+      text: '#162840', text2: '#5880A8',
+      green: '#40C057', red: '#F03E3E',
+      textOnAccent: '#FFFFFF',
+      gradAccent: 'linear-gradient(135deg,#4A90E0,#1A56A8)',
+      gradIdle: 'linear-gradient(135deg,#FFFFFF,#D8ECFC)',
+      gradGreen: 'linear-gradient(135deg,#40C057,#2B9E46)',
+      gradRed: 'linear-gradient(135deg,#F03E3E,#D32F2F)',
+    },
     'dark-gold': {
       name: '暗金', icon: '✦',
       accent: '#C9A84C', accentLight: '#F0C040', accentDark: '#8B6914',
@@ -153,9 +165,9 @@
     },
   };
 
-  // 当前主题
-  let currentThemeId = localStorage.getItem('__ad_theme') || 'dark-gold';
-  function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES['dark-gold']; }
+  // 当前主题（默认天空蓝，与手机端一致）
+  let currentThemeId = localStorage.getItem('__ad_theme') || 'sky-blue';
+  function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES['sky-blue']; }
 
   function applyTheme(id) {
     currentThemeId = id;
@@ -164,7 +176,7 @@
     // 刷新拨号按钮（完整刷新所有主题相关属性）
     if (floatEl) {
       floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
-      floatEl.style.color = t.text;
+      floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
       floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
       floatEl.style.border = `1px solid ${t.accent}33`;
     }
@@ -1194,7 +1206,7 @@
           if (chrome.runtime.lastError || !resp?.success) {
             pinStatus.textContent = '保存失败'; pinStatus.style.color = t.red;
           } else {
-            pinStatus.textContent = '✓ 已保存'; pinStatus.style.color = '#2ECC71';
+            pinStatus.textContent = '✓ 已保存'; pinStatus.style.color = t.green;
             setTimeout(() => { pinStatus.textContent = ''; }, 2000);
           }
         });
@@ -1232,7 +1244,7 @@
       const srvSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
       srvSaveBtn.addEventListener('click', () => {
         chrome.storage.local.set({ cloud_api: srvInput.value.trim() }, () => {
-          srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = '#2ECC71';
+          srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = t.green;
           setTimeout(() => { srvStatus.textContent = ''; }, 2000);
         });
       });
@@ -1265,7 +1277,7 @@
           const d = await r.json();
           const ms = Date.now() - start;
           if (d.service) {
-            srvStatus.textContent = `✓ 连接成功 (${ms}ms)`; srvStatus.style.color = '#2ECC71';
+            srvStatus.textContent = `✓ 连接成功 (${ms}ms)`; srvStatus.style.color = t.green;
           } else {
             srvStatus.textContent = '✗ 服务异常'; srvStatus.style.color = t.red;
           }
@@ -1303,7 +1315,7 @@
               chrome.storage.local.set({ cloud_apis_fetched: servers });
               srvInput.value = servers[0];
               chrome.storage.local.set({ cloud_api: servers[0] });
-              srvStatus.textContent = `✓ 获取到 ${servers.length} 个服务器`; srvStatus.style.color = '#2ECC71';
+              srvStatus.textContent = `✓ 获取到 ${servers.length} 个服务器`; srvStatus.style.color = t.green;
               return;
             }
           } catch (_) { continue; }
@@ -1392,6 +1404,7 @@
       const label = document.getElementById('__ad_dial_label');
       if (label) label.textContent = '📞 ' + phone;
       floatEl.style.background = t.gradAccent;
+      floatEl.style.color = t.textOnAccent || t.text;
       floatEl.style.boxShadow = `0 4px 16px ${t.accent}33`;
     }
 
@@ -1401,6 +1414,7 @@
       const label = document.getElementById('__ad_dial_label');
       if (label) label.textContent = (ok ? '✓ ' : '✗ ') + text;
       floatEl.style.background = ok ? t.gradGreen : t.gradRed;
+      floatEl.style.color = t.textOnAccent || t.text;
       floatEl.style.boxShadow = ok
         ? `0 4px 16px ${t.green}44`
         : `0 4px 16px ${t.red}44`;
@@ -1411,6 +1425,7 @@
         const lb = document.getElementById('__ad_dial_label');
         if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
         floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
+        floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
         floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
       }, ok ? 2500 : 1000);
     }
@@ -1636,7 +1651,7 @@
     div.id = '__ad_iframe_toast';
     var isOk = text.indexOf('✅') >= 0 || text.indexOf('正在') >= 0;
     div.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);' +
-      'background:' + (isOk ? '#2ECC71' : '#E74C3C') + ';color:#fff;padding:10px 24px;' +
+      'background:' + (isOk ? T().green : T().red) + ';color:#fff;padding:10px 24px;' +
       'border-radius:8px;z-index:2147483647;font-size:14px;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
     div.textContent = text;
     document.body.appendChild(div);
