@@ -19,6 +19,10 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, urlencode
+from concurrent.futures import ThreadPoolExecutor
+
+# P0-Fix: 专用线程池，避免 DB 查询占用 websockets process_request 的默认线程池
+_db_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix='db')
 
 import websockets
 from websockets.legacy.server import serve
@@ -153,6 +157,10 @@ def init_db():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+        # Fix P0-1: WAL mode to prevent DB write locks from blocking reads
+        c.execute('PRAGMA journal_mode=WAL')
+        c.execute('PRAGMA synchronous=NORMAL')
+        c.execute('PRAGMA busy_timeout=5000')
         c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
@@ -461,6 +469,9 @@ _pin_attempts: dict[str, list] = defaultdict(list)
 
 def check_rate_limit(client_ip: str) -> bool:
     """检查是否超频，返回 True 表示应该拒绝"""
+    # P1: localhost 请求不限频（健康检查、管理界面自身调用）
+    if client_ip in ('127.0.0.1', '::1', 'localhost'):
+        return False
     now = datetime.now()
     # 清理过期条目
     _pin_attempts[client_ip] = [
@@ -505,11 +516,12 @@ async def forward_to_phones(pin, message, exclude_ws=None):
     data = json.dumps(message, ensure_ascii=False)
     target_device = message.get('targetDevice')
     sent_count = 0
-    for phone in list(group.phones):
+    # P0-4: 创建快照避免迭代过程中集合被其他协程修改
+    phones_snapshot = [(p, ws_meta.get(p, {})) for p in list(group.phones)]
+    for phone, phone_meta in phones_snapshot:
         if phone != exclude_ws:
             # 如果指定了 targetDevice，只转发给匹配的设备
             if target_device:
-                phone_meta = ws_meta.get(phone, {})
                 phone_name = phone_meta.get('device_name', '')
                 if phone_name != target_device:
                     continue
@@ -654,18 +666,22 @@ async def handle_connection(ws, path=None):
                             await pc_ws.send(auth_msg)
                         except Exception:
                             pass
-                    # 查询手机主人姓名
+                    # Round3: 卸载同步 DB 查询到线程池，避免阻塞事件循环
                     owner_name = ''
                     try:
-                        conn2 = sqlite3.connect(DB_PATH)
-                        c2 = conn2.cursor()
-                        c2.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
-                        row2 = c2.fetchone()
-                        if row2: owner_name = row2[0]
-                    except Exception: pass
-                    finally:
-                        try: conn2.close()
-                        except Exception: pass
+                        loop_ref = asyncio.get_running_loop()
+                        def _query_owner_name():
+                            conn = sqlite3.connect(DB_PATH)
+                            try:
+                                c = conn.cursor()
+                                c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                                row = c.fetchone()
+                                return row[0] if row else ''
+                            finally:
+                                conn.close()
+                        owner_name = await loop_ref.run_in_executor(_db_executor, _query_owner_name)
+                    except Exception:
+                        pass
                     # 通知手机等待授权
                     await ws.send(json.dumps({
                         'type': 'auth_pending',
@@ -682,18 +698,22 @@ async def handle_connection(ws, path=None):
 
                 group.phones.add(ws)
                 pc_online = len(group.pcs) > 0
-                # 查询手机主人的姓名（用于手机端上门同步权限）
+                # Round3: 卸载同步 DB 查询到线程池，避免阻塞事件循环
                 owner_name = ''
                 try:
-                    conn = sqlite3.connect(DB_PATH)
-                    c = conn.cursor()
-                    c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
-                    row = c.fetchone()
-                    if row: owner_name = row[0]
-                except Exception: pass
-                finally:
-                    try: conn.close()
-                    except Exception: pass
+                    loop_ref = asyncio.get_running_loop()
+                    def _query_owner_name2():
+                        conn = sqlite3.connect(DB_PATH)
+                        try:
+                            c = conn.cursor()
+                            c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                            row = c.fetchone()
+                            return row[0] if row else ''
+                        finally:
+                            conn.close()
+                    owner_name = await loop_ref.run_in_executor(_db_executor, _query_owner_name2)
+                except Exception:
+                    pass
                 await ws.send(json.dumps({
                     'type': 'auth_ok',
                     'pin': pin,
@@ -1067,8 +1087,15 @@ def _err_json(code, message):
 _AUTH_ERR = (401, JSON_HDR, _err_json('UNAUTHORIZED', '需要管理权限'))
 
 def _schedule_async(coro):
-    """从 HTTP handler 线程安全地调度 async 任务到事件循环"""
+    """调度 async 任务：事件循环内用 create_task，跨线程用 run_coroutine_threadsafe"""
     global loop
+    try:
+        running_loop = asyncio.get_running_loop()
+        if running_loop is loop:
+            asyncio.create_task(coro)
+            return
+    except RuntimeError:
+        pass  # 不在事件循环中，走跨线程路径
     if loop and loop.is_running():
         asyncio.run_coroutine_threadsafe(coro, loop)
     else:
@@ -1217,15 +1244,9 @@ def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
 def _push_visit_to_phone(pin, visit_record):
     """推送 visit_record 给对应 pin 的手机，离线则堆积"""
     group = pin_groups.get(pin)
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
     if group and group.phones:
         try:
-            asyncio.run_coroutine_threadsafe(
-                forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}), loop
-            )
+            _schedule_async(forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}))
         except Exception as e:
             log.warning(f'VISIT push failed pin={pin}: {e}')
             if group:
@@ -1238,7 +1259,12 @@ def _push_visit_to_phone(pin, visit_record):
         grp.pending_visits.append(visit_record)
 
 async def health_check_handler(path, request_headers):
-    """处理 HTTP 请求（健康检查 + API + Web 界面）"""
+    """处理 HTTP 请求（健康检查 + API + Web 界面）
+
+    这是 async 函数，运行在 asyncio 事件循环上。HTTP 响应直接通过
+    websockets 库发送，无需经过 run_in_executor → Future 等待环节。
+    同步 DB 查询通过 _db_executor 线程池卸载。异步转发使用 create_task。
+    """
     # 如果是 WebSocket 握手请求，不拦截，让 websockets 库处理
     # v8修复: dict() 归一化 headers 键为全小写，兼容 Node.js ws (Upgrade) 和 OkHttp (upgrade)
     try:
@@ -1408,12 +1434,17 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('DUPLICATE_DIAL', '相同号码正在拨号中'))
         group.last_dial[number] = now
 
-        # 同步返回 ACCEPTED，异步转发（ensure_future 解决 process_request 同步限制）
-        asyncio.ensure_future(forward_to_phones(pin, {
-            'type': 'dial',
-            'number': number,
-            'messageId': f'rest-{int(now*1000)}'
-        }))
+        # 同步返回 ACCEPTED，异步转发到手机
+        async def _dial_forward():
+            try:
+                await forward_to_phones(pin, {
+                    'type': 'dial',
+                    'number': number,
+                    'messageId': f'rest-{int(now*1000)}'
+                })
+            except Exception as e:
+                log.error(f'REST_DIAL failed pin={pin}: {e}')
+        _schedule_async(_dial_forward())
         record_message(pin, 'rest_dial', 64)
         log.info(f'REST_DIAL pin={pin} number={number}')
         return (200, JSON_HDR, json.dumps({'ok': True, 'code': 'ACCEPTED'}).encode('utf-8'))
@@ -1430,10 +1461,15 @@ async def health_check_handler(path, request_headers):
         if not group or not group.phones:
             return (200, JSON_HDR, _err_json('PHONE_OFFLINE', '手机未连接'))
 
-        asyncio.ensure_future(forward_to_phones(pin, {
-            'type': 'hangup',
-            'messageId': f'rest-hangup-{int(time.time()*1000)}'
-        }))
+        async def _hangup_forward():
+            try:
+                await forward_to_phones(pin, {
+                    'type': 'hangup',
+                    'messageId': f'rest-hangup-{int(time.time()*1000)}'
+                })
+            except Exception as e:
+                log.error(f'REST_HANGUP failed pin={pin}: {e}')
+        _schedule_async(_hangup_forward())
         record_message(pin, 'rest_hangup', 32)
         log.info(f'REST_HANGUP pin={pin}')
         return (200, JSON_HDR, json.dumps({'ok': True, 'code': 'ACCEPTED'}).encode('utf-8'))
@@ -1724,7 +1760,7 @@ async def health_check_handler(path, request_headers):
             finally:
                 try: conn3.close()
                 except Exception: pass
-            # 通过 asyncio.run_coroutine_threadsafe 发送消息（因为 health_check_handler 在 threadsafe 模式下运行）
+            # 通过 _schedule_async 调度异步任务（自动检测事件循环上下文）
             async def _send_auth_ok():
                 try:
                     await phone_ws.send(json.dumps({
@@ -2430,11 +2466,13 @@ async def health_check_handler(path, request_headers):
         kicked = 0
         for _ws, _meta in list(ws_meta.items()):
             if _meta.get('pin') == pin and (not role or _meta.get('role') == role):
-                try:
-                    await _ws.close(4000, 'kicked by admin')
-                    kicked += 1
-                except Exception:
-                    pass
+                kicked += 1
+                async def _kick_ws(ws=_ws):
+                    try:
+                        await ws.close(4000, 'kicked by admin')
+                    except Exception:
+                        pass
+                _schedule_async(_kick_ws())
         log.info(f'KICK pin={pin} role={role or "any"} count={kicked}')
         return (200, JSON_HDR, json.dumps({'ok': True, 'kicked': kicked}).encode('utf-8'))
 
@@ -2506,6 +2544,8 @@ async def run_server():
     
     # 自动配置防火墙规则（放到 executor 中避免阻塞事件循环）
     loop = asyncio.get_running_loop()
+    # P0-Fix: 扩大默认线程池，防止 sync process_request 因线程池饱和而排队超时
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=32, thread_name_prefix='ws-http'))
     await loop.run_in_executor(None, configure_firewall)
 
     # C4修复: 取消旧心跳任务再创建新的
@@ -2521,7 +2561,8 @@ async def run_server():
                      process_request=health_check_handler,
                      ping_interval=30,
                      ping_timeout=90,  # 增加 ping 超时到 90 秒
-                     close_timeout=10) as server:
+                     close_timeout=10,
+                     max_queue=128) as server:  # P0-Fix: 增大连接队列防止高并发丢连接
         server_instance = server
         log.info(f'Server started on port {PORT}, PID={os.getpid()}')
         log.info(f'Web 管理界面: http://0.0.0.0:{PORT} (与 WebSocket 同端口)')
