@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- Go 1.21+
+- Go 1.23
 - Wails v2 (GUI 框架)
 - gorilla/websocket (WebSocket)
 - golang.org/x/sys (Windows 注册表等)
@@ -22,6 +22,7 @@ pc-app-go/
 ├── settings.go     # JSON 持久化设置
 ├── logger.go       # 文件日志系统
 ├── tray.go         # 系统托盘（右键菜单）
+├── go.mod / go.sum # Go 模块依赖
 ├── wails.json      # Wails 项目配置
 ├── frontend/       # 前端资源（HTML/JS）
 └── build/          # 构建资源（图标等）
@@ -41,7 +42,7 @@ wails dev
 
 ```bash
 wails build
-# 输出: build/bin/autodial-pc.exe
+# 输出: build/bin/AutoDial.exe
 ```
 
 ## 核心功能
@@ -75,6 +76,7 @@ wails build
 - `GET /toggle-floatbar` — 切换悬浮条
 - `GET /cloud-servers` — 云端服务器列表
 - `GET /` — 状态 JSON
+- `POST /api/set-pin` — 设置 PIN（body: `{"pin":"13800138000"}`，4位或11位数字）
 
 ### 设备管理（`devices.go`）
 
@@ -93,18 +95,21 @@ wails build
 
 ### 设置持久化（`settings.go`）
 
-JSON 存储于 `{executableDir}/autodial-settings.json`：
+JSON 存储于 `{UserConfigDir}/settings.json`（Windows 下即 `%AppData%\settings.json`）：
 
 ```json
 {
-  "theme": "dark-gold",
-  "mode": "dark",
   "closeAction": "minimize",
+  "trayExit": true,
   "autoStart": false,
   "silentStart": false,
+  "theme": "lavender",
+  "pinCode": "",
+  "mode": "light",
+  "phoneNotes": {},
+  "cloudServer": "",
   "cloudEnabled": false,
-  "cloudServers": [],
-  "phoneNotes": {}
+  "cloudServers": []
 }
 ```
 

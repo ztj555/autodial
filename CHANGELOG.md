@@ -1,5 +1,23 @@
 # AutoDial 更新日志
 
+## 2026-08-01
+
+### 云中继并发 / DB 性能 P0 修复 + 测试脚本
+
+**cloud_relay_v2.py**
+- 新增专用 DB 线程池 `_db_executor`（8 线程），将同步 SQLite 查询卸载到线程池，避免阻塞事件循环
+- SQLite 启用 WAL 模式（`journal_mode=WAL`）、`synchronous=NORMAL`、`busy_timeout=5000`，缓解写锁阻塞读
+- localhost 请求不限频（健康检查、管理面板自身调用）
+- `forward_to_phones` 遍历前创建快照，避免迭代过程中集合被并发修改
+- `_schedule_async` 优化：事件循环内用 `create_task`，跨线程用 `run_coroutine_threadsafe`
+- REST 拨号转发、`visit_record` 推送统一改用 `_schedule_async`
+
+**测试脚本**
+- 新增 `test_cloud_relay_v2.py`、`test_stress_50_users.py`
+
+**文档**
+- 更新 `README.md`、`部署指南.md`、`待验证问题.md`
+
 ## 2026-07-31
 
 ### 扩展端 UI 对齐手机端「天空蓝 · 亮白」(v4.13)
@@ -22,8 +40,8 @@
 
 **云中继**
 - 管理后台增加管理员鉴权（账号密码登录 + 会话令牌，24h 过期）
-- 设 `AUTODIAL_ADMIN_PASS` 环境变量启用，不设则调试模式免登录
-- 保护端点：设为/取消管理员、分组增删、登记增删改、踢出设备
+- 管理员账号存于 `admin_accounts` 表，鉴权始终启用（`_check_admin`）；`GET /api/v1/login` 发放 24h 会话令牌
+- 保护端点：添加/删除管理账号、分组增删、登记增删改、踢出设备
 - 修复会话令牌永不过期 bug、登录状态验证用错接口 bug
 
 **PC 端 (Go)**
@@ -42,7 +60,7 @@
 - 批量同步通话记录从 50 条限制为 20 条（避免 URL 超长）
 
 **工程整理**
-- 删除废弃文件：`cloud_relay.py`（旧版 v2）、`web_server.py`、`package.json`
+- 删除废弃文件：`cloud_relay.py`（旧版）、`web_server.py`；`package.json` 未删除（仍存在于 `pc-app-Electron/`）
 - 更新 `build.bat`、`start.bat`、`Dockerfile` 引用到 `cloud_relay_v2.py`
 - 清理过时/冗余文档 3 份，更新技术文档 3 份
 

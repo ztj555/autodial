@@ -1,6 +1,6 @@
 # AutoDial 浏览器插件端技术文档
 
-> 最后修改：2026-07-21 23:30 | MV3 v4.2 | 全链路同步修复 + 纯增量去重 + 自动翻页 + 右键一键同步
+> 最后修改：2026-08-01 | MV3 v4.2.0 | 天空蓝 UI + 全链路同步修复 + 纯增量去重 + 自动翻页 + 右键一键同步
 
 ---
 
@@ -10,12 +10,12 @@
 AutoDial-Extension/
 ├── manifest.json           ← MV3 清单（host_permissions + content_scripts）
 ├── background.js           ← Service Worker：双模路由 + PIN 管理 + 拨号
-├── content-script.js       ← 内容脚本：CRM 浮动按钮 + TreeWalker 号码扫描
+├── content-script.js       ← 内容脚本：CRM 浮动按钮 + 号码扫描 + 内联主题（EXT_THEMES）
 ├── popup.html              ← 弹窗界面：云服务器 + PIN 配置
 ├── popup.js                ← 弹窗逻辑：/health 测试 + /api/v1/status 查询
-├── wails-adapter.js        ← Wails API 适配（Go PC 端兼容）
-├── icon16/48/128.png       ← 扩展图标
-└── themes/                 ← CSS 主题文件
+├── auth.html               ← 设备授权页
+├── icons/                  ← 扩展图标（icon16/48/128.png）
+└── AutoDial-API.md         ← API 参考文档
 ```
 
 ---
@@ -25,22 +25,28 @@ AutoDial-Extension/
 ```json
 {
   "manifest_version": 3,
-  "version": "4.0.0",
-  "name": "AutoDial 一键拨号",
+  "version": "4.2.0",
+  "name": "AutoDial",
   "description": "一键拨号 - CRM客户手机号自动拨打（PIN整合版）",
   "host_permissions": [
-    "http://127.0.0.1:35432/*"
+    "*://guwen.zhudaicms.com/*",
+    "*://*.zhudaicms.com/*",
+    "*://*.rxhcrm.com/*",
+    "*://*.rongxinhui.com/*",
+    "http://127.0.0.1:35432/*",
+    "<all_urls>"
   ],
-  "permissions": ["activeTab", "storage", "clipboardWrite"],
+  "permissions": ["activeTab", "storage", "clipboardWrite", "alarms", "contextMenus"],
   "content_scripts": [{
     "matches": [
+      "*://guwen.zhudaicms.com/*",
       "*://*.zhudaicms.com/*",
       "*://*.rxhcrm.com/*",
       "*://*.rongxinhui.com/*"
     ],
     "js": ["content-script.js"],
-    "css": ["themes/dark-gold.css"],
-    "run_at": "document_idle"
+    "run_at": "document_idle",
+    "all_frames": true
   }]
 }
 ```
@@ -57,14 +63,14 @@ AutoDial-Extension/
 
 ```
 拨号请求
-  ├── 1. 检测 PC（localhost:35432，2s 超时）
+  ├── 1. 检测 PC（localhost:35432，500ms 超时）
   │     ├── PC 在线 → HTTP 35432/dial → 完成
   │     └── PC 不在线 → 步骤 2
   └── 2. 云中继（配置的云端地址，REST API）
         └── GET /api/v1/dial?number=xxx + X-AutoDial-PIN Header
 ```
 
-**PC 检测缓存（30s TTL）**：检测结果缓存 30 秒，超时自动重新探测，避免 PC 离线后永久走直连超时。
+**PC 检测缓存（35s TTL）**：检测结果缓存 35 秒（比后台 15s 探测间隔长，保证拨号时永远命中缓存），超时自动重新探测，避免 PC 离线后永久走直连超时。
 
 **PC_CONNECTED 反向兜底**：扩展以为 PC 不在线但云中继发现 PC 实际在线 → 返回 `PC_CONNECTED` 错误码 → 扩展刷新缓存切回本地。
 
@@ -120,7 +126,7 @@ async function hangup() {
 ### 3.5 状态查询
 
 - `getInfo()`：查询 PC 状态 + 手机连接状态
-- `isPcAlive()`：2s 超时 `fetch('http://127.0.0.1:35432/')` → 缓存结果
+- `isPcAlive()`：500ms 超时 `fetch('http://127.0.0.1:35432/')` → 缓存结果
 - `refreshPcCache()`：重置 PC 缓存，重新检测
 
 ---
@@ -138,7 +144,7 @@ async function hangup() {
 | **手动拨号条** | 独立悬浮条：输入框（不限长度/支持*#）+ 清空 + 拨号，右键菜单切换显隐 |
 | **设置弹窗** | 毛玻璃弹窗：PIN 设置 + 云端服务器（测试连接/一键获取），与 popup.html 双向同步 |
 | **右键菜单** | 主题切换、手动拨号、设置、拨号、短信、PC 状态、PIN 显示 |
-| **8 套主题** | 与 PC 端一致，切换时实时刷新所有悬浮元素 |
+| **9 套主题** | 默认「天空蓝」+ 8 套其它主题（含亮色「极简白」），与手机端默认主题一致，切换时实时刷新所有悬浮元素 |
 
 ### 4.2 号码格式
 
@@ -147,10 +153,10 @@ async function hangup() {
 - 允许 `+` `*` `#` 和格式化字符（空格、`-`、括号）
 - 端到端校验点在云中继和 PC 端 HTTP handler，插件端不做拦截
 
-### 4.3 8 套主题
+### 4.3 9 套主题
 
-与 PC 端一致的 8 套主题，通过 CSS 文件提供：
-`dark-gold`, `cyber-frost`, `deep-space`, `cyberpunk`, `minimalist`, `forest-green`, `energetic-orange`, `ocean-blue`
+主题数据内联在 `content-script.js` 的 `EXT_THEMES` 中（非 CSS 文件），默认「天空蓝」与手机端默认主题一致，另精选 8 套主题（其中「极简白」为亮色）：
+`sky-blue`（天空蓝，默认）, `dark-gold`（暗金）, `cyber-frost`（冰蓝冷峻）, `deep-space`（深空紫）, `cyberpunk`（赛博朋克）, `minimalist`（极简白）, `forest-green`（森林绿）, `energetic-orange`（活力橙）, `ocean-blue`（海洋蓝）
 
 ### 4.4 CRM 适配
 
@@ -161,7 +167,7 @@ async function hangup() {
 
 当检测到 CRM 页面时自动注入浮动按钮，非 CRM 页面不注入。
 
-### 4.4 同步登记列表（v4.2 全链路修复）
+### 4.4 同步登记列表（系统 v4.11 全链路修复）
 
 **功能说明**：从 CRM 来访列表页全量抓取客户来访记录，批量同步到云中继，推送手机端。纯增量去重。
 
@@ -171,7 +177,7 @@ form[name="fdsf"] ~ table tr  ← 数据表格（兄弟元素，非子元素）
 cells[0] = crm_id       cells[1] = name (去括号)
 cells[2] = mobile       cells[4] = visit_type
 cells[5] = advisor_phone  cells[6] = advisor_name
-cells[10] = visit_time  ← CRM 真实来访时间（v4.2 新增）
+cells[10] = visit_time  ← CRM 真实来访时间（系统 v4.11 新增）
 ```
 
 **自动翻页流程**:
@@ -189,7 +195,7 @@ GET /api/v1/visit?name=&mobile=&kefu_tel=&visit_type=&visit_time=&source=crm_syn
 Header: X-AutoDial-PIN
 ```
 
-**触发方式（v4.2 新增3个入口）**:
+**触发方式（系统 v4.11 新增3个入口）**:
 | 入口 | 触发位置 | 行为 |
 |------|----------|------|
 | 🔁 右键菜单 | 任意 CRM 页面 | 自动跳转列表页 + 同步 |
@@ -246,7 +252,6 @@ Header: X-AutoDial-PIN
 | `PHONE_OFFLINE` | 手机未连接 | "手机未连接，请检查手机端" |
 | `PC_CONNECTED` | PC 在线 | 自动切回 localhost 直连（对用户透明） |
 | `DUPLICATE_DIAL` | 重复拨号 | 静默忽略 |
-| `RATE_LIMITED` | 频率限制 | "请求过于频繁，请稍后重试" |
 | `INVALID_NUMBER` | 号码不合法（需 3-20 位数字，允许 *#+） | "无效的电话号码" |
 | 网络超时 | PC/云不可达 | 自动降级：PC 不可达 → 走云端 |
 
@@ -272,7 +277,7 @@ Header: X-AutoDial-PIN
 
 ## 九、注意事项
 
-1. **MV3 Service Worker** 会在闲置 30s 后被浏览器终止，`background.js` 的状态需通过 `chrome.storage` 持久化
-2. **fetch 超时**：本地 `localhost` 端口关闭时 TCP 瞬间拒绝（无延迟），云端超时需要 AbortController（当前本地部署不受影响，部署公网前需处理）
-3. **CORS**：云中继的 REST API 不设 CORS（扩展通过 `host_permissions` 绕过），仅 `/health` 有 CORS
+1. **MV3 Service Worker** 会在闲置 30s 后被浏览器终止，`background.js` 的状态需通过 `chrome.storage` 持久化（另用 `chrome.alarms` 每 15s 保活 + `runtime.onMessage` 唤醒）
+2. **fetch 超时**：PC 直连探测用 AbortController 500ms 超时（`PC_PING_TIMEOUT`）；云端/列表拉取用 8s 超时；超时自动降级走云端
+3. **CORS**：云中继所有 JSON 响应统一携带 `Access-Control-Allow-Origin: *`（`JSON_HDR`），扩展通过 `host_permissions` 不受 CORS 限制
 4. **content-script 注入时机**：`run_at: "document_idle"` 确保 DOM 加载完成后再注入，避免 TreeWalker 扫描不完整

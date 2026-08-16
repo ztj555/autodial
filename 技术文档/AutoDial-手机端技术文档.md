@@ -1,6 +1,6 @@
 # AutoDial Android 端技术文档
 
-> 最后修改：2026-06-30 21:15 | Kotlin | 包名 `com.autodial.app` | 登记kid适配 + 离线补推 + 姓名查询
+> 最后修改：2026-08-01 | Kotlin | 包名 `com.autodial.app` | 云中转数据同步 + 设备别名 + 顾问姓名 + 离线补推
 
 ---
 
@@ -13,7 +13,12 @@ android/app/src/main/java/com/autodial/app/
 ├── DialEngine.kt               # 拨号执行引擎 + SIM 选择
 ├── CallLogDb.kt                # SQLite 通话记录数据库
 ├── CloudCtrl.kt                # 云服务器配置 CRUD + 连通测试
+├── CloudServerSheet.kt         # 云服务器管理弹窗（增删/测速/恢复默认）
 ├── DialMode.kt                 # 拨号模式枚举
+├── DialModeSheet.kt            # 拨号模式选择弹窗
+├── DialPadSheet.kt             # 手动拨号盘
+├── CallDetailSheet.kt          # 通话详情弹窗
+├── AnimationSheet.kt           # 拨号动画选择弹窗
 ├── MainActivity.kt             # 主界面（ViewPager2 + 4 Tab）
 ├── ConnectFragment.kt          # 设置页
 ├── CallLogFragment.kt          # 通话页
@@ -25,10 +30,12 @@ android/app/src/main/java/com/autodial/app/
 ├── SmsConfirmActivity.kt       # 短信确认 Activity
 ├── FileLogger.kt               # 文件日志工具
 ├── BootReceiver.kt             # 开机自启广播接收器
-├── ThemeManager.kt             # 主题管理（多套配色）
+├── ThemeManager.kt             # 主题管理（16 套主题 + 7 级亮度）
 ├── ThemeDialog.kt              # 主题选择对话框
 ├── ViewPagerAdapter.kt         # ViewPager2 适配器
-└── ConnectionStrategy.kt       # 连接策略枚举（AUTO/LAN_ONLY/CLOUD_ONLY）
+├── NotifyHelper.kt             # 通知辅助
+├── ConnectionStrategySheet.kt  # 连接策略选择弹窗
+└── PrefCtrl.kt                 # SharedPrefs 封装（含 ConnectionStrategy 枚举：AUTO/LAN_ONLY/CLOUD_ONLY）
 ```
 
 ---
@@ -318,15 +325,15 @@ getLastDialInfo(number, context)
 ### 7.1 服务器列表管理
 
 - 存储：SharedPreferences `cloud_servers`（JSON Array）
-- 默认服务器：`ws://262ao85kz470.vicp.fun:55535`
+- 默认服务器：`ws://101.34.65.254:35430`（别名「融鑫汇腾讯云专线」）
 - 支持 CRUD 操作
 - 向后兼容旧的 `cloud_server`（单字符串）配置
 
 ### 7.2 连通性测试
 
-- `testServer(server)`：HTTP GET 测试，4 秒超时
+- `testServer(server)`：WebSocket 全链路认证测试（连接超时 3s，发 `{"type":"auth","pin":"0000"}` 假 PIN → 收到 `auth_ok` 或 `auth_fail` 即判定可达）
 - `testAllServers(servers)`：协程并发测试所有服务器
-- 自动将 `ws://` 转为 `http://` 进行 HTTP 连通性探测
+- 列表地址自动补全 `ws://` 前缀，无需用户手动输入协议头
 
 ### 7.3 Gist 同步
 
@@ -403,9 +410,9 @@ getLastDialInfo(number, context)
 | visit_record 处理 | `ConnectionManager.kt` | WS 消息 → 存时间戳 + 通知 + 统计刷新 |
 
 ### MainActivity 改动
-- `activity_main.xml`：底部导航 Tab 顺序为「通话」「录上门」「统计」「设置」
+- `activity_main.xml`：底部导航 Tab 标签为「通话」「录上门」「财库」「设置」（可切换「设置」优先排序）
 - `fragments` 列表顺序对应：CallLog → Register → Stats → Connect
-- `switchTab()` 分支 index 0=通话, 1=录上门, 2=统计, 3=设置
+- `switchTab()` 分支 index 0=通话, 1=录上门, 2=财库, 3=设置
 
 ### 登记流程（v4.1.1 更新）
 1. 「接待顾问姓名」可编辑输入，也可按 PIN 从云中继自动查询（`/api/v1/advisor/name`），持久化到 SharedPreferences

@@ -1,6 +1,6 @@
 # AutoDial 云端技术文档
 
-> 最后修改：2026-07-23 | Python | SQLite 8表 | 管理面板 v4.11 | 管理员鉴权 | 32个API端点 | 纯增量去重
+> 最后修改：2026-08-01 | Python | SQLite 8表 | 管理面板 5.0 | 管理员鉴权 | 41个API端点 | 纯增量去重 | 并发/DB性能优化
 
 ---
 
@@ -11,8 +11,8 @@ cloud-relay/
 ├── start.bat                    ← Windows 启动脚本
 ├── Dockerfile / docker-compose.yml  ← Docker 容器化部署
 └── python/
-    ├── cloud_relay_v2.py        ← ★ 主中继（v4.10，2089行，32个API端点）
-    ├── dashboard.html           ← Web 管理面板 v4.11（10 Tab页 + Chart.js + 管理员登录）
+    ├── cloud_relay_v2.py        ← ★ 主中继（v4.13，2787行，41个API端点）
+    ├── dashboard.html           ← Web 管理面板 5.0（8 Tab页 + Chart.js + 管理员登录）
     ├── build.bat                ← PyInstaller 构建脚本（打包为 EXE）
     ├── install.bat              ← Python 依赖安装脚本
     ├── requirements.txt         ← Python 依赖（websockets, pystray, Pillow）
@@ -22,16 +22,16 @@ cloud-relay/
 
 ---
 
-## 二、主中继：cloud_relay_v2.py（v4.10）
+## 二、主中继：cloud_relay_v2.py（v4.13）
 
 ### 2.1 概述
 
-- **版本**：v4.10
+- **版本**：v4.13
 - **端口**：35430（WebSocket + HTTP REST API + Web 管理界面 共用）
 - **依赖**：`websockets pystray Pillow`
-- **认证**：PIN（建议 11 位手机号，最低 4 位）
+- **认证**：PIN（4 位或 11 位纯数字）
 - **部署**：`python cloud_relay_v2.py` 单命令启动
-- **管理鉴权**：设 `AUTODIAL_ADMIN_PASS` 环境变量启用管理员登录，不设则调试模式免登录
+- **管理鉴权**：鉴权始终启用，管理账号存于 `admin_accounts` 表，首次启动自动创建默认账号
 
 ### 2.2 核心机制：PinGroup 分组
 
@@ -46,7 +46,7 @@ class PinGroup:
 **路由逻辑**：
 - `phone_hello{pin, deviceName}` → 手机加入 `pin_groups[pin].phones`
 - `pc_hello{pin, hostname}` → PC 加入 `pin_groups[pin].pcs`
-- `dial{nubmer}` → `forward_to_phones(group, msg)` → 广播给组内所有手机
+- `dial{number}` → `forward_to_phones(group, msg)` → 广播给组内所有手机
 - `dial_result{status}` → `forward_to_pcs(group, msg)` → 广播给组内所有 PC
 - 组内设备全部断开时自动清理 `del pin_groups[pin]`
 
@@ -58,7 +58,7 @@ class PinGroup:
 ← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
 
 验证失败:
-← {"type": "auth_fail", "reason": "配对码无效（需4位或11位手机号）"}
+← {"type": "auth_fail", "reason": "配对码须为4位或11位数字"}
 ```
 
 #### PC 端握手
@@ -67,7 +67,7 @@ class PinGroup:
 ← {"type": "pc_auth_ok", "pin": "13800138000", "phoneCount": 1}
 
 验证失败:
-← {"type": "pc_auth_fail", "reason": "PIN格式不正确"}
+← {"type": "pc_auth_fail", "reason": "配对码须为4位或11位数字"}
 ```
 
 #### PC 在线/离线通知
@@ -90,7 +90,7 @@ Header: X-AutoDial-PIN: 13800138000
 ```
 
 处理流程：
-1. 从 Header 读取并校验 PIN（4 位纯数字 或 11 位手机号 `1[3-9]xxxxxxxxx`）
+1. 从 Header 读取并校验 PIN（4 位或 11 位纯数字）
 2. 校验号码（3-20 位数字，允许 `+` `*` `#`，兼容 10086/固话/400/*100#）
 3. 检查 PinGroup.pcs → PC 在线 → 返回 `PC_CONNECTED`（让扩展走本地）
 4. 检查 PinGroup.phones → 无手机 → 返回 `PHONE_OFFLINE`
@@ -106,14 +106,14 @@ Header: X-AutoDial-PIN: 13800138000
 #### GET /api/v1/status
 ```
 Header: X-AutoDial-PIN: 13800138000
-→ {"ok": true, "pin": "13800138000", "pcConnected": true, "phoneConnected": true, "phoneCount": 1}
+→ {"ok": true, "pin": "13800138000", "pcConnected": true, "phoneConnected": true, "phoneCount": 1, "extOnline": true}
 ```
 
 #### GET /health
 ```
-→ {"status": "ok", "timestamp": "...", "version": "2.0.0", "uptime": 3600}
+→ {"service": "AutoDial Cloud Relay", "version": "4.13", "port": 35430, "uptime_seconds": 3600, "total_connections": 0, "total_groups": 0}
 ```
-此端点**有 CORS**（允许页面端测试连接）。
+此端点**有 CORS**（允许页面端测试连接）。注：代码中 `version` 字段当前硬编码为 `4.10`，与系统版本 v4.13 不同步，建议下次发版更新。
 
 ### 2.5 错误码
 
@@ -124,7 +124,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `PHONE_OFFLINE` | 手机未连接 |
 | `PC_CONNECTED` | PC 在线，扩展应走本地 |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 |
-| `RATE_LIMITED` | IP 频率限制（每分钟 5 次握手） |
+| `RATE_LIMITED` | IP 频率限制（每分钟 5 次，仅 WS 握手返回 auth_fail） |
 | `INVALID_NUMBER` | 号码格式不合法 |
 
 ### 2.6 管理 API（Dashboard 专用，写操作需管理员鉴权 🔐）
@@ -143,6 +143,15 @@ Header: X-AutoDial-PIN: 13800138000
 | `GET /api/history` | 连接数历史数据（最近4小时） | - |
 | `GET /api/v1/login?user=&pass=` | 管理员登录，返回会话令牌 | - |
 | `GET /api/v1/logout?token=` | 管理员登出 | - |
+| `GET /api/v1/admin/accounts` | 管理账号列表 | 🔐 |
+| `GET /api/v1/admin/add?user=&pass=` | 添加管理账号 | 🔐 |
+| `GET /api/v1/admin/del?id=` | 删除管理账号 | 🔐 |
+| `GET /api/v1/admin/chpwd?id=&newpass=` | 修改管理账号密码 | 🔐 |
+| `GET /api/v1/auth/pending?pin=` | 查询挂起的设备授权请求 | - |
+| `GET /api/v1/auth/respond?request_id=&allow=` | 响应设备授权请求 | - |
+| `GET /api/v1/device-history?device_id=` | 设备历史 PIN 记录 | - |
+| `GET /api/v1/device-set-default-pin?device_id=&default_pin=` | 设置设备默认 PIN | 🔐 |
+| `GET /api/v1/device/update?device_id=&label=` | 更新设备别名 | 🔐 |
 
 ### 2.7 数据上报 API（手机端→云端）
 
@@ -151,6 +160,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `GET /api/v1/calls/batch?device_id=&pin=&data=<json>` | 通话记录批量上传（幂等去重） |
 | `GET /api/v1/events/log?device_id=&event_type=&pin=&detail=` | 行为事件记录 |
 | `GET /api/v1/stats/report?device_id=&pin=&model=&version=&count=&duration=&connected=` | 每日统计快照（服务器重算并对比） |
+| `GET /api/v1/visits/batch?data=<JSON数组>&token=` | CRM 上门记录批量导入 | 🔐 |
 
 ### 2.8 业务 API
 
@@ -161,9 +171,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `GET /api/v1/status` (Header: X-AutoDial-PIN) | 按 PIN 查询连接状态 |
 | `GET /api/v1/advisor/register?pin=&name=` | 顾问姓名注册 |
 | `GET /api/v1/advisor/name?pin=` | 顾问姓名查询 |
-| `GET /api/v1/advisor/is_admin?pin=` | 管理员检查 |
-| `GET /api/v1/advisor/set_admin?pin=` | 设为管理员 | 🔐 |
-| `GET /api/v1/advisor/del_admin?pin=` | 取消管理员 | 🔐 |
+| `GET /api/v1/advisor/update?pin=&name=` | 更新顾问姓名 | 🔐 |
 | `GET /api/v1/pins` | PIN/顾问列表 |
 | `GET /api/v1/pin/set_group?pin=&group_id=` | 设置 PIN 分组 | 🔐 |
 | `GET /api/v1/groups` | 分组列表 |
@@ -174,7 +182,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `GET /api/v1/visit/delete?id=` | 删除访问记录 | 🔐 |
 | `GET /api/v1/visit/update?id=&name=&mobile=&kefu_tel=&visit_type=` | 更新访问记录 | 🔐 |
 
-**总计 32 个 API 端点**，全部为 GET 方法（兼容 websockets process_request 仅支持 path+headers）。
+**总计 41 个 API 端点**，全部为 GET 方法（通过 websockets `process_request` 处理，仅支持 path+headers）。
 
 ### 2.9 系统托盘
 
@@ -191,7 +199,7 @@ Header: X-AutoDial-PIN: 13800138000
 |----|------|
 | `visits` | 上门登记（pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_synced） |
 | `advisor_names` | 顾问姓名映射（pin→name） |
-| `admins` | 管理员标记 |
+| `admin_accounts` | 管理员账号（username/password） |
 | `pin_groups` | PIN 分组管理 |
 | `phones` | 设备注册（device_id, model, version, first_seen, last_seen） |
 | `call_records_raw` | 原始通话记录（device_id+local_id 联合主键，幂等去重） |
@@ -234,73 +242,27 @@ else:
 
 ---
 
-## 三、v3 JWT 中继（并存模块）
+## 三、v3 JWT 中继（已移除）
 
-### 3.1 概述
-
-- **文件**：`cloud_relay_v3.py` + `auth.py` + `db.py`
-- **端口**：WS 35440 + HTTP 35441（与 v2 35430 隔离）
-- **版本**：0.02
-- **依赖**：`aiosqlite bcrypt PyJWT`（增量依赖）
-- **认证**：JWT + PIN 双模
-
-### 3.2 双模握手
-
-```python
-if auth_method == "jwt":
-    # JWT 验证 → jwt_devices 分组
-    verify_jwt(token)
-elif auth_method == "pin":
-    # PIN 验证 → pin_groups 分组
-    verify_pin(pin)
-```
-
-JWT 设备走 `jwt_devices[user_id]` 路由，PIN 设备走 `pin_groups[pin]` 路由，两组数据结构独立。
-
-### 3.3 认证模块（auth.py）
-
-```python
-# 依赖: bcrypt + PyJWT (HS256)
-- POST /api/v1/auth/login       → 手机号 + 密码 → JWT + refresh_token
-- POST /api/v1/auth/auto-login  → 手机号 → JWT（免密码快速登录）
-- POST /api/v1/auth/refresh     → refresh_token → 新 JWT
-- 防爆破限流：每 IP 每分钟 3 次失败 → 锁定 5 分钟
-```
-
-### 3.4 数据库模块（db.py）
-
-`aiosqlite` 异步 SQLite，包含以下表：
-
-| 表 | 用途 |
-|----|------|
-| `users` | 用户账号（手机号 + bcrypt 密码哈希） |
-| `refresh_tokens` | JWT 刷新令牌（支持轮换） |
-| `devices` | 用户设备注册 |
-| `audit_log` | 操作审计日志 |
-
-### 3.5 状态说明
-
-> **v3 JWT 模块不作为主中继使用**。主中继由 cloud_relay_v2.py (v4.10) 承担。v3 代码保留在代码库中供有 JWT 认证需求的场景选用，运行在独立端口 35440/35441，不影响主中继。
+> **v3 JWT 双模中继（`cloud_relay_v3.py` + `auth.py` + `db.py`，端口 35440/35441，依赖 `aiosqlite bcrypt PyJWT`）已于 2026-07-04 全量移除**，仓库中不再存在这些文件。当前唯一主中继为 `cloud_relay_v2.py`（端口 35430），统一使用 PIN（4 位或 11 位）认证，无 JWT 通道。
 
 ---
 
 ## 四、Web 管理面板（端口 35430，与 WebSocket 同端口）
 
-`dashboard.html` 提供基于浏览器的全功能管理界面（版本 v4.11）：
+`dashboard.html` 提供基于浏览器的全功能管理界面（版本 5.0 (UX Redesign)）：
 
-### 页面功能（10个Tab页）
+### 页面功能（8个Tab页）
 
 | Tab | 功能 |
 |-----|------|
-| 📊 仪表盘 | 6个统计卡片 + 连接趋势折线图(总/PC/手机) + 消息类型饼图 + 最近客户端 |
-| 👥 客户端管理 | 在线设备列表 + 角色筛选 + 设备名搜索 + **踢出功能** |
-| 📞 通话记录 | 日期/设备/号码筛选 + 分页 + CSV导出（数据来自 call_records_raw 表） |
-| 📱 设备管理 | 已注册设备清单 + 在线状态(绿/灰点) + 型号/版本 + 首次/最后在线 |
-| 📈 流量统计 | 每日流量趋势 + 按PIN统计(Top10) + 每日明细表 |
-| 📋 日志 | 关键词搜索 + 行数选择(100/200/500/1000) |
-| 🏠 上门记录 | CRUD + 日期/来源筛选 + CSV导出 + 14天趋势图 |
-| 📊 对账面板 | 服务端 vs 手机端数据对比（OK/MISMATCH高亮） |
-| 👤 PIN管理 | 分组管理 + 管理员标记 + 顾问姓名映射 |
+| 📊 首页总览 | 统计卡片 + 最近客户端 + 手机设备一览 |
+| 📱 手机管理 | 设备清单/别名/默认PIN/在线状态 + 历史PIN记录 |
+| 📞 通话记录 | 设备/号码筛选 + CSV导出（数据来自 call_records_raw 表） |
+| 🏠 上门登记 | 记录管理 + 14天趋势图 + CRM批量导入 |
+| 👤 人员管理 | PIN + 姓名 + 分组管理 |
+| 🔑 管理账号 | 账号增删 + 修改密码 |
+| 📋 系统日志 | 关键词搜索 + 流量统计 |
 | ⚙️ 设置 | 端口/日志级别配置 + 系统信息 |
 
 ### 技术特性
@@ -313,34 +275,20 @@ JWT 设备走 `jwt_devices[user_id]` 路由，PIN 设备走 `pin_groups[pin]` �
 
 ## 五、部署说明
 
-### 5.1 主中继（推荐）
+### 5.1 主中继（唯一部署方式）
 
 ```bash
 pip install websockets pystray Pillow
 python cloud_relay_v2.py
-
-# 启用管理员鉴权
-set AUTODIAL_ADMIN_PASS=你的密码   # Windows
-export AUTODIAL_ADMIN_PASS=你的密码  # Linux
 ```
 
-### 5.2 含 v3 可选模块
+> 管理员鉴权始终启用（管理账号存于 `admin_accounts` 表，首次启动自动创建默认账号）；无环境变量开关、无 v3 JWT 可选模块（已移除）。
 
-```bash
-pip install websockets pystray Pillow aiohttp aiosqlite bcrypt PyJWT
-# 主中继
-python cloud_relay_v2.py &
-# v3 JWT 中继（可选，独立端口）
-python cloud_relay_v3.py &
-```
-
-### 5.3 防火墙要求
+### 5.2 防火墙要求
 
 | 端口 | 协议 | 用途 |
 |------|------|------|
 | 35430 | TCP | 主中继（WS + REST + Web 管理面板） |
-| 35440 | TCP | v3 JWT WebSocket（可选） |
-| 35441 | TCP | v3 JWT REST API（可选） |
 
 ---
 

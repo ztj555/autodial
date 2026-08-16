@@ -1,10 +1,14 @@
-# AutoDial 一键拨号系统 v4.12
+# AutoDial 一键拨号系统 v4.13
 
-> 仓库：github.com/ztj555/autodial | 最后更新：2026-07-23
+> 仓库：github.com/ztj555/autodial | 最后更新：2026-08-01
 
 ## 项目概述
 
 AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页中点击手机号自动拨号；右键悬浮按钮即可完成客户登记，数据实时同步云端和手机端。
+
+**v4.13 更新**：
+- **云中继并发/DB 性能 P0 修复**：SQLite WAL 模式、DB 操作移出事件循环（线程池 executor）、智能调度 `_schedule_async`，50 并发压力测试全指标通过（WS 100/100 连接、REST P50=16ms）
+- **扩展 UI 对齐手机端**：Chrome 扩展 v4.2.0 天空蓝默认主题（共 9 套主题），修复状态文字着色、清理硬编码旧主题色
 
 **v4.12 更新**：
 - **管理后台安全加固**：管理员账号密码登录 + 会话令牌（24h过期），保护敏感操作端点
@@ -48,7 +52,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │ (MV3)            │◄──────────────┼───────────────────────│                  │
 │ PIN 自动检测      │   Go / Electron│                       │ WS 连云中继       │
 │ 双模路由(Ping)   │    PC 端        │                       │ 收发 dial/hangup  │
-│ 浮动按钮 8 主题   │               │                       │ 4 Tab 界面        │
+│ 浮动按钮 9 主题   │               │                       │ 4 Tab 界面        │
 │ 一键登记+确认弹窗 │               │                       │ 16 主题+7 亮度    │
 └──────────────────┘               │                       └──────────────────┘
                                     │
@@ -61,6 +65,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 |------|------|------|
 | **35430** | WS + HTTP | 云中继（WS 中继 + REST API + Web 面板） |
 | 35432 | HTTP + WS | PC 端主服务（局域网直连 + 扩展连接） |
+| 35433 | UDP | PC 端设备发现（局域网广播/唤醒） |
 
 ## 目录结构
 
@@ -77,7 +82,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
-│   ├── manifest.json                # MV3 配置（v4.1.0）
+│   ├── manifest.json                # MV3 配置（v4.2.0）
 │   ├── background.js                # Service Worker：PIN/路由/登记
 │   ├── content-script.js            # 全帧注入：扫号/按钮/主题/菜单
 │   ├── popup.html + popup.js        # 弹窗：配置 PIN + 服务器
@@ -142,8 +147,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │       ├── FileLogger.kt            # 文件日志
 │       ├── NotifyHelper.kt          # 通知辅助
 │       └── PrefCtrl.kt              # SharedPrefs 封装
-├── 设计文档/                         # UI 设计规范
-├── 技术文档/                         # 各端技术文档
+├── 技术文档/                         # 各端技术文档 + UI 技术文档
 ├── 场景测试列表.md                   # 50 场景覆盖
 ├── 场景检测报告.md                   # 代码审计结果
 ├── 待验证问题.md                     # QA 验证清单
@@ -211,9 +215,6 @@ cd pc-app-Electron && npm install && npm start
 | GET | `/api/v1/advisor/register?pin=...&name=...` | 注册顾问 |
 | GET | `/api/v1/advisor/name?pin=...` | 查询顾问姓名 |
 | GET | `/api/v1/advisor/update?pin=...&name=...` | 更新顾问姓名 |
-| GET | `/api/v1/advisor/is_admin?pin=...` | 是否管理员 |
-| GET | `/api/v1/advisor/set_admin?pin=...` | 设为管理员 |
-| GET | `/api/v1/advisor/del_admin?pin=...` | 取消管理员 |
 
 ### PIN 分组管理
 
@@ -293,12 +294,14 @@ cd pc-app-Electron && npm install && npm start
 | `INVALID_JSON` | JSON 格式错误（v4.10） |
 | `SERVER_ERROR` | 服务器内部错误（v4.10） |
 | `NO_FIELDS` | 没有要更新的字段（v4.10） |
+| `DELETED` | 删除成功（v4.10） |
+| `UPDATED` | 更新成功（v4.10） |
 
 ## 双模路由
 
 ```
 扩展拨号:
-1. 尝试 HTTP 127.0.0.1:35432 (PC 直连, 2s 超时)
+1. 尝试 HTTP 127.0.0.1:35432 (PC 直连, 500ms 超时)
 2. PC 不可达 → 云中继 /api/v1/dial (Header PIN)
    ├─ PC_CONNECTED → 提示切回本地
    ├─ PHONE_OFFLINE → 提示手机离线

@@ -17,7 +17,7 @@ AutoDial 提供两个功能等价的 PC 端实现。两者共享相同的通信�
 | 最大手机连接 | 10 台 | 10 台 |
 | 系统托盘 | Electron Tray API | 原生 Win32 API |
 | 前端渲染 | Chromium | WebView2 |
-| PIN 校验 | 11 位手机号强校验 | 11 位手机号强校验（v1.0.1） |
+| PIN 校验 | 与 `PIN_CODE` 比对（无格式强校验） | `isValidPhonePIN()` 4 位或 11 位纯数字 |
 | 号码校验 | 3-20 位，支持 *#+ | 3-20 位，支持 *#+ |
 
 ---
@@ -26,11 +26,11 @@ AutoDial 提供两个功能等价的 PC 端实现。两者共享相同的通信�
 
 ### 2.1 文件结构
 
-模块化架构，`main.js` 为 919 行编排文件，10 个功能模块按职责拆分：
+模块化架构，`main.js` 为 923 行编排文件，10 个功能模块按职责拆分：
 
 ```
 pc-app-Electron/
-├── main.js (919行)             ← IPC 处理器 + 应用生命周期 + 跨模块胶水
+├── main.js (923行)             ← IPC 处理器 + 应用生命周期 + 跨模块胶水
 ├── phone-connection-manager.js ← 设备连接管理器（独立模块，双通道 LAN+Cloud）
 ├── preload.js                  ← contextBridge IPC 桥接
 ├── modules/
@@ -141,18 +141,26 @@ pc-app-Electron/
 
 ### 2.7 主题系统
 
-8 套主题，存储在 `themes/theme-data.js`：
+16 套主题，存储在 `themes/theme-data.js`：
 
 | 主题 ID | 名称 |
 |---------|------|
-| `dark-gold` | 暗金（默认） |
-| `cyber-frost` | 赛博霜寒 |
-| `deep-space` | 深空 |
-| `cyberpunk` | 赛博朋克 |
-| `minimalist` | 极简 |
-| `forest-green` | 森林绿 |
+| `dark-gold` | 暗金 |
+| `cyber-frost` | 冰蓝冷峻 |
+| `minimalist` | 极简白 |
+| `glassmorphism` | 毛玻璃 |
 | `energetic-orange` | 活力橙 |
+| `rounded-candy` | 圆润糖果 |
+| `deep-space` | 深空紫 |
+| `forest-green` | 森林绿 |
+| `cyberpunk` | 赛博朋克 |
+| `warm-cream` | 暖光米色 |
 | `ocean-blue` | 海洋蓝 |
+| `teal-gradient` | 蓝绿渐变 |
+| `mint-fresh` | 薄荷清新 |
+| `coral-sunset` | 珊瑚日落 |
+| `lavender` | 薰衣草 |
+| `sky-blue` | 天空蓝 |
 
 每次主题切换会广播 `theme-changed` 事件到所有窗口。
 
@@ -170,7 +178,7 @@ pc-app-Electron/
   "mode": "dark",
   "pinCode": "13800138000",
   "phoneNotes": {},
-  "cloudServer": "262ao85kz470.vicp.fun:55535",
+  "cloudServer": "101.34.65.254:35430",
   "cloudEnabled": false,
   "cloudServers": []
 }
@@ -186,15 +194,15 @@ pc-app-Electron/
 
 ```
 pc-app-go/
-├── main.go (61行)              ← Wails 启动：无边框窗口 420×780
-├── app.go (660行)              ← 40+ 个 Go→前端绑定方法（App 结构体）
-├── server.go (533行)           ← HTTP + WebSocket 服务器
-├── cloud.go (320行)            ← 云中转连接管理（generation 防竞态）
-├── devices.go (488行)          ← 设备管理 + 常量/工具函数
-├── tray.go (484行)             ← 原生 Win32 API 系统托盘
-├── udp.go (159行)              ← UDP 局域网发现
-├── settings.go (77行)          ← JSON 设置持久化
-├── logger.go (141行)           ← 文件日志（旧日志 zip 压缩）
+├── main.go (60行)              ← Wails 启动：无边框窗口 420×780
+├── app.go (671行)              ← 40+ 个 Go→前端绑定方法（App 结构体）
+├── server.go (575行)           ← HTTP + WebSocket 服务器
+├── cloud.go (314行)            ← 云中转连接管理（generation 防竞态）
+├── devices.go (529行)          ← 设备管理 + 常量/工具函数
+├── tray.go (483行)             ← 原生 Win32 API 系统托盘
+├── udp.go (157行)              ← UDP 局域网发现
+├── settings.go (76行)          ← JSON 设置持久化
+├── logger.go (140行)           ← 文件日志（旧日志 zip 压缩）
 ├── go.mod / go.sum             ← Go 模块依赖
 ├── wails.json                  ← Wails 构建配置
 └── frontend/
@@ -262,7 +270,7 @@ pc-app-go/
 | 悬浮条 | 独立窗口 440×48 | 窗口缩放为 400×52 |
 | 连接上限 | 10 台 | 10 台 |
 | TCP KeepAlive | `socket.setKeepAlive` 在 open 回调设置 | `TCPConn.SetKeepAlivePeriod(10s)` |
-| PIN 校验 | 11 位手机号强校验 | 11 位手机号强校验 |
+| PIN 校验 | 与 `PIN_CODE` 比对（无格式强校验） | `isValidPhonePIN()` 4 位或 11 位纯数字 |
 | 防火墙 | netsh 自动添加规则 | 仅检测端口可达性 |
 | 通信协议 | **完全相同** | **完全相同** |
 
@@ -302,7 +310,7 @@ npm run build      # 打包为 exe
 
 ```bash
 cd pc-app-go
-# 前置条件：安装 Go 1.21+ 和 Wails CLI
+# 前置条件：安装 Go 1.23+ 和 Wails CLI
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 wails build         # 构建单文件 exe
 wails dev           # 开发模式（热重载）

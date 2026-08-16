@@ -1,6 +1,6 @@
 # AutoDial 技术文档（当前版本）
 
-> 最后修改：2026-07-21 23:30 | v4.2 | 全链路同步修复 + 纯增量去重 + 自动翻页 + 右键一键同步
+> 最后修改：2026-08-01 | v4.13 | 云中继并发/DB 性能 P0 修复 + Chrome 扩展 v4.2.0 天空蓝 UI
 
 ---
 
@@ -10,13 +10,13 @@
 |------|--------|--------|----------|
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | 11 位 PIN |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | 11 位 PIN |
-| **云中继（主）** | **v2** | Python + websockets + SQLite | PIN（4位或11位手机号） |
-| **Chrome 扩展** | **v4.1.1** | MV3 + Service Worker | X-AutoDial-PIN Header |
-| **Android 端** | **v4.54** | Kotlin + HttpURLConnection | PIN + WS 双通道 |
+| **云中继（主）** | **v4.13** | Python + websockets + SQLite | PIN（4位或11位纯数字） |
+| **Chrome 扩展** | **v4.2.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
+| **Android 端** | **v4.53** | Kotlin + OkHttp | PIN + WS 双通道 |
 
-> **v4.2 新增**：全链路同步修复（3个Bug修复+自动翻页+纯增量去重+visit_time字段）、右键一键同步（3入口）、增量反馈toast、Web管理面板增强。
+> **v4.11 新增**：全链路同步修复（3个Bug修复+自动翻页+纯增量去重+visit_time字段）、右键一键同步（3入口）、增量反馈toast、Web管理面板增强。
 
-> **v4.1.1 新增**：登记 CRM kid 适配（姓名→ID 两步提交）、云端管理面板重构（PIN/分组/管理员/未同步筛选/CSV导出/趋势图）、CRM 姓名自动检测（CSS选择器）、右键同步登记列表、手机端离线补推、云中继 advisor_names / admins / pin_groups 表。
+> **v4.1.1 新增**：登记 CRM kid 适配（姓名→ID 两步提交）、云端管理面板重构（PIN/分组/管理员/未同步筛选/CSV导出/趋势图）、CRM 姓名自动检测（CSS选择器）、右键同步登记列表、手机端离线补推、云中继 advisor_names / admin_accounts / pin_groups 表。
 
 ---
 
@@ -56,13 +56,29 @@
 
 **双通道设计**：PC 端和手机端均支持 LAN 直连（WebSocket 35432）和 Cloud 中继（WebSocket 35430）双通道，由 PhoneConnectionManager（Electron）/ ConnectionManager（Android）自动管理优先级和降级切换。
 
+**连接路径矩阵**：
+
+| 场景 | 路径 | 说明 |
+|------|------|------|
+| 全本地（PC+手机同网络） | 扩展 → HTTP localhost:35432 → PC → WS 直连 → 手机 | 延迟 < 10ms，零外部依赖 |
+| 异地（扩展+手机不同网络） | 扩展 → REST 35430 → 云中继 → WS 35430 → 手机 | 走云中继转发 |
+| 混合（PC 连云，扩展走本地） | 扩展 → HTTP localhost:35432 → PC → WS 35430（云中继）→ 手机 | PC 作桥梁，最灵活的生产模式 |
+| Go PC 替代 Electron | 扩展 → HTTP localhost:35432 → Go PC → WS → 手机 | 协议完全兼容，扩展端透明 |
+
+**连接能力矩阵**：
+
+| 连接路径 | Electron PC | Go PC | 扩展 | 手机 |
+|----------|:---:|:---:|:---:|:---:|
+| 局域网直连 (35432) | ✅ | ✅ | ✅ (HTTP) | ✅ |
+| 云中继 v2 (35430) | ✅ | ✅ | ✅ (REST) | ✅ |
+
 ---
 
 ## 三、云中继（端口 35430）
 
 ### 3.1 架构
 
-主中继为 `cloud_relay_v2.py`（v2），Python 标准库 sqlite3 内置存储，仅需 `websockets pystray Pillow` 包。
+主中继为 `cloud_relay_v2.py`（v4.13），Python 标准库 sqlite3 内置存储，仅需 `websockets pystray Pillow` 包。
 
 ```
 cloud_relay_v2.py
@@ -81,11 +97,15 @@ cloud_relay_v2.py
 │   ├── /api/v1/advisor/*（顾问管理）
 │   ├── /api/v1/pins + /api/v1/groups（PIN 分组）
 │   └── /api/v1/pin/set_group（设置分组）
-├── SQLite 数据库（4 张表）
+├── SQLite 数据库（8 张表）
 │   ├── visits：登记记录（含 crm_synced 同步状态）
 │   ├── advisor_names：PIN→姓名映射（含 group_id）
-│   ├── admins：管理员 PIN 列表
-│   └── pin_groups：分组定义
+│   ├── admin_accounts：管理员账号
+│   ├── pin_groups：分组定义
+│   ├── phones：设备注册
+│   ├── call_records_raw：原始通话记录
+│   ├── phone_events：手机行为事件日志
+│   └── phone_daily_stats：每日对账
 ├── CRM 后台同步（v4.1.1）
 │   ├── _lookup_kid()：姓名→CRM内部ID 转换
 │   └── _sync_to_crm()：两步提交，成功后标记 crm_synced=1
@@ -113,9 +133,9 @@ class PinGroup:
 
 `websockets` 的 `process_request(path, request_headers)` 回调只接收 path 和 headers 两个参数，不接收 request body。解决方案：PIN 通过自定义 Header `X-AutoDial-PIN` 传递，号码通过 URL query `?number=`。
 
-**为何用 `asyncio.ensure_future()`？**
+**为何用 `_schedule_async()`？**
 
-`process_request` 是同步回调，不能直接 `await` 异步的 `forward_to_phones()`。用 `asyncio.ensure_future()` 将异步转发调度出去，同步返回 `202 ACCEPTED`。
+`process_request` 是同步回调，不能直接 `await` 异步的 `forward_to_phones()`。用 `_schedule_async()`（内部 `asyncio.run_coroutine_threadsafe`）将异步转发调度出去，同步返回 HTTP 200 + `{"ok": true, "code": "ACCEPTED"}`。
 
 ### 3.4 并发保护
 
@@ -126,18 +146,9 @@ class PinGroup:
 | 频率限制 | `check_rate_limit()`，每 IP 每分钟 5 次尝试 |
 | 心跳超时 | WebSocket 内置 ping/pong（30s 间隔，90s 超时） |
 
-### 3.5 v3 JWT 并存模块（端口 35440/35441）
+### 3.5 v3 JWT 并存模块（已移除）
 
-代码库中保留完整的 v3 JWT 双模中继，位于独立端口：
-
-```
-cloud_relay_v3.py (WS 35440)
-├── auth.py — JWT + bcrypt + 防爆破限流
-├── db.py  — SQLite (aiosqlite) 用户/设备/审计
-└── 双模握手：JWT 优先 → PIN 降级
-```
-
-> **注意**：v3 模块代码保留但**不作为主中继**使用。主中继为 cloud_relay_v2.py (v4.10)。v3 的 `requirements.txt` 中包含了 `bcrypt`、`PyJWT`、`aiosqlite` 等依赖，这些仅用于 v3 模块，主中继不需要。
+> **v3 JWT 双模中继（`cloud_relay_v3.py` + `auth.py` + `db.py`，端口 35440/35441，依赖 `bcrypt PyJWT aiosqlite`）已于 2026-07-04 全量移除**，仓库中不再存在这些文件。当前唯一主中继为 `cloud_relay_v2.py` (v4.13)，统一使用 PIN（4 位或 11 位）认证。
 
 ---
 
@@ -147,7 +158,7 @@ cloud_relay_v3.py (WS 35440)
 
 ```json
 {"ok": true,  "code": "ACCEPTED"}
-{"ok": false, "code": "INVALID_PIN", "message": "PIN 格式错误"}
+{"ok": false, "code": "INVALID_PIN", "message": "PIN 格式错误，须为4位或11位数字"}
 ```
 
 ### 4.2 错误码
@@ -159,7 +170,7 @@ cloud_relay_v3.py (WS 35440)
 | `PHONE_OFFLINE` | 手机未连接 | 提示手机未连接 |
 | `PC_CONNECTED` | PC 在线，应走本地 | 切回 localhost |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
-| `RATE_LIMITED` | 频率限制 | 1 分钟后重试 |
+| `RATE_LIMITED` | 频率限制（仅 WS 握手返回 auth_fail） | 稍后重试 |
 | `INVALID_NUMBER` | 号码不合法（需 3-20 位数字，允许 *#+） | 提示用户 |
 
 ---
@@ -172,7 +183,7 @@ cloud_relay_v3.py (WS 35440)
 ```json
 → {"type": "phone_hello", "pin": "13800138000", "deviceName": "Redmi K40"}
 ← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
-← {"type": "auth_fail", "reason": "配对码无效（需4位或11位手机号）"}
+← {"type": "auth_fail", "reason": "配对码须为4位或11位数字"}
 ```
 
 **PC 端握手**：
@@ -203,11 +214,11 @@ cloud_relay_v3.py (WS 35440)
 
 ### 6.1 架构特点
 
-模块化架构，`main.js` 约 919 行作为编排文件，10 个功能模块按职责拆分：
+模块化架构，`main.js` 约 923 行作为编排文件，10 个功能模块按职责拆分：
 
 ```
 pc-app-Electron/
-├── main.js (919行)             ← IPC 处理器 + 生命周期 + 跨模块胶水
+├── main.js (923行)             ← IPC 处理器 + 生命周期 + 跨模块胶水
 ├── phone-connection-manager.js ← 设备连接管理（独立模块，双通道 LAN+Cloud）
 ├── preload.js                  ← contextBridge IPC 桥接
 ├── modules/
@@ -239,7 +250,7 @@ pc-app-Electron/
 | **心跳** | 120s 超时 + 30s TTL 清理僵尸设备 |
 | **系统托盘** | 金色电话图标，右键菜单（显隐主窗口/悬浮条/退出） |
 | **多窗口** | 主窗口 420×780 + 悬浮条 440×48 + 设置窗口 + 短信窗口 |
-| **8 套主题** | dark-gold（默认）/ cyber-frost / deep-space / cyberpunk / minimalist / forest-green / energetic-orange / ocean-blue |
+| **16 套主题** | dark-gold（默认）/ cyber-frost / deep-space / cyberpunk / minimalist / forest-green / energetic-orange / ocean-blue / glassmorphism / rounded-candy / warm-cream / teal-gradient / mint-fresh / coral-sunset / lavender / sky-blue |
 
 ### 6.3 连接上限
 
@@ -253,15 +264,15 @@ pc-app-Electron/
 
 ```
 pc-app-go/
-├── main.go (61行)          ← Wails 启动 + 窗口生命周期
-├── app.go (660行)           ← 40+ 个 Go→前端绑定方法
-├── server.go (533行)        ← HTTP + WebSocket 服务器
-├── cloud.go (320行)         ← 云中转连接管理
-├── devices.go (488行)       ← 设备管理 + 常量定义
-├── tray.go (484行)          ← Win32 API 原生系统托盘
-├── udp.go (159行)           ← UDP 局域网发现
-├── settings.go (77行)       ← 设置持久化
-├── logger.go (141行)        ← 文件日志（含 zip 压缩）
+├── main.go (60行)          ← Wails 启动 + 窗口生命周期
+├── app.go (671行)           ← 40+ 个 Go→前端绑定方法
+├── server.go (575行)        ← HTTP + WebSocket 服务器
+├── cloud.go (314行)         ← 云中转连接管理
+├── devices.go (529行)       ← 设备管理 + 常量定义
+├── tray.go (483行)          ← Win32 API 原生系统托盘
+├── udp.go (157行)           ← UDP 局域网发现
+├── settings.go (76行)       ← 设置持久化
+├── logger.go (140行)        ← 文件日志（含 zip 压缩）
 └── frontend/                ← WebView2 渲染的 HTML 界面
     └── wails-adapter.js     ← Electron API → Wails API 适配层
 ```
@@ -282,7 +293,7 @@ pc-app-go/
 
 ---
 
-## 八、Chrome 扩展（v4.1.0）
+## 八、Chrome 扩展（v4.2.0）
 
 ### 8.1 架构
 
@@ -363,13 +374,13 @@ enum class ConnectionStrategy {
 
 | 环节 | 校验方式 | 位置 |
 |------|---------|------|
-| 扩展设置 | 11 位手机号正则（popup），云中继兼容 4 位 PIN | popup.js |
+| 扩展设置 | 4 位或 11 位数字正则（`/^\d{4}$|^\d{11}$/`） | popup.js |
 | 扩展请求 | X-AutoDial-PIN Header | background.js |
 | Electron PC | `if (msg.pin !== PIN_CODE)` | main.js |
-| Go PC | 11 位手机号强校验 | server.go / app.go |
-| 云中继 REST | `is_valid_pin()`: 4 位纯数字 或 11 位手机号 | cloud_relay_v2.py |
+| Go PC | `isValidPhonePIN()`: 4 位或 11 位纯数字 | devices.go / app.go |
+| 云中继 REST | `validate_pin()`: 4 位或 11 位纯数字 | cloud_relay_v2.py |
 | 云中继 WS | 同上 | cloud_relay_v2.py |
-| Android | 11 位数字强校验 | ConnectionManager.kt |
+| Android | 4 位配对码或 11 位手机号（1开头） | ConnectFragment.kt |
 
 ---
 
@@ -377,7 +388,7 @@ enum class ConnectionStrategy {
 
 | 机制 | 说明 |
 |------|------|
-| **PIN 强校验** | 全链路校验：PC/Android 端 11 位手机号，云中继兼容 4 位/11 位 |
+| **PIN 强校验** | 全链路校验：Go/Electron PC、扩展、Android、云中继均兼容 4 位/11 位 |
 | **并发保护** | PC_CONNECTED 去重 + DUPLICATE_DIAL 5s 去重 |
 | **频率限制** | 每 IP 每分钟 5 次握手尝试 |
 | **心跳超时** | WebSocket ping/pong（30s/90s 云端；15s/20s PC端） |
@@ -385,16 +396,25 @@ enum class ConnectionStrategy {
 | **generation 防竞态** | PC 端云中转使用递增 generation 防止旧连接事件覆盖新状态 |
 | **ACK 确认** | 拨号/挂断指令 3s ACK 超时，自动切通道重试 |
 
+**已知风险与注意事项**：
+
+| # | 风险 | 严重度 | 备注 |
+|---|------|--------|------|
+| 1 | 手机同时连 LAN + Cloud 双路拨号 | 低 | ACK 去重 |
+| 2 | 手机端 `resolveSimSlot()` 不检查 SIM 可用性 | 低 | SIM 无信号时可能拨号失败 |
+| 3 | `dialNumber()` 不检查当前通话状态 | 低 | 通话中再次拨号可能失败 |
+| 4 | Android 省电模式下后台 WS 可能被冻结 | 中 | 需引导用户加入电池白名单 |
+| 5 | 自动检测坐席手机号依赖页面扫描顺序 | 低 | 部分 CRM 页面可能误匹配，可手动修正 |
+
 ---
 
 ## 十二、部署
 
 | 组件 | 依赖 | 启动方式 |
 |------|------|---------|
-| 云中继 v4.10 | `websockets pystray Pillow` | `python cloud_relay_v2.py` |
-| 云中继 v3（可选） | `+ aiosqlite bcrypt PyJWT` | `python cloud_relay_v3.py` |
+| 云中继 v4.13 | `websockets pystray Pillow` | `python cloud_relay_v2.py` |
 | Electron PC | Node.js + npm | `npm start` 或打包后 exe |
-| Go PC | Go 1.21+ | `wails build` → 单文件 exe |
+| Go PC | Go 1.23+ | `wails build` → 单文件 exe |
 | Chrome 扩展 | 无 | Chrome 加载已解压 |
 | Android | Kotlin + Gradle | Android Studio 构建或 GitHub Actions |
 
@@ -407,5 +427,3 @@ enum class ConnectionStrategy {
 | **35430** | WS + HTTP | 云中继主端口（中继 + REST API + Web 面板 + 访问登记 API） | cloud_relay_v2.py |
 | **35432** | HTTP + WS | PC 端主服务（LAN 直连 + 扩展连接） | Electron/Go PC |
 | **35433** | UDP | LAN 设备发现（广播 announce + 响应 discover） | 全部组件 |
-| 35440 | WS | v3 JWT 云中继（并存，非主用） | cloud_relay_v3.py |
-| 35441 | HTTP | v3 JWT REST API（并存，非主用） | cloud_relay_v3.py |
