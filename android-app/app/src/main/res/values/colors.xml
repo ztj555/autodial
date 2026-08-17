@@ -10,6 +10,9 @@
     <color name="text_sub">#A09070</color>
     <color name="green">#2ECC71</color>
     <color name="red">#E74C3C</color>
+    <!-- 固定寓意强调色（不随主题变化），与 ThemeManager.ACCENT_* 保持一致 -->
+    <color name="luck_red">#E53935</color>
+    <color name="fortune_purple">#7B2CBF</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
 </resources>

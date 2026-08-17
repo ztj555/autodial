@@ -544,7 +544,7 @@ class RegisterFragment : Fragment() {
             btnSubmit.text = "✅登记成功"
             btnSubmit.isEnabled = false
             btnSubmit.alpha = 1.0f
-            btnSubmit.setBackgroundColor(Color.parseColor("#2ECC71"))
+            btnSubmit.setBackgroundColor(Color.parseColor(ThemeManager.ACCENT_SUCCESS_GREEN))
             btnSubmit.setTextColor(Color.WHITE)
 
             // 保存登记时间戳（保留最近66天）
@@ -592,7 +592,7 @@ class RegisterFragment : Fragment() {
             }, 2000)
         } else {
             // 失败：红色闪一下 + Toast 提示，恢复按钮
-            btnSubmit.setBackgroundColor(Color.parseColor("#E74C3C"))
+            btnSubmit.setBackgroundColor(Color.parseColor(ThemeManager.ACCENT_DANGER_RED))
             btnSubmit.setTextColor(Color.WHITE)
             handler.postDelayed({
                 if (isAdded) setSubmittingState(false)

@@ -815,7 +815,7 @@ class StatsFragment : Fragment() {
         ThemeManager.applyToView(requireView(), colors)
 
         // 保留“鸿运当头、紫气东来”的固定寓意色，不随主题覆盖。
-        todayCount.setTextColor(Color.parseColor("#E53935"))
-        todayDuration.setTextColor(Color.parseColor("#7B2CBF"))
+        todayCount.setTextColor(Color.parseColor(ThemeManager.ACCENT_LUCK_RED))
+        todayDuration.setTextColor(Color.parseColor(ThemeManager.ACCENT_FORTUNE_PURPLE))
     }
 }

@@ -32,7 +32,7 @@
                 android:background="@drawable/bg_v3_icon"
                 android:padding="7dp"
                 android:src="@drawable/ic_tab_settings"
-                android:tint="#2B6CC4" />
+                android:tag="iconTint" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -54,7 +54,7 @@
                 android:paddingEnd="10dp"
                 android:gravity="center"
                 android:text="断开连接"
-                android:textColor="#FF4D4F"
+                android:textColor="@color/red"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -272,7 +272,7 @@
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp"
                 android:text="断开"
-                android:textColor="#FF4D4F"
+                android:textColor="@color/red"
                 android:textSize="12sp"
                 android:visibility="gone" />
         </FrameLayout>
@@ -362,7 +362,7 @@
             android:paddingTop="12dp"
             android:paddingBottom="12dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tint="#6685A6" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_wifi_high" android:tag="iconTint2" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -710,7 +710,7 @@
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_phone_outgoing" android:tint="#6685A6" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_phone_outgoing" android:tag="iconTint2" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -1162,7 +1162,7 @@
             android:paddingEnd="16dp"
             android:paddingBottom="14dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_palette" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_palette" android:tag="iconTint2" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -1313,7 +1313,7 @@
             android:paddingEnd="16dp"
             android:paddingBottom="14dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_bell" android:tint="#6685A6" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="7dp" android:src="@drawable/ic_ph_bell" android:tag="iconTint2" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -1383,7 +1383,7 @@
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
 
-            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_book_open_text" android:tint="#6685A6" />
+            <ImageView android:layout_width="30dp" android:layout_height="30dp" android:background="@drawable/bg_v3_icon" android:padding="6dp" android:src="@drawable/ic_ph_book_open_text" android:tag="iconTint2" />
 
             <LinearLayout
                 android:layout_width="0dp"

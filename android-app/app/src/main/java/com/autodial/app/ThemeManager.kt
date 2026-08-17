@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -45,6 +46,12 @@ object ThemeManager {
 
     val DEFAULT_THEME_ID = "sky-blue"
     val DEFAULT_MODE = "light"
+
+    // 固定寓意强调色（不随主题变化），与 res/values/colors.xml 保持一致
+    const val ACCENT_LUCK_RED = "#E53935"
+    const val ACCENT_FORTUNE_PURPLE = "#7B2CBF"
+    const val ACCENT_SUCCESS_GREEN = "#2ECC71"
+    const val ACCENT_DANGER_RED = "#E74C3C"
 
     // 主题变更监听器
     private val listeners = mutableListOf<() -> Unit>()
@@ -443,6 +450,8 @@ object ThemeManager {
             }
             "divider" -> view.setBackgroundColor(parseColor(colors.bg3))
             "statusBarBg" -> view.setBackgroundColor(parseColor(colors.bg))
+            "iconTint" -> if (view is ImageView) view.setColorFilter(parseColor(colors.primary))
+            "iconTint2" -> if (view is ImageView) view.setColorFilter(parseColor(colors.text2))
         }
 
         // hint 颜色（EditText 专用）

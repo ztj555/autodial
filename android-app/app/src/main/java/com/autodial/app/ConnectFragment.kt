@@ -201,7 +201,7 @@ class ConnectFragment : Fragment() {
             disconnectBtn = view.findViewById(R.id.disconnectBtn)
             disconnectBtn.background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                setStroke(1, Color.parseColor("#FF4D4F"))
+                setStroke(1, Color.parseColor(ThemeManager.ACCENT_DANGER_RED))
                 cornerRadius = 6f * resources.displayMetrics.density
                 setColor(Color.TRANSPARENT)
             }
@@ -1076,7 +1076,7 @@ class ConnectFragment : Fragment() {
                 stopPulseAnimation()
                 val manual = prefCtrl.isManuallyDisconnected()
                 statusText.text = if (manual) "已手动断开" else "未连接电脑"
-                statusText.setTextColor(Color.parseColor(if (manual) "#FF4D4F" else colors.text2))
+                statusText.setTextColor(Color.parseColor(if (manual) ThemeManager.ACCENT_DANGER_RED else colors.text2))
                 connectionMode.visibility = View.GONE
                 foundPCInfo.visibility = View.GONE
                 discoveryHint.text = "你的系统手机号 · 与电脑端保持一致"
@@ -1394,7 +1394,7 @@ class ConnectFragment : Fragment() {
             val ok = cloudCtrl.testServer(server)
             if (!isAdded) return@launch
             indicator.text = if (ok) "\u2705" else "\u274C"
-            indicator.setTextColor(Color.parseColor(if (ok) "#2ECC71" else "#E74C3C"))
+            indicator.setTextColor(Color.parseColor(if (ok) ThemeManager.ACCENT_SUCCESS_GREEN else ThemeManager.ACCENT_DANGER_RED))
         }
     }
 

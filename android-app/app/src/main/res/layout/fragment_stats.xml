@@ -73,7 +73,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="0次"
-                        android:textColor="#FF4444"
+                        android:textColor="@color/luck_red"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -112,7 +112,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="0.0"
-                        android:textColor="#8E44AD"
+                        android:textColor="@color/fortune_purple"
                         android:textSize="28sp"
                         android:textStyle="bold"
                         android:fontFamily="monospace" />
@@ -271,7 +271,8 @@
                 <View
                     android:layout_width="1dp"
                     android:layout_height="72dp"
-                    android:background="#22262F"
+                    android:tag="divider"
+                    android:background="#888888"
                     android:layout_marginStart="12dp"
                     android:layout_marginEnd="12dp" />
 
@@ -460,7 +461,8 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="#22262F"
+                    android:tag="divider"
+                    android:background="#888888"
                     android:layout_marginTop="12dp"
                     android:layout_marginBottom="12dp" />
 
@@ -579,7 +581,8 @@
                 <View
                     android:layout_width="3dp"
                     android:layout_height="14dp"
-                    android:background="#4F8EF7"
+                    android:tag="primary"
+                    android:background="#888888"
                     android:layout_marginEnd="8dp" />
 
                 <TextView
@@ -596,6 +599,7 @@
                 android:id="@+id/statsChartContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="140dp"
                 android:tag="bg2"
                 android:background="#888888"
                 android:gravity="bottom|center_horizontal"

@@ -238,6 +238,7 @@ class CallLogFragment : Fragment() {
         if (isAdded) {
             applyTheme()
             updateDialModeBarUI()
+            updateFilterChipUI()
             forceLoadCallLog()
         }
     }
@@ -735,16 +736,25 @@ class CallLogFragment : Fragment() {
 
     private fun updateFilterChipUI() {
         val colors = ThemeManager.getColors(requireContext())
-        val activeBg = android.graphics.Color.parseColor(colors.primary)
-        val activeText = android.graphics.Color.parseColor(colors.bg)
-        val inactiveBg = android.graphics.Color.parseColor(colors.bg2)
-        val inactiveText = android.graphics.Color.parseColor(colors.text2)
+        val density = resources.displayMetrics.density
+
+        fun pill(fillHex: String): android.graphics.drawable.GradientDrawable {
+            return android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 999f * density
+                setColor(android.graphics.Color.parseColor(fillHex))
+            }
+        }
 
         fun applyChip(chip: TextView, active: Boolean) {
             if (active) {
-                chip.setBackgroundColor(activeBg); chip.setTextColor(activeText)
+                chip.background = pill(colors.primary)
+                chip.setTextColor(android.graphics.Color.parseColor(colors.bg))
+                chip.setTypeface(null, android.graphics.Typeface.BOLD)
             } else {
-                chip.setBackgroundColor(inactiveBg); chip.setTextColor(inactiveText)
+                chip.background = pill(colors.bg2)
+                chip.setTextColor(android.graphics.Color.parseColor(colors.text2))
+                chip.setTypeface(null, android.graphics.Typeface.NORMAL)
             }
         }
         applyChip(filterAll, currentFilter == "all")
@@ -814,14 +824,20 @@ class CallLogFragment : Fragment() {
         val prefs = requireActivity().getSharedPreferences("autodial", Context.MODE_PRIVATE)
         val currentMode = prefs.getString("dial_mode", DialMode.ROUND_SELECT.key) ?: DialMode.ROUND_SELECT.key
 
+        val density = resources.displayMetrics.density
         dialModeButtons.forEachIndexed { index, btn ->
             val isSelected = dialModeKeys[index] == currentMode
+            btn.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 999f * density
+                setColor(android.graphics.Color.parseColor(if (isSelected) colors.primary else colors.bg))
+            }
             if (isSelected) {
-                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.primary))
                 btn.setTextColor(android.graphics.Color.parseColor(colors.bg))
+                btn.setTypeface(null, android.graphics.Typeface.BOLD)
             } else {
-                btn.setBackgroundColor(android.graphics.Color.parseColor(colors.bg))
                 btn.setTextColor(android.graphics.Color.parseColor(colors.text))
+                btn.setTypeface(null, android.graphics.Typeface.NORMAL)
             }
         }
     }
