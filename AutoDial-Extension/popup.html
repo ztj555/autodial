@@ -6,26 +6,43 @@
 <title>AutoDial</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-/* ===== 设计基准：手机端 天空蓝 × 亮白（ThemeManager sky-blue/light） ===== */
+/* ===== v5 设计 Token（唯一权威值，与手机端 ThemeManager sky-blue/light 对齐） ===== */
 :root {
-  --bg: #EBF4FF;          /* 页面底色 */
-  --surface: #FFFFFF;     /* 卡片 bg_v3_card */
-  --surface-2: #D8ECFC;   /* 深层背景 bg3 */
-  --input-bg: #F4F8FC;    /* 输入框 bg_v3_input */
-  --border: #DCEAF7;      /* 卡片描边 */
-  --border-input: #DFEBF6;/* 输入框描边 */
-  --divider: #E4EBF1;     /* 行内分割线 */
-  --text: #162840;        /* 主文字 */
-  --sub: #5880A8;         /* 辅助文字 */
+  --bg: #EBF4FF;
+  --surface: #FFFFFF;
+  --surface-2: #D8ECFC;
+  --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
+  --border: #DCEAF7;
+  --border-input: #DFEBF6;
+  --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
+  --text: #162840;
+  --text-2: #5880A8;
   --primary: #2B6CC4;
   --primary-light: #4A90E0;
   --primary-dark: #1A56A8;
   --green: #40C057;
   --red: #F03E3E;
-  --tile: #EDF5FD;        /* 图标底 bg_v3_icon */
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  /* 圆角体系（4 档） */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  /* 阴影体系（3 档） */
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-float: 0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
 }
+html { background: var(--bg); }
 body {
-  width: 340px;
+  width: 360px;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -33,34 +50,49 @@ body {
   letter-spacing: .02em;
   padding: 14px;
   -webkit-font-smoothing: antialiased;
+  max-height: 600px;
+  overflow-y: auto;
 }
+body::-webkit-scrollbar { width: 6px; }
+body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
+body::-webkit-scrollbar-track { background: transparent; }
+::selection { background: rgba(var(--primary-rgb), .16); }
 
-/* ===== Header（手机端顶部栏：白卡 + 24dp 圆角） ===== */
-.header {
+/* ===== Topbar（轻量：图标底座 + 标题，无卡片） ===== */
+.topbar {
   display: flex; align-items: center; gap: 10px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 18px; padding: 10px 12px; margin-bottom: 12px;
+  padding: 2px 2px 12px;
 }
 .app-icon {
-  width: 34px; height: 34px; border-radius: 10px;
-  background: var(--tile); color: var(--primary);
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--primary);
   display: grid; place-items: center; flex-shrink: 0;
 }
-.app-icon svg { width: 20px; height: 20px; }
+.app-icon svg { width: 19px; height: 19px; }
 .title-group { display: flex; align-items: baseline; gap: 6px; }
 .title-group h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
-.ver { font-size: 11px; color: var(--sub); background: var(--surface-2); padding: 2px 8px; border-radius: 999px; }
+.ver { font-size: 11px; color: var(--text-2); background: var(--surface-2); padding: 2px 8px; border-radius: var(--r-pill); }
 
-/* ===== Hero 状态卡（手机端状态大盘：浅蓝渐变 + 蓝描边） ===== */
-.hero-card {
-  display: flex; align-items: center; gap: 12px;
-  background: linear-gradient(180deg, #F0F6FD 0%, var(--surface) 100%);
-  border: 1px solid #BFD9F2;
-  border-radius: 18px; padding: 14px; margin-bottom: 12px;
+/* ===== 面板切换动画（display:none→block 时触发） ===== */
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+#statusPanel, #setupPanel { animation: panelIn .22s ease-out; }
+
+/* ===== Hero 大盘（手机端 heroCard：渐变 + 蓝描边 + 主操作内置） ===== */
+.hero-card {
+  background: var(--grad-hero);
+  border: 1px solid var(--hero-border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.hero-row { display: flex; align-items: center; gap: 12px; }
 .status-indicator {
   width: 38px; height: 38px; border-radius: 50%;
-  background: var(--tile); display: grid; place-items: center; flex-shrink: 0;
+  background: var(--icon-tile); display: grid; place-items: center; flex-shrink: 0;
 }
 .status-dot {
   width: 11px; height: 11px; border-radius: 50%;
@@ -79,133 +111,185 @@ body {
 }
 .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hero-title { font-size: 15px; font-weight: 700; }
-.hero-sub { font-size: 12px; color: var(--sub); }
+.hero-sub { font-size: 12px; color: var(--text-2); }
 
-/* ===== 信息卡（白卡 + 行分割线） ===== */
+/* ===== 按钮（手机端 primaryBtn 渐变 + ghost/danger pill） ===== */
+.btn {
+  border: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 600; letter-spacing: .02em;
+  transition: filter .15s, transform .08s, box-shadow .15s;
+}
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn-primary {
+  width: 100%;
+  background: var(--grad-btn);
+  color: #FFFFFF;
+  border-radius: var(--r-lg);
+  padding: 11px 12px;
+  margin-top: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  box-shadow: var(--shadow-btn);
+}
+.btn-primary svg { width: 15px; height: 15px; }
+.btn-primary:hover { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(var(--primary-rgb),.34); }
+.btn-ghost {
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: #B9D4F0; }
+.btn-danger {
+  background: var(--surface); color: var(--red);
+  border: 1px solid rgba(240,62,62,.3); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-danger:hover { background: rgba(240,62,62,.06); }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; }
+.btn-row .btn { flex: 1; }
+.btn-sm {
+  width: auto; height: 38px; padding: 0 16px;
+  font-size: 12px; border-radius: var(--r-sm); flex-shrink: 0;
+}
+.input-row .btn { margin-top: 0; }
+
+/* ===== 信息分组卡（手机端 bg2 卡片 + 图标底座行） ===== */
 .info-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; padding: 4px 14px; margin-bottom: 12px;
+  border-radius: var(--r-lg); padding: 6px 8px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
 }
 .info-row {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  padding: 10px 0; border-bottom: 1px solid var(--divider);
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 6px; border-bottom: 1px solid var(--divider);
+  border-radius: var(--r-sm);
+  transition: background .15s;
 }
 .info-row:last-child { border-bottom: none; }
-.info-row .label { font-size: 12px; color: var(--sub); flex-shrink: 0; }
+.info-row:hover { background: var(--input-bg); }
+.row-ico {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.row-ico svg { width: 13px; height: 13px; }
+.info-row .label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
 .info-row .value {
-  font-size: 13px; font-weight: 500; text-align: right;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;
+  font-size: 13px; font-weight: 500; text-align: right; margin-left: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
 }
 .info-row .value.link { color: var(--primary); cursor: pointer; }
 .info-row .value.link:hover { color: var(--primary-dark); text-decoration: underline; }
+.chev {
+  width: 13px; height: 13px; color: var(--text-2); flex-shrink: 0;
+  transition: color .15s, transform .15s;
+}
+.info-row:hover .chev { color: var(--primary); transform: translateX(1px); }
 
-/* ===== 按钮（手机端：主按钮蓝渐变 18dp 圆角） ===== */
-.btn {
-  width: 100%; padding: 10px 12px; border: none; border-radius: 12px;
-  font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
-  letter-spacing: .02em;
-  transition: filter .15s, background .15s, transform .05s;
-}
-.btn:active { transform: translateY(1px); }
-.btn-primary {
-  background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
-  color: #FFFFFF; margin-top: 2px;
-  display: flex; align-items: center; justify-content: center; gap: 7px;
-  box-shadow: 0 3px 10px rgba(43,108,196,.28);
-}
-.btn-primary svg { width: 15px; height: 15px; }
-.btn-primary:hover { filter: brightness(1.06); }
-.btn-ghost {
-  background: var(--surface); color: var(--sub);
-  border: 1px solid var(--border);
-}
-.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: #B9D4F0; }
-.btn-danger { background: var(--surface); color: var(--red); border: 1px solid rgba(240,62,62,.3); }
-.btn-danger:hover { background: rgba(240,62,62,.06); }
-.btn-row { display: flex; gap: 8px; margin-top: 8px; }
-.btn-row .btn { margin-top: 0; }
-.btn-sm { width: auto; padding: 9px 14px; font-size: 12px; }
-
-/* ===== Hint（手机端 infoBanner：浅蓝底 + 蓝描边） ===== */
+/* ===== Hint 横幅（手机端 infoBanner） ===== */
 .hint-card {
   display: flex; align-items: flex-start; gap: 8px;
-  background: #E3EEFB; border: 1px solid #C4DAF3;
-  border-radius: 12px; padding: 10px 12px; margin-bottom: 14px;
-  color: var(--primary);
+  background: var(--banner-info-bg); border: 1px solid var(--banner-info-border);
+  border-radius: 12px; padding: 10px 12px; margin-bottom: 12px;
 }
-.hint-card svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; }
-.hint-card span { font-size: 12px; color: var(--sub); line-height: 1.5; }
+.hint-card svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--primary); }
+.hint-card span { font-size: 12px; color: var(--text-2); line-height: 1.5; }
 
-/* ===== 设置分区（白卡 + 图标小块） ===== */
+/* ===== 分组设置卡（一张卡 + 组间分割线，对齐手机端 settingGroup/settingRow） ===== */
 .section {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 16px; padding: 12px 14px; margin-bottom: 12px;
+  border-radius: var(--r-lg); padding: 6px 14px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
 }
-.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.group { padding: 10px 0; }
+.group-divider { height: 1px; background: var(--divider); }
+.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-ico {
-  width: 26px; height: 26px; border-radius: 8px;
-  background: var(--tile); color: var(--sub);
+  width: 24px; height: 24px; border-radius: 8px;
+  background: var(--icon-tile); color: var(--text-2);
   display: grid; place-items: center; flex-shrink: 0;
 }
-.section-ico svg { width: 15px; height: 15px; }
+.section-ico svg { width: 14px; height: 14px; }
 .section-title { font-size: 13px; font-weight: 600; }
-.section-sub { margin-left: auto; font-size: 11px; color: var(--sub); }
+.section-sub { margin-left: auto; font-size: 11px; color: var(--text-2); }
 .input-row { display: flex; gap: 8px; }
 input {
-  flex: 1; min-width: 0; background: var(--input-bg);
-  border: 1px solid var(--border-input); border-radius: 12px;
-  padding: 10px 12px; color: var(--text); font-size: 13px;
-  font-family: inherit; outline: none; transition: border-color .15s, background .15s;
+  flex: 1; min-width: 0; height: 38px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-input); border-radius: var(--r-sm);
+  padding: 0 12px; color: var(--text); font-size: 13px;
+  font-family: inherit; outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
 }
 input::placeholder { color: #9AB4CC; }
-input:focus { border-color: var(--primary); background: var(--surface); }
-.field-status, .server-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--sub); }
+input:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .14);
+}
+.field-status, .server-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--text-2); }
 .field-status.ok, .server-status.ok { color: var(--green); }
 .field-status.err, .server-status.err { color: var(--red); }
 </style>
 </head>
 <body>
 
-<!-- ===== Header ===== -->
-<header class="header">
+<!-- ===== Topbar ===== -->
+<header class="topbar">
   <div class="app-icon">
     <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg>
   </div>
   <div class="title-group">
     <h1>AutoDial</h1>
-    <span class="ver">v4</span>
+    <span class="ver">v5</span>
   </div>
 </header>
 
-<!-- ===== 状态面板（PIN 已设置） ===== -->
+<!-- ===== 状态页（PIN 已设置） ===== -->
 <div id="statusPanel" style="display:none">
   <div class="hero-card">
-    <div class="status-indicator">
-      <span id="statusDot" class="status-dot online"></span>
+    <div class="hero-row">
+      <div class="status-indicator">
+        <span id="statusDot" class="status-dot online"></span>
+      </div>
+      <div class="hero-text">
+        <div id="statusText" class="hero-title">PIN 已就绪</div>
+        <div id="cloudStatus" class="hero-sub">连接中…</div>
+      </div>
     </div>
-    <div class="hero-text">
-      <div id="statusText" class="hero-title">PIN 已就绪</div>
-      <div id="cloudStatus" class="hero-sub">连接中…</div>
-    </div>
+    <button id="syncBtn" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      同步登记列表
+    </button>
   </div>
 
   <div class="info-card">
-    <div class="info-row"><span class="label">坐席手机号</span><span id="myPhone" class="value">--</span></div>
-    <div class="info-row"><span class="label">接待顾问</span><span id="myMgrName" class="value link">--</span></div>
-    <div class="info-row"><span class="label">云端地址</span><span id="cloudAddr" class="value link">--</span></div>
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg></span>
+      <span class="label">坐席手机号</span>
+      <span id="myPhone" class="value">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      <span class="label">接待顾问</span>
+      <span id="myMgrName" class="value link">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+      <span class="label">云端地址</span>
+      <span id="cloudAddr" class="value link">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
   </div>
 
-  <button id="syncBtn" class="btn btn-primary">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    同步登记列表
-  </button>
   <div class="btn-row">
     <button id="editServerBtn" class="btn btn-ghost">修改服务器</button>
     <button id="clearPinBtn" class="btn btn-danger">清除 PIN</button>
   </div>
 </div>
 
-<!-- ===== 设置面板（PIN + 服务器） ===== -->
+<!-- ===== 设置页（PIN + 服务器） ===== -->
 <div id="setupPanel">
   <div class="hint-card">
     <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
@@ -213,44 +297,74 @@ input:focus { border-color: var(--primary); background: var(--surface); }
   </div>
 
   <div class="section">
-    <div class="section-head">
-      <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-      <span class="section-title">云中继地址</span>
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <span class="section-title">云中继地址</span>
+      </div>
+      <div class="input-row">
+        <input id="serverInput" placeholder="101.34.65.254:35430" />
+        <button id="testServerBtn" class="btn btn-ghost btn-sm">测试</button>
+      </div>
+      <span id="serverStatus" class="field-status"></span>
     </div>
-    <div class="input-row">
-      <input id="serverInput" placeholder="101.34.65.254:35430" />
-      <button id="testServerBtn" class="btn btn-ghost btn-sm">测试</button>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">配对码</span>
+        <span class="section-sub">4位或11位数字</span>
+      </div>
+      <div class="input-row">
+        <input id="pinInput" placeholder="输入配对码" maxlength="11" />
+        <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
+      <span id="pinStatus" class="field-status"></span>
     </div>
-    <span id="serverStatus" class="field-status"></span>
-    <button id="backToStatusBtn" class="btn btn-ghost" style="display:none;margin-top:6px">← 返回</button>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">接待顾问姓名</span>
+      </div>
+      <div class="input-row">
+        <input id="mgrNameInput" placeholder="请填写您的姓名" />
+        <button id="saveMgrNameBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
+      <span id="mgrNameStatus" class="field-status"></span>
+    </div>
   </div>
 
-  <div class="section">
-    <div class="section-head">
-      <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M11 11l8 8M16 16l2-2M19 19l2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-      <span class="section-title">配对码</span>
-      <span class="section-sub">4位或11位数字</span>
-    </div>
-    <div class="input-row">
-      <input id="pinInput" placeholder="输入配对码" maxlength="11" />
-      <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
-    </div>
-    <span id="pinStatus" class="field-status"></span>
-  </div>
-
-  <div class="section">
-    <div class="section-head">
-      <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-      <span class="section-title">接待顾问姓名</span>
-    </div>
-    <div class="input-row">
-      <input id="mgrNameInput" placeholder="请填写您的姓名" />
-      <button id="saveMgrNameBtn" class="btn btn-primary btn-sm">保存</button>
-    </div>
-    <span id="mgrNameStatus" class="field-status"></span>
-  </div>
+  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    返回
+  </button>
 </div>
 
+<script src="themes.js"></script>
+<script>
+(function () {
+  var MAP = {
+    '--bg': 'bg', '--surface': 'bg2', '--surface-2': 'bg3', '--input-bg': 'inputBg',
+    '--icon-tile': 'iconTile', '--border': 'borderC', '--border-input': 'borderInput',
+    '--divider': 'divider', '--hero-border': 'heroBorder', '--hero-top': 'heroTop',
+    '--text': 'text', '--text-2': 'text2',
+    '--primary': 'accent', '--primary-light': 'accentLight', '--primary-dark': 'accentDark',
+    '--green': 'green', '--red': 'red',
+    '--banner-info-bg': 'bannerInfoBg', '--banner-info-border': 'bannerInfoBorder',
+    '--primary-rgb': 'primaryRgb'
+  };
+  chrome.storage.local.get(['__ad_theme'], function (s) {
+    var t = AD_THEME_VARS(s.__ad_theme || 'sky-blue');
+    var r = document.documentElement.style;
+    Object.keys(MAP).forEach(function (k) { r.setProperty(k, t[MAP[k]]); });
+  });
+})();
+</script>
 <script src="popup.js"></script>
 </body>
 </html>

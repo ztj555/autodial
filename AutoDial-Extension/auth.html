@@ -4,75 +4,102 @@
 <meta charset="utf-8">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-/* ===== 设计基准：手机端 天空蓝 × 亮白 ===== */
+/* ===== v5 设计 Token（与 popup.html 逐字一致，同源于手机端 ThemeManager sky-blue/light） ===== */
 :root {
   --bg: #EBF4FF;
   --surface: #FFFFFF;
   --surface-2: #D8ECFC;
   --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
   --border: #DCEAF7;
+  --border-input: #DFEBF6;
   --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
   --text: #162840;
-  --sub: #5880A8;
+  --text-2: #5880A8;
   --primary: #2B6CC4;
   --primary-light: #4A90E0;
   --primary-dark: #1A56A8;
   --green: #40C057;
   --red: #F03E3E;
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
 }
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg); color: var(--text);
   letter-spacing: .02em;
-  padding: 24px; display: flex; justify-content: center; -webkit-font-smoothing: antialiased;
+  padding: 24px; display: flex; justify-content: center;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: rgba(var(--primary-rgb), .16); }
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .auth-card {
   width: 360px; max-width: 100%;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 18px; padding: 24px; text-align: center;
-  box-shadow: 0 6px 24px rgba(43,108,196,.10);
+  border-radius: var(--r-lg); padding: 26px 24px 22px; text-align: center;
+  box-shadow: var(--shadow-card);
+  animation: cardIn .22s ease-out;
 }
 .auth-icon {
-  width: 56px; height: 56px; border-radius: 50%;
-  background: rgba(240,62,62,.10); display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: var(--r-md);
+  background: rgba(240,62,62,.10); color: var(--red);
+  display: grid; place-items: center;
   margin: 0 auto 14px;
 }
-.auth-icon svg { width: 28px; height: 28px; }
-.auth-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-.desc { font-size: 13px; color: var(--sub); line-height: 1.6; margin-bottom: 18px; }
+.auth-icon svg { width: 24px; height: 24px; }
+.auth-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.desc { font-size: 13px; color: var(--text-2); line-height: 1.6; margin-bottom: 18px; }
 
 .info-card {
-  background: var(--input-bg); border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 6px 14px; text-align: left; margin-bottom: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 2px 14px; text-align: left; margin-bottom: 18px;
 }
 .info-row {
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--divider);
 }
 .info-row:last-child { border-bottom: none; }
-.info-row .label { font-size: 12px; color: var(--sub); flex-shrink: 0; }
+.info-row .label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
 .info-row .value { font-size: 13px; font-weight: 500; text-align: right; }
-.warn { font-size: 12px; color: var(--red); margin-top: 8px; line-height: 1.5; }
+.warn {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: 12px; color: var(--red); margin-top: 6px; line-height: 1.5; text-align: left;
+}
+.warn svg { flex-shrink: 0; width: 13px; height: 13px; margin-top: 1px; }
 
 .btns { display: flex; gap: 10px; }
 .btn {
-  flex: 1; padding: 11px 0; border: none; border-radius: 12px;
+  flex: 1; height: 42px; border: none; border-radius: var(--r-pill);
   font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
   letter-spacing: .02em;
-  transition: filter .15s, background .15s, transform .05s;
+  transition: filter .15s, background .15s, transform .08s;
 }
-.btn:active { transform: translateY(1px); }
+.btn:active { transform: translateY(1px) scale(.98); }
 .btn-primary {
-  background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  background: var(--grad-btn);
   color: #FFFFFF;
-  box-shadow: 0 3px 10px rgba(43,108,196,.28);
+  box-shadow: var(--shadow-btn);
 }
 .btn-primary:hover { filter: brightness(1.06); }
-.btn-ghost { background: var(--surface); color: var(--sub); border: 1px solid var(--border); }
+.btn-ghost { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: #B9D4F0; }
 
-.status { font-size: 13px; color: var(--sub); margin-top: 14px; display: none; }
+.status { font-size: 13px; color: var(--text-2); margin-top: 14px; display: none; }
 .status.success { color: var(--green); }
 .status.error { color: var(--red); }
 </style>
@@ -80,7 +107,7 @@ body {
 <body>
 <div class="auth-card">
   <div class="auth-icon">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.2 2.5 20h19L12 3.2z" fill="#F03E3E"/><path d="M12 10v4.2" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="#FFFFFF"/></svg>
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4L3 19h18L12 4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10.5v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/></svg>
   </div>
   <h2>设备授权请求</h2>
   <div class="desc">有设备正在尝试使用您的 PIN 登录，需要您确认是否授权。</div>
@@ -88,7 +115,10 @@ body {
     <div class="info-row"><span class="label">设备名称</span><span class="value" id="device">-</span></div>
     <div class="info-row"><span class="label">请求使用 PIN</span><span class="value" id="pin">-</span></div>
     <div class="info-row"><span class="label">设备默认 PIN</span><span class="value" id="default_pin">-</span></div>
-    <div class="warn">该设备此前使用默认 PIN 登录，现在尝试切换。</div>
+    <div class="warn">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 4L3 19h18L12 4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 10.5v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/></svg>
+      <span>该设备此前使用默认 PIN 登录，现在尝试切换。</span>
+    </div>
   </div>
   <div class="btns">
     <button class="btn btn-ghost" onclick="respond(false)">拒绝</button>
@@ -96,6 +126,26 @@ body {
   </div>
   <div class="status" id="status"></div>
 </div>
+<script src="themes.js"></script>
+<script>
+(function () {
+  var MAP = {
+    '--bg': 'bg', '--surface': 'bg2', '--surface-2': 'bg3', '--input-bg': 'inputBg',
+    '--icon-tile': 'iconTile', '--border': 'borderC', '--border-input': 'borderInput',
+    '--divider': 'divider', '--hero-border': 'heroBorder', '--hero-top': 'heroTop',
+    '--text': 'text', '--text-2': 'text2',
+    '--primary': 'accent', '--primary-light': 'accentLight', '--primary-dark': 'accentDark',
+    '--green': 'green', '--red': 'red',
+    '--banner-info-bg': 'bannerInfoBg', '--banner-info-border': 'bannerInfoBorder',
+    '--primary-rgb': 'primaryRgb'
+  };
+  chrome.storage.local.get(['__ad_theme'], function (s) {
+    var t = AD_THEME_VARS(s.__ad_theme || 'sky-blue');
+    var r = document.documentElement.style;
+    Object.keys(MAP).forEach(function (k) { r.setProperty(k, t[MAP[k]]); });
+  });
+})();
+</script>
 <script>
 var params = new URLSearchParams(location.search);
 var rid = params.get('request_id');

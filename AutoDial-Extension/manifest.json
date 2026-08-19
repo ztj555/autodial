@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoDial",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "description": "一键拨号 - CRM客户手机号自动拨打（PIN整合版）",
   "permissions": ["activeTab", "storage", "clipboardWrite", "alarms", "contextMenus"],
   "host_permissions": [
@@ -31,7 +31,7 @@
         "*://*.rxhcrm.com/*",
         "*://*.rongxinhui.com/*"
       ],
-      "js": ["content-script.js"],
+      "js": ["themes.js", "content-script.js"],
       "run_at": "document_idle",
       "all_frames": true
     }

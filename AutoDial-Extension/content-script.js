@@ -60,110 +60,81 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // 主题数据（默认「天空蓝」与手机端默认主题一致，另精选8套暗色）
+  // 主题数据（v5 起统一取自 themes.js 的 AD_THEMES，唯一权威源）
   // ═══════════════════════════════════════════════════════════════
-  const EXT_THEMES = {
-    'sky-blue': {
-      name: '天空蓝', icon: '☁',
-      accent: '#2B6CC4', accentLight: '#4A90E0', accentDark: '#1A56A8',
-      bg: '#EBF4FF', bg2: '#FFFFFF', bg3: '#D8ECFC',
-      text: '#162840', text2: '#5880A8',
-      green: '#40C057', red: '#F03E3E',
-      textOnAccent: '#FFFFFF',
-      gradAccent: 'linear-gradient(135deg,#4A90E0,#1A56A8)',
-      gradIdle: 'linear-gradient(135deg,#FFFFFF,#D8ECFC)',
-      gradGreen: 'linear-gradient(135deg,#40C057,#2B9E46)',
-      gradRed: 'linear-gradient(135deg,#F03E3E,#D32F2F)',
-    },
-    'dark-gold': {
-      name: '暗金', icon: '✦',
-      accent: '#C9A84C', accentLight: '#F0C040', accentDark: '#8B6914',
-      bg: '#111318', bg2: '#1A1D24', bg3: '#22262F',
-      text: '#E8DCC8', text2: '#A09070',
-      green: '#2ECC71', red: '#E74C3C',
-      gradAccent: 'linear-gradient(135deg,#C9A84C,#8B6914)',
-      gradIdle: 'linear-gradient(135deg,#5b5b5b,#333)',
-      gradGreen: 'linear-gradient(135deg,#2ECC71,#27AE60)',
-      gradRed: 'linear-gradient(135deg,#E74C3C,#C0392B)',
-    },
-    'cyber-frost': {
-      name: '冰蓝冷峻', icon: '❄',
-      accent: '#00BCD4', accentLight: '#4DD0E1', accentDark: '#006064',
-      bg: '#0A1628', bg2: '#122A45', bg3: '#1A3A5C',
-      text: '#E0F0FF', text2: '#7BA3C4',
-      green: '#00E676', red: '#FF5252',
-      gradAccent: 'linear-gradient(135deg,#00BCD4,#006064)',
-      gradIdle: 'linear-gradient(135deg,#1A3A5C,#0A1628)',
-      gradGreen: 'linear-gradient(135deg,#00E676,#00C853)',
-      gradRed: 'linear-gradient(135deg,#FF5252,#D32F2F)',
-    },
-    'deep-space': {
-      name: '深空紫', icon: '◆',
-      accent: '#BB86FC', accentLight: '#DA98FF', accentDark: '#7B1FA2',
-      bg: '#0D0A18', bg2: '#18142E', bg3: '#241E42',
-      text: '#E8DEFF', text2: '#9575CD',
-      green: '#00E676', red: '#FF5252',
-      gradAccent: 'linear-gradient(135deg,#BB86FC,#7B1FA2)',
-      gradIdle: 'linear-gradient(135deg,#241E42,#0D0A18)',
-      gradGreen: 'linear-gradient(135deg,#00E676,#00C853)',
-      gradRed: 'linear-gradient(135deg,#FF5252,#C0392B)',
-    },
-    'cyberpunk': {
-      name: '赛博朋克', icon: '⚡',
-      accent: '#00FFFF', accentLight: '#80FFFF', accentDark: '#008B8B',
-      bg: '#0A0010', bg2: '#150022', bg3: '#220035',
-      text: '#F0F0FF', text2: '#8866CC',
-      green: '#39FF14', red: '#FF0039',
-      gradAccent: 'linear-gradient(135deg,#00FFFF,#008B8B)',
-      gradIdle: 'linear-gradient(135deg,#220035,#0A0010)',
-      gradGreen: 'linear-gradient(135deg,#39FF14,#00C853)',
-      gradRed: 'linear-gradient(135deg,#FF0039,#C0392B)',
-    },
-    'minimalist': {
-      name: '极简白', icon: '○',
-      accent: '#888888', accentLight: '#AAAAAA', accentDark: '#666666',
-      bg: '#1A1A1A', bg2: '#2A2A2A', bg3: '#3A3A3A',
-      text: '#E8E8E8', text2: '#999999',
-      green: '#4CAF50', red: '#EF5350',
-      gradAccent: 'linear-gradient(135deg,#888888,#666666)',
-      gradIdle: 'linear-gradient(135deg,#3A3A3A,#1A1A1A)',
-      gradGreen: 'linear-gradient(135deg,#4CAF50,#388E3C)',
-      gradRed: 'linear-gradient(135deg,#EF5350,#C62828)',
-    },
-    'forest-green': {
-      name: '森林绿', icon: '♣',
-      accent: '#81C784', accentLight: '#A5D6A7', accentDark: '#388E3C',
-      bg: '#0E1810', bg2: '#182818', bg3: '#223822',
-      text: '#E0F0E0', text2: '#7AA07A',
-      green: '#69F0AE', red: '#FF8A80',
-      gradAccent: 'linear-gradient(135deg,#81C784,#388E3C)',
-      gradIdle: 'linear-gradient(135deg,#223822,#0E1810)',
-      gradGreen: 'linear-gradient(135deg,#69F0AE,#00E676)',
-      gradRed: 'linear-gradient(135deg,#FF8A80,#E74C3C)',
-    },
-    'energetic-orange': {
-      name: '活力橙', icon: '☀',
-      accent: '#FF9800', accentLight: '#FFB74D', accentDark: '#E65100',
-      bg: '#1A1510', bg2: '#2A2018', bg3: '#3A2D20',
-      text: '#FFF5E6', text2: '#B08D60',
-      green: '#66BB6A', red: '#EF5350',
-      gradAccent: 'linear-gradient(135deg,#FF9800,#E65100)',
-      gradIdle: 'linear-gradient(135deg,#3A2D20,#1A1510)',
-      gradGreen: 'linear-gradient(135deg,#66BB6A,#388E3C)',
-      gradRed: 'linear-gradient(135deg,#EF5350,#C62828)',
-    },
-    'ocean-blue': {
-      name: '海洋蓝', icon: '◎',
-      accent: '#42A5F5', accentLight: '#64B5F6', accentDark: '#1565C0',
-      bg: '#0B1424', bg2: '#152238', bg3: '#1E3050',
-      text: '#E0ECFF', text2: '#7890B8',
-      green: '#00E676', red: '#FF5252',
-      gradAccent: 'linear-gradient(135deg,#42A5F5,#1565C0)',
-      gradIdle: 'linear-gradient(135deg,#1E3050,#0B1424)',
-      gradGreen: 'linear-gradient(135deg,#00E676,#00C853)',
-      gradRed: 'linear-gradient(135deg,#FF5252,#C62828)',
-    },
+  const EXT_THEMES = AD_THEMES;
+
+  // ── v5 统一组件样式（设计 token，与 popup/auth 同源） ──
+  function adStyles(t) {
+    return {
+      card: {
+        background: t.bg2,
+        borderRadius: '14px',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
+        backdropFilter: 'blur(16px)',
+        fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      },
+      input: {
+        background: t.bg3,
+        border: `1px solid ${t.accent}33`,
+        borderRadius: '10px',
+        color: t.text,
+        outline: 'none',
+      },
+      btnPrimary: {
+        background: t.gradAccent,
+        color: '#FFFFFF',
+        border: 'none',
+        borderRadius: '10px',
+        fontWeight: '700',
+        cursor: 'pointer',
+      },
+      btnGhost: {
+        background: 'transparent',
+        color: t.text2,
+        border: `1px solid ${t.accent}44`,
+        borderRadius: '10px',
+        fontWeight: '600',
+        cursor: 'pointer',
+      },
+      menuItem: {
+        padding: '8px 10px',
+        margin: '0 4px',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        whiteSpace: 'nowrap',
+        transition: 'background .15s',
+      },
+    };
+  }
+
+  // ── v5 矢量图标（Phosphor 风格 24 viewBox / stroke 1.8，替代功能 emoji） ──
+  const AD_ICON = {
+    phone: '<path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/>',
+    phoneX: '<path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/><path d="M16.5 5.5l5 5M21.5 5.5l-5 5"/>',
+    monitor: '<rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M9 21h6M12 17v4"/>',
+    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+    chat: '<path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h16a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 16H9.5L5 19.5V16H4a1.5 1.5 0 0 1-1.5-1.5v-8z"/>',
+    pencil: '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>',
+    palette: '<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2.2-1.2 1.6-2.4-.5-1 .1-2 1.3-2H17a4.4 4.4 0 0 0 4-4.4C21 6.7 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>',
+    keypad: '<rect x="3" y="3" width="4" height="4" rx="1"/><rect x="10" y="3" width="4" height="4" rx="1"/><rect x="17" y="3" width="4" height="4" rx="1"/><rect x="3" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="3" y="17" width="4" height="4" rx="1"/><rect x="10" y="17" width="4" height="4" rx="1"/>',
+    gear: '<circle cx="12" cy="12" r="3.5"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    user: '<circle cx="12" cy="8" r="3.6"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/>',
+    bolt: '<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5L13 2z"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    mapPin: '<path d="M12 21s-7-5.5-7-11a7 7 0 1 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/>',
+    clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a3 3 0 0 1 6 0"/><path d="M9 11h6M9 15h6"/>',
+    cloud: '<path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   };
+  function adIcon(name, size) {
+    var s = size || 16;
+    return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;pointer-events:none;vertical-align:-3px">' + (AD_ICON[name] || '') + '</svg>';
+  }
 
   // 当前主题（默认天空蓝，与手机端一致）
   let currentThemeId = localStorage.getItem('__ad_theme') || 'sky-blue';
@@ -172,26 +143,30 @@
   function applyTheme(id) {
     currentThemeId = id;
     localStorage.setItem('__ad_theme', id);
+    // v5: 同步给 popup/auth（chrome.storage 跨上下文共享）
+    try { chrome.storage.local.set({ __ad_theme: id }); } catch (_) {}
     const t = T();
     // 刷新拨号按钮（完整刷新所有主题相关属性）
     if (floatEl) {
-      floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
+      floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
       floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
-      floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
+      floatEl.style.boxShadow = currentPhone
+        ? `0 6px 20px ${t.accent}59`
+        : `0 4px 14px ${t.accent}1F`;
       floatEl.style.border = `1px solid ${t.accent}33`;
     }
-    // 刷新挂断按钮（跟随主题 idle 颜色）
+    // 刷新挂断按钮（idle = 卡片底 + 红字，语义"挂断"）
     if (hangupEl) {
-      hangupEl.style.background = t.gradIdle;
-      hangupEl.style.color = t.text;
-      hangupEl.style.boxShadow = `0 2px 10px ${t.accent}33`;
-      hangupEl.style.border = `1px solid ${t.accent}33`;
+      hangupEl.style.background = t.bg2;
+      hangupEl.style.color = t.red;
+      hangupEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
+      hangupEl.style.border = `1px solid ${t.red}55`;
       const label = hangupEl.querySelector('span');
-      if (label) label.style.color = t.text;
+      if (label) label.style.color = t.red;
     }
-    // 刷新缩放手柄颜色（用 accent 而非 red）
+    // 刷新缩放手柄颜色（红色系，与挂断语义一致）
     if (hangupResizeHandle) {
-      hangupResizeHandle.style.background = `linear-gradient(135deg, ${t.accent}66 50%, transparent 50%)`;
+      hangupResizeHandle.style.background = `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`;
     }
     // 刷新右键菜单（如果打开的话）
     hideContextMenu();
@@ -199,7 +174,7 @@
     if (manualDialBar) {
       manualDialBar.style.background = t.bg2;
       manualDialBar.style.border = `1px solid ${t.accent}33`;
-      manualDialBar.style.boxShadow = `0 4px 16px ${t.accent}22`;
+      manualDialBar.style.boxShadow = `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`;
       const input = manualDialBar.querySelector('input');
       if (input) {
         input.style.background = t.bg3;
@@ -208,12 +183,13 @@
       }
       manualDialBar.querySelectorAll('button').forEach(btn => {
         if (btn.classList.contains('__ad_manual_paste')) {
-          btn.style.color = t.text;
+          btn.style.color = t.text2;
           btn.style.border = `1px solid ${t.accent}44`;
-          btn.style.background = t.bg3;
+          btn.style.background = 'transparent';
         }
         if (btn.classList.contains('__ad_manual_dial')) {
           btn.style.background = t.gradAccent;
+          btn.style.color = '#FFFFFF';
         }
       });
     }
@@ -390,25 +366,48 @@
         right: '20px',
         top: '370px',
         zIndex: '2147483647',
-        padding: '10px 20px',
+        padding: '10px 18px',
         fontSize: '13px',
         fontWeight: '600',
         color: t.text,
-        background: t.gradIdle,
-        borderRadius: '24px',
-        boxShadow: `0 4px 16px ${t.accent}22`,
+        background: t.bg2,
+        borderRadius: '999px',
+        boxShadow: `0 4px 14px ${t.accent}1F`,
         cursor: 'grab',
         userSelect: 'none',
-        transition: 'background .2s, box-shadow .2s',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        transition: 'background .2s, box-shadow .2s, transform .15s',
         whiteSpace: 'nowrap',
         letterSpacing: '0.5px',
         border: `1px solid ${t.accent}33`,
       });
-      // 用 span 包文字，避免 textContent 覆盖子元素
+      floatEl.addEventListener('mouseenter', () => {
+        const c = T();
+        floatEl.style.transform = 'translateY(-1px)';
+        floatEl.style.boxShadow = currentPhone
+          ? `0 8px 24px ${c.accent}66`
+          : `0 6px 18px ${c.accent}26`;
+      });
+      floatEl.addEventListener('mouseleave', () => {
+        const c = T();
+        floatEl.style.transform = '';
+        floatEl.style.boxShadow = currentPhone
+          ? `0 6px 20px ${c.accent}59`
+          : `0 4px 14px ${c.accent}1F`;
+      });
+      floatEl.addEventListener('pointerdown', () => { floatEl.style.transform = 'scale(.97)'; });
+      floatEl.addEventListener('pointerup', () => { floatEl.style.transform = ''; });
+      floatEl.addEventListener('pointercancel', () => { floatEl.style.transform = ''; });
+      // 用 span 包内容（图标 + 文字），避免 textContent 覆盖子元素
       const dialLabel = document.createElement('span');
       dialLabel.id = '__ad_dial_label';
-      dialLabel.textContent = '📞 等待号码...';
       dialLabel.style.pointerEvents = 'none'; // 不拦截指针事件，让父元素处理
+      dialLabel.style.display = 'inline-flex';
+      dialLabel.style.alignItems = 'center';
+      dialLabel.style.gap = '6px';
+      dialLabel.innerHTML = adIcon('phone', 15) + '<span>等待号码...</span>';
       floatEl.appendChild(dialLabel);
 
       // ─── 拖动（仅左右边缘启动，中间区域点击拨号） ────
@@ -484,23 +483,27 @@
         top: '140px',
         zIndex: '2147483646',
         borderRadius: '20px',
-        background: t.gradIdle,
-        boxShadow: `0 2px 10px ${t.accent}33`,
+        background: t.bg2,
+        boxShadow: `0 4px 14px ${t.accent}1F`,
         cursor: 'pointer',
         userSelect: 'none',
         display: 'flex',  // 始终显示
         alignItems: 'center',
         justifyContent: 'center',
+        gap: '5px',
         transition: 'box-shadow .2s, background .2s',
-        color: t.text,
+        color: t.red,
         fontWeight: '700',
         letterSpacing: '1px',
-        border: `1px solid ${t.accent}33`,
+        border: `1px solid ${t.red}55`,
       });
-      // 用 span 包文字，避免 textContent 覆盖手柄子元素
+      // 用 span 包内容（图标 + 文字），文字单独 span 供 flash 更新
       const hangupLabel = document.createElement('span');
-      hangupLabel.textContent = '挂断';
+      hangupLabel.innerHTML = adIcon('phoneX', 13) + '<span class="__ad_hangup_text">挂断</span>';
       hangupLabel.style.pointerEvents = 'none';
+      hangupLabel.style.display = 'inline-flex';
+      hangupLabel.style.alignItems = 'center';
+      hangupLabel.style.gap = '5px';
       hangupEl.appendChild(hangupLabel);
 
       // ─── 点击挂断 ────────────────────────────────
@@ -567,8 +570,8 @@
         height: '14px',
         cursor: 'nwse-resize',
         zIndex: '1',
-        // 用三角形视觉提示
-        background: `linear-gradient(135deg, ${t.accent}66 50%, transparent 50%)`,
+        // 用三角形视觉提示（红色系，与挂断语义一致）
+        background: `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`,
         borderRadius: '0 0 0 4px',
         opacity: '0.6',
         transition: 'opacity .15s',
@@ -622,14 +625,18 @@
       if (!hangupEl) return;
       const t = T();
       const h = Math.round(hangupSize * 0.72);
-      const label = hangupEl.querySelector('span');
+      const label = hangupEl.querySelector('.__ad_hangup_text');
       if (label) label.textContent = text;
       hangupEl.style.fontSize = Math.round(h * 0.38) + 'px';
       hangupEl.style.background = t.gradRed; // 挂断按钮点击后始终显示红色
+      hangupEl.style.color = '#FFFFFF';
+      hangupEl.style.border = '1px solid transparent';
       setTimeout(() => {
         if (label) label.textContent = '挂断';
         hangupEl.style.fontSize = Math.round(h * 0.45) + 'px';
-        hangupEl.style.background = t.gradIdle; // 恢复主题色
+        hangupEl.style.background = t.bg2; // 恢复主题卡片色
+        hangupEl.style.color = t.red;
+        hangupEl.style.border = `1px solid ${t.red}55`;
       }, 1800);
     }
 
@@ -652,13 +659,14 @@
         zIndex: '2147483645',
         display: 'none',  // 默认隐藏，右键菜单切换
         alignItems: 'center',
-        gap: '6px',
-        padding: '6px 8px',
+        gap: '8px',
+        padding: '8px',
         background: t.bg2,
-        borderRadius: '12px',
-        boxShadow: `0 4px 16px ${t.accent}22`,
+        borderRadius: '14px',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
         border: `1px solid ${t.accent}33`,
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        transition: 'opacity .18s ease, transform .18s ease',
       });
 
       // ── 输入框 ──
@@ -668,16 +676,27 @@
       input.autocomplete = 'off';
       Object.assign(input.style, {
         width: '140px',
-        padding: '6px 10px',
+        height: '34px',
+        padding: '0 10px',
         fontSize: '14px',
         fontWeight: '500',
         letterSpacing: '1px',
         color: t.text,
         background: t.bg3,
         border: `1px solid ${t.accent}33`,
-        borderRadius: '8px',
+        borderRadius: '10px',
         outline: 'none',
         textAlign: 'center',
+        transition: 'border-color .15s, box-shadow .15s',
+      });
+      input.addEventListener('focus', () => {
+        const c = T();
+        input.style.borderColor = c.accent;
+        input.style.boxShadow = `0 0 0 3px ${c.accent}26`;
+      });
+      input.addEventListener('blur', () => {
+        input.style.borderColor = T().accent + '33';
+        input.style.boxShadow = 'none';
       });
       // 回车直接拨号
       input.addEventListener('keydown', (e) => {
@@ -690,16 +709,17 @@
       pasteBtn.className = '__ad_manual_paste';
       pasteBtn.textContent = '清空';
       Object.assign(pasteBtn.style, {
-        padding: '6px 12px',
+        height: '34px',
+        padding: '0 12px',
         fontSize: '13px',
         fontWeight: '600',
-        color: t.text,
-        background: t.bg3,
+        color: t.text2,
+        background: 'transparent',
         border: `1px solid ${t.accent}44`,
-        borderRadius: '8px',
+        borderRadius: '10px',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
-        transition: 'opacity .15s',
+        transition: 'opacity .15s, background .15s',
       });
       pasteBtn.addEventListener('click', () => {
         input.value = '';
@@ -714,13 +734,14 @@
       dialBtn.className = '__ad_manual_dial';
       dialBtn.textContent = '拨号';
       Object.assign(dialBtn.style, {
-        padding: '6px 14px',
+        height: '34px',
+        padding: '0 16px',
         fontSize: '13px',
         fontWeight: '700',
-        color: t.bg,
+        color: '#FFFFFF',
         background: t.gradAccent,
         border: 'none',
-        borderRadius: '8px',
+        borderRadius: '10px',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
         transition: 'opacity .15s',
@@ -744,7 +765,17 @@
     function toggleManualDial() {
       if (!manualDialBar) return;
       const showing = manualDialBar.style.display !== 'none';
-      manualDialBar.style.display = showing ? 'none' : 'flex';
+      if (showing) {
+        manualDialBar.style.display = 'none';
+      } else {
+        manualDialBar.style.display = 'flex';
+        manualDialBar.style.opacity = '0';
+        manualDialBar.style.transform = 'translateY(6px)';
+        requestAnimationFrame(() => {
+          manualDialBar.style.opacity = '1';
+          manualDialBar.style.transform = 'translateY(0)';
+        });
+      }
     }
 
     // ─── 自定义右键菜单 ──────────────────────────────
@@ -784,9 +815,9 @@
         top: y + 'px',
         zIndex: '2147483647',
         background: t.bg2,
-        borderRadius: '10px',
-        boxShadow: `0 4px 20px ${t.accent}22, 0 0 0 1px ${t.accent}33`,
-        padding: '4px 0',
+        borderRadius: '14px',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
+        padding: '6px',
         minWidth: '220px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '13px',
@@ -796,21 +827,21 @@
       });
 
       const items = [
-        { label: '🖥 打开电脑端主界面', action: openDesktopApp },
-        { label: '📋 显示/隐藏悬浮窗', action: toggleFloatbar },
+        { icon: 'monitor', label: '打开电脑端主界面', action: openDesktopApp },
+        { icon: 'eye', label: '显示/隐藏悬浮窗', action: toggleFloatbar },
         { type: 'separator' },
-        { label: currentPhone ? '📞 拨打 ' + currentPhone : '📞 拨号（未检测号码）', action: () => {
+        { icon: 'phone', label: currentPhone ? '拨打 ' + currentPhone : '拨号（未检测号码）', action: () => {
           if (!currentPhone) { flashFloat('未检测到号码', false); return; }
           chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
         }},
-        { label: currentPhone ? '💬 发短信 ' + currentPhone : '💬 发短信（未检测号码）', action: () => {
+        { icon: 'chat', label: currentPhone ? '发短信 ' + currentPhone : '发短信（未检测号码）', action: () => {
           if (!currentPhone) { flashFloat('未检测到号码', false); return; }
           sendSms(currentPhone);
         }},
-        { label: (function() {
+        { icon: 'pencil', label: (function() {
           var custName = window.__adCustomerName || '';
           var custPhone = window.__adPhone || '';
-          return custPhone && custName ? '📝 一键登记 ' + custName + ' ' + custPhone : '📝 一键登记（未检测客户）';
+          return custPhone && custName ? '一键登记 ' + custName + ' ' + custPhone : '一键登记（未检测客户）';
         })(), action: () => {
           var custName = window.__adCustomerName || '';
           var custPhone = window.__adPhone || currentPhone || '';
@@ -818,44 +849,48 @@
           showRegisterConfirm(custName, custPhone);
         }},
         { type: 'separator' },
-        { label: '🎨 切换主题', action: showThemeMenu },
-        { label: '📱 手动拨号', action: toggleManualDial },
-        { label: '⚙ 设置', action: showSettingsDialog },
+        { icon: 'palette', label: '切换主题', action: showThemeMenu },
+        { icon: 'keypad', label: '手动拨号', action: toggleManualDial },
+        { icon: 'gear', label: '设置', action: showSettingsDialog },
         { type: 'separator' },
         { type: 'account' },  // 占位，渲染时异步填充当前登录账号
-        { label: '✕ 关闭菜单', action: () => {} },
+        { icon: 'x', label: '关闭菜单', action: () => {} },
       ];
 
       items.forEach(item => {
         if (item.type === 'separator') {
           const sep = document.createElement('div');
-          Object.assign(sep.style, { height: '1px', background: t.accent + '22', margin: '4px 8px' });
+          Object.assign(sep.style, { height: '1px', background: t.accent + '22', margin: '4px 12px' });
           contextMenu.appendChild(sep);
           return;
         }
         if (item.type === 'account') {
           const row = document.createElement('div');
-          row.style.cssText = 'padding:8px 14px;white-space:nowrap;font-size:12px;';
-          row.textContent = '👤 加载中...';
+          Object.assign(row.style, {
+            padding: '8px 10px', margin: '0 4px', borderRadius: '8px',
+            display: 'flex', alignItems: 'center', gap: '8px',
+            whiteSpace: 'nowrap', fontSize: '12px',
+          });
+          row.innerHTML = adIcon('user', 14) + '<span>加载中...</span>';
           contextMenu.appendChild(row);
           // PIN 模式：显示自动检测的坐席号 + PC 状态
           chrome.storage.local.get(['self_phone', 'pin'], (s) => {
             const phone = s.pin || s.self_phone;
             if (phone) {
-              row.textContent = '👤 PIN: ' + phone;
+              row.innerHTML = adIcon('user', 14) + '<span>PIN: ' + escHtml(phone) + '</span>';
               row.style.color = t.text2;
               row.style.cursor = 'default';
               // 异步查 PC 状态
               chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
                 if (status && status.pcAlive === true) {
                   const pcRow = document.createElement('div');
-                  pcRow.style.cssText = 'padding:0 14px 6px 14px;font-size:11px;color:' + t.text2 + ';';
+                  pcRow.style.cssText = 'padding:0 10px 6px 10px;font-size:11px;color:' + t.text2 + ';';
                   pcRow.textContent = 'PIN 已就绪，PC 在线';
                   row.parentNode.insertBefore(pcRow, row.nextSibling);
                 }
               });
             } else {
-              row.textContent = '⚡ 未检测到坐席号';
+              row.innerHTML = adIcon('bolt', 14) + '<span>未检测到坐席号</span>';
               row.style.color = t.red;
               row.style.fontWeight = '600';
               row.style.cursor = 'pointer';
@@ -868,13 +903,22 @@
         }
         const row = document.createElement('div');
         Object.assign(row.style, {
-          padding: '8px 14px',
+          padding: '8px 10px',
+          margin: '0 4px',
+          borderRadius: '8px',
           cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
           transition: 'background .15s',
           whiteSpace: 'nowrap',
         });
-        row.textContent = item.label;
-        row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
+        if (item.icon) {
+          row.innerHTML = adIcon(item.icon, 15) + '<span style="pointer-events:none">' + escHtml(item.label) + '</span>';
+        } else {
+          row.textContent = item.label;
+        }
+        row.addEventListener('mouseenter', () => { row.style.background = t.accent + '14'; });
         row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
         row.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -930,19 +974,23 @@
         zIndex: '2147483647',
         background: t.bg2,
         color: t.text,
-        borderRadius: '10px',
-        boxShadow: `0 4px 20px ${t.accent}44, 0 0 0 1px ${t.accent}44`,
-        padding: '16px 20px',
-        fontFamily: 'monospace, system-ui',
+        borderRadius: '14px',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
+        padding: '18px 20px',
+        fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
         fontSize: '13px',
         lineHeight: '1.8',
+        letterSpacing: '.02em',
         minWidth: '280px',
         backdropFilter: 'blur(16px)',
       });
 
       const title = document.createElement('div');
-      title.textContent = '📍 当前按钮位置';
-      Object.assign(title.style, { fontWeight: '700', marginBottom: '10px', fontSize: '14px', color: t.accent });
+      title.innerHTML = adIcon('mapPin', 15) + '<span style="vertical-align:2px">当前按钮位置</span>';
+      Object.assign(title.style, {
+        fontWeight: '700', marginBottom: '10px', fontSize: '14px', color: t.accent,
+        display: 'flex', alignItems: 'center', gap: '6px',
+      });
       tip.appendChild(title);
 
       const lines = [];
@@ -966,17 +1014,21 @@
       });
 
       const copyBtn = document.createElement('button');
-      copyBtn.textContent = '📋 复制位置';
+      copyBtn.innerHTML = adIcon('clipboard', 14) + '<span>复制位置</span>';
       Object.assign(copyBtn.style, {
-        marginTop: '12px',
-        padding: '6px 14px',
+        marginTop: '14px',
+        height: '34px',
+        padding: '0 16px',
         background: t.gradAccent,
-        color: t.bg,
+        color: '#FFFFFF',
         border: 'none',
-        borderRadius: '6px',
+        borderRadius: '10px',
         cursor: 'pointer',
         fontWeight: '600',
         fontSize: '12px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
       });
       copyBtn.onclick = () => {
         navigator.clipboard.writeText(lines.join('\n')).then(() => {
@@ -989,13 +1041,14 @@
       const closeBtn = document.createElement('button');
       closeBtn.textContent = '关闭';
       Object.assign(closeBtn.style, {
-        marginTop: '8px',
+        marginTop: '14px',
         marginLeft: '8px',
-        padding: '6px 14px',
+        height: '34px',
+        padding: '0 16px',
         background: 'transparent',
         color: t.text2,
         border: `1px solid ${t.accent}44`,
-        borderRadius: '6px',
+        borderRadius: '10px',
         cursor: 'pointer',
         fontSize: '12px',
       });
@@ -1015,9 +1068,9 @@
         right: '20px',
         bottom: '140px',
         zIndex: '2147483647',
-        background: t.bg,
-        borderRadius: '12px',
-        boxShadow: `0 8px 32px ${t.accent}33, 0 0 0 1px ${t.accent}44`,
+        background: t.bg2,
+        borderRadius: '14px',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
         padding: '12px',
         width: '200px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -1030,11 +1083,14 @@
       Object.assign(title.style, {
         fontSize: '12px',
         color: t.text2,
-        marginBottom: '8px',
+        marginBottom: '10px',
         fontWeight: '500',
         letterSpacing: '1px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
       });
-      title.textContent = '🎨 选择主题';
+      title.innerHTML = adIcon('palette', 13) + '<span>选择主题</span>';
       menu.appendChild(title);
 
       // 主题列表
@@ -1050,11 +1106,10 @@
           gap: '10px',
           marginBottom: '2px',
           transition: 'background .15s',
-          background: isActive ? theme.accent + '22' : 'transparent',
-          borderLeft: isActive ? `3px solid ${theme.accent}` : '3px solid transparent',
+          background: isActive ? theme.accent + '1A' : 'transparent',
         });
 
-        // 色块预览
+        // 色块预览（active 时外圈光环）
         const swatch = document.createElement('span');
         Object.assign(swatch.style, {
           width: '20px',
@@ -1063,16 +1118,28 @@
           background: theme.gradAccent,
           display: 'inline-block',
           flexShrink: '0',
-          boxShadow: `0 1px 4px ${theme.accent}55`,
+          boxShadow: isActive
+            ? `0 0 0 2px ${t.bg2}, 0 0 0 4px ${theme.accent}`
+            : `0 1px 4px ${theme.accent}55`,
         });
         row.appendChild(swatch);
 
-        // 名称
+        // 名称（去掉图标 emoji，仅文字）
         const label = document.createElement('span');
-        label.textContent = theme.icon + ' ' + theme.name;
+        label.textContent = theme.name;
         label.style.color = isActive ? theme.accent : theme.text;
         label.style.fontWeight = isActive ? '600' : '400';
         row.appendChild(label);
+
+        // 选中标记 ✓
+        if (isActive) {
+          const check = document.createElement('span');
+          check.innerHTML = adIcon('check', 14);
+          check.style.marginLeft = 'auto';
+          check.style.color = theme.accent;
+          check.style.display = 'inline-flex';
+          row.appendChild(check);
+        }
 
         if (!isActive) {
           row.addEventListener('mouseenter', () => { row.style.background = theme.accent + '12'; });
@@ -1141,9 +1208,9 @@
         zIndex: '2147483647',
         width: '380px', maxWidth: 'calc(100vw - 32px)',
         background: t.bg2,
-        borderRadius: '14px',
-        boxShadow: `0 12px 48px rgba(0,0,0,0.5), 0 0 0 1px ${t.accent}22`,
-        padding: '24px',
+        borderRadius: '16px',
+        boxShadow: `0 16px 48px rgba(0,0,0,0.45), 0 0 0 1px ${t.accent}22`,
+        padding: '20px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
         color: t.text,
         fontSize: '14px',
@@ -1169,15 +1236,16 @@
 
       // ── 标题 ──
       const title = document.createElement('div');
-      title.textContent = '⚙ 设置';
+      title.innerHTML = adIcon('gear', 17) + '<span>设置</span>';
       Object.assign(title.style, {
-        fontSize: '17px', fontWeight: '700', marginBottom: '20px',
+        fontSize: '16px', fontWeight: '700', marginBottom: '18px',
         color: t.accent, letterSpacing: '0.5px',
+        display: 'flex', alignItems: 'center', gap: '8px',
       });
       dialog.appendChild(title);
 
       // ═══════════════════ PIN 区 ═══════════════════
-      const pinSection = mkSection('📞 配对码 (PIN)', '4位或11位数字，用于配对和标识');
+      const pinSection = mkSection('配对码 (PIN)', '4位或11位数字，用于配对和标识');
       dialog.appendChild(pinSection);
 
       const pinRow = document.createElement('div');
@@ -1187,15 +1255,23 @@
       pinInput.maxLength = 11;
       pinInput.placeholder = '4位或11位数字配对码';
       Object.assign(pinInput.style, {
-        flex: '1', padding: '10px 12px', fontSize: '15px', fontWeight: '500', letterSpacing: '1px',
-        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',
+        flex: '1', height: '40px', padding: '0 12px', fontSize: '15px', fontWeight: '500', letterSpacing: '1px',
+        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '10px',
         color: t.text, outline: 'none', textAlign: 'center',
+        transition: 'border-color .15s, box-shadow .15s',
       });
       pinInput.addEventListener('input', () => { pinInput.value = pinInput.value.replace(/\D/g, ''); });
-      pinInput.addEventListener('focus', () => { pinInput.style.borderColor = t.accent; });
-      pinInput.addEventListener('blur', () => { pinInput.style.borderColor = t.accent + '33'; });
+      pinInput.addEventListener('focus', () => {
+        const c = T();
+        pinInput.style.borderColor = c.accent;
+        pinInput.style.boxShadow = `0 0 0 3px ${c.accent}26`;
+      });
+      pinInput.addEventListener('blur', () => {
+        pinInput.style.borderColor = T().accent + '33';
+        pinInput.style.boxShadow = 'none';
+      });
 
-      const pinSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
+      const pinSaveBtn = mkBtn('保存', t.gradAccent, '#FFFFFF');
       pinSaveBtn.addEventListener('click', () => {
         const v = pinInput.value.trim();
         if (!/^\d{4}$|^\d{11}$/.test(v)) {
@@ -1225,7 +1301,7 @@
       });
 
       // ═══════════════════ 云端服务器区 ═══════════════════
-      const srvSection = mkSection('☁ 云端服务器', '默认端口 35430，可保留为空走直连');
+      const srvSection = mkSection('云端服务器', '默认端口 35430，可保留为空走直连');
       dialog.appendChild(srvSection);
 
       const srvRow = document.createElement('div');
@@ -1234,14 +1310,22 @@
       srvInput.type = 'text';
       srvInput.placeholder = '例: 101.34.65.254:35430';
       Object.assign(srvInput.style, {
-        flex: '1', padding: '10px 12px', fontSize: '14px',
-        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '8px',
+        flex: '1', height: '40px', padding: '0 12px', fontSize: '14px',
+        background: t.bg3, border: `1px solid ${t.accent}33`, borderRadius: '10px',
         color: t.text, outline: 'none',
+        transition: 'border-color .15s, box-shadow .15s',
       });
-      srvInput.addEventListener('focus', () => { srvInput.style.borderColor = t.accent; });
-      srvInput.addEventListener('blur', () => { srvInput.style.borderColor = t.accent + '33'; });
+      srvInput.addEventListener('focus', () => {
+        const c = T();
+        srvInput.style.borderColor = c.accent;
+        srvInput.style.boxShadow = `0 0 0 3px ${c.accent}26`;
+      });
+      srvInput.addEventListener('blur', () => {
+        srvInput.style.borderColor = T().accent + '33';
+        srvInput.style.boxShadow = 'none';
+      });
 
-      const srvSaveBtn = mkBtn('保存', t.gradAccent, t.bg);
+      const srvSaveBtn = mkBtn('保存', t.gradAccent, '#FFFFFF');
       srvSaveBtn.addEventListener('click', () => {
         chrome.storage.local.set({ cloud_api: srvInput.value.trim() }, () => {
           srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = t.green;
@@ -1329,9 +1413,9 @@
       const closeBtn = document.createElement('button');
       closeBtn.textContent = '关闭';
       Object.assign(closeBtn.style, {
-        display: 'block', margin: '12px auto 0', padding: '8px 32px',
+        display: 'block', margin: '14px auto 0', height: '38px', padding: '0 32px',
         background: 'transparent', color: t.text2, border: `1px solid ${t.accent}33`,
-        borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+        borderRadius: '10px', cursor: 'pointer', fontSize: '13px',
       });
       closeBtn.addEventListener('click', closeSettings);
       dialog.appendChild(closeBtn);
@@ -1340,17 +1424,21 @@
     }
 
     // ── 辅助：区块标题 ──
-    function mkSection(icon, subtitle) {
+    const SECTION_ICON = { '配对码 (PIN)': 'lock', '云端服务器': 'cloud' };
+    function mkSection(title, subtitle) {
       const t = T();
       const el = document.createElement('div');
       Object.assign(el.style, { marginBottom: '10px' });
       const head = document.createElement('div');
-      Object.assign(head.style, { fontSize: '13px', fontWeight: '600', color: t.accent, marginBottom: '2px' });
-      head.textContent = icon;
+      Object.assign(head.style, {
+        fontSize: '13px', fontWeight: '600', color: t.accent, marginBottom: '2px',
+        display: 'flex', alignItems: 'center', gap: '6px',
+      });
+      head.innerHTML = adIcon(SECTION_ICON[title] || 'gear', 14) + '<span>' + title + '</span>';
       el.appendChild(head);
       if (subtitle) {
         const sub = document.createElement('div');
-        Object.assign(sub.style, { fontSize: '11px', color: t.text2 });
+        Object.assign(sub.style, { fontSize: '11px', color: t.text2, paddingLeft: '20px' });
         sub.textContent = subtitle;
         el.appendChild(sub);
       }
@@ -1362,9 +1450,9 @@
       const btn = document.createElement('button');
       btn.textContent = text;
       Object.assign(btn.style, {
-        padding: '10px 16px', fontSize: '13px', fontWeight: '600',
+        height: '40px', padding: '0 16px', fontSize: '13px', fontWeight: '600',
         background: bg || 'transparent', color: color || '#fff',
-        border: border || 'none', borderRadius: '8px',
+        border: border || 'none', borderRadius: '10px',
         cursor: 'pointer', whiteSpace: 'nowrap', transition: 'opacity .15s',
       });
       btn.addEventListener('mouseenter', () => { btn.style.opacity = '0.8'; });
@@ -1402,31 +1490,33 @@
       if (!floatEl) return;
       const t = T();
       const label = document.getElementById('__ad_dial_label');
-      if (label) label.textContent = '📞 ' + phone;
+      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + escHtml(phone) + '</span>';
       floatEl.style.background = t.gradAccent;
       floatEl.style.color = t.textOnAccent || t.text;
-      floatEl.style.boxShadow = `0 4px 16px ${t.accent}33`;
+      floatEl.style.boxShadow = `0 6px 20px ${t.accent}59`;
     }
 
     function flashFloat(text, ok) {
       if (!floatEl) return;
       const t = T();
       const label = document.getElementById('__ad_dial_label');
-      if (label) label.textContent = (ok ? '✓ ' : '✗ ') + text;
+      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (ok ? '✓ ' : '✗ ') + escHtml(text) + '</span>';
       floatEl.style.background = ok ? t.gradGreen : t.gradRed;
-      floatEl.style.color = t.textOnAccent || t.text;
+      floatEl.style.color = '#FFFFFF';
       floatEl.style.boxShadow = ok
-        ? `0 4px 16px ${t.green}44`
-        : `0 4px 16px ${t.red}44`;
+        ? `0 6px 20px ${t.green}55`
+        : `0 6px 20px ${t.red}55`;
       // 清理旧定时器，防止闪烁冲突
       clearTimeout(window.__ad_flash_timer);
       // 成功2.5秒恢复，失败6秒恢复
       window.__ad_flash_timer = setTimeout(() => {
         const lb = document.getElementById('__ad_dial_label');
-        if (lb) lb.textContent = currentPhone ? '📞 ' + currentPhone : '📞 等待号码...';
-        floatEl.style.background = currentPhone ? t.gradAccent : t.gradIdle;
+        if (lb) lb.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
+        floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
         floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
-        floatEl.style.boxShadow = `0 4px 16px ${t.accent}22`;
+        floatEl.style.boxShadow = currentPhone
+          ? `0 6px 20px ${t.accent}59`
+          : `0 4px 14px ${t.accent}1F`;
       }, ok ? 2500 : 1000);
     }
 
@@ -1446,11 +1536,11 @@
         zIndex: '2147483647',
         background: t.bg2,
         color: t.text,
-        padding: '10px 24px',
-        borderRadius: '8px',
+        padding: '10px 22px',
+        borderRadius: '12px',
         fontSize: '14px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
         border: '1px solid ' + t.accent + '33',
         backdropFilter: 'blur(12px)',
         transition: 'opacity .3s',
@@ -1483,23 +1573,23 @@
         'background:rgba(0,0,0,0.6);z-index:2147483647;display:flex;' +
         'align-items:center;justify-content:center;font-family:sans-serif;';
 
-      overlay.innerHTML = '<div style="background:' + t.bg2 + ';border-radius:12px;padding:24px;' +
-        'min-width:300px;max-width:360px;color:' + t.text + ';text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.5);">' +
+      overlay.innerHTML = '<div style="background:' + t.bg2 + ';border-radius:16px;padding:20px;' +
+        'min-width:300px;max-width:360px;color:' + t.text + ';text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.45),0 0 0 1px ' + t.accent + '22;backdrop-filter:blur(16px);font-family:system-ui,-apple-system,sans-serif;">' +
         '<div style="font-size:16px;font-weight:bold;color:' + t.accentLight + ';margin-bottom:16px;">确认登记客户信息</div>' +
         '<div style="text-align:left;margin-bottom:16px;">' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户姓名：</span>' + escHtml(name) + '</div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">客户手机号：</span>' + escHtml(phone) + '</div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">接待顾问：</span>' +
-        '<select id="autodial-register-manager" style="width:100%;padding:6px 8px;border:1px solid ' + t.text2 + ';border-radius:6px;background:' + t.bg + ';color:' + t.text + ';font-size:14px;box-sizing:border-box;margin-top:4px;">' +
+        '<select id="autodial-register-manager" style="width:100%;padding:8px 10px;border:1px solid ' + t.accent + '33;border-radius:10px;background:' + t.bg3 + ';color:' + t.text + ';font-size:14px;box-sizing:border-box;margin-top:4px;outline:none;">' +
         '<option value="' + escHtml(mgrName || '') + '" selected>' + escHtml(mgrName || '加载中…') + '</option>' +
         '</select></div>' +
         '<div style="margin-bottom:8px;"><span style="color:' + t.text2 + ';">事由：</span>贷款咨询</div>' +
         '</div>' +
         '<div style="display:flex;gap:12px;">' +
-        '<button id="autodial-register-cancel" style="flex:1;padding:10px;border:1px solid #444;' +
-        'border-radius:8px;background:transparent;color:' + t.text2 + ';cursor:pointer;font-size:14px;">取消</button>' +
-        '<button id="autodial-register-confirm" style="flex:1;padding:10px;border:none;' +
-        'border-radius:8px;background:' + t.accentLight + ';color:' + t.bg + ';cursor:pointer;font-size:14px;font-weight:bold;">确认登记</button>' +
+        '<button id="autodial-register-cancel" style="flex:1;height:42px;border:1px solid ' + t.accent + '44;' +
+        'border-radius:999px;background:transparent;color:' + t.text2 + ';cursor:pointer;font-size:14px;font-family:inherit;">取消</button>' +
+        '<button id="autodial-register-confirm" style="flex:1;height:42px;border:none;' +
+        'border-radius:999px;background:' + t.gradAccent + ';color:#FFFFFF;cursor:pointer;font-size:14px;font-weight:bold;font-family:inherit;box-shadow:0 3px 10px ' + t.accent + '44;">确认登记</button>' +
         '</div></div>';
 
       document.body.appendChild(overlay);
