@@ -402,6 +402,8 @@
         .empty-state { text-align: center; padding: 44px 20px; color: var(--text-2); font-size: 13px; }
         .empty-state .icon { width: 44px; height: 44px; margin: 0 auto 12px; opacity: .35; }
         .empty-state .icon svg { width: 44px; height: 44px; }
+        .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-input); border-top-color: var(--primary); border-radius: 50%; vertical-align: -2px; margin-right: 6px; animation: spinR .8s linear infinite; }
+        @keyframes spinR { to { transform: rotate(360deg); } }
 
         /* ===== 分页 ===== */
         .pagination { display: flex; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; color: var(--text-2); flex-wrap: wrap; }
@@ -581,7 +583,7 @@
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></div>最近连接的客户端</div>
                     <table class="data-table"><thead><tr><th>设备名称</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th></tr></thead>
-                    <tbody id="recent-clients"><tr><td colspan="5" class="empty-state">加载中...</td></tr></tbody></table>
+                    <tbody id="recent-clients"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -599,7 +601,7 @@
                         </button>
                     </div>
                     <table class="data-table"><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th><th>操作</th></tr></thead>
-                    <tbody id="phones-list"><tr><td colspan="10" class="empty-state">加载中...</td></tr></tbody></table>
+                    <tbody id="phones-list"><tr><td colspan="10" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -624,7 +626,7 @@
                         </button>
                     </div>
                     <table class="data-table"><thead><tr><th>设备ID</th><th>号码</th><th>通话时间</th><th>时长(秒)</th><th>类型</th><th>SIM</th><th>模型</th><th>版本</th></tr></thead>
-                    <tbody id="calls-list"><tr><td colspan="8" class="empty-state">加载中...</td></tr></tbody></table>
+                    <tbody id="calls-list"><tr><td colspan="8" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                     <div class="pagination" id="calls-pagination"></div>
                 </div>
             </div>
@@ -683,7 +685,7 @@
                         </div>
                     </div>
                     <table class="data-table"><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>更新时间</th><th>操作</th></tr></thead>
-                    <tbody id="pins-list"><tr><td colspan="5" class="empty-state">加载中...</td></tr></tbody></table>
+                    <tbody id="pins-list"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -702,7 +704,7 @@
                         </button>
                     </div>
                     <table class="data-table"><thead><tr><th>ID</th><th>账号</th><th>创建时间</th><th>操作</th></tr></thead>
-                    <tbody id="admin-accounts-list"><tr><td colspan="4" class="empty-state">加载中...</td></tr></tbody></table>
+                    <tbody id="admin-accounts-list"><tr><td colspan="4" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>修改密码</div>
@@ -728,7 +730,7 @@
                         <div class="filter-group" style="flex:1;min-width:200px;"><label>关键词搜索</label><input type="text" class="input" id="log-search" placeholder="搜索日志关键词..." oninput="loadLogs()" style="width:100%;"></div>
                         <div class="filter-group"><label>条数</label><select class="input" id="log-lines" onchange="loadLogs()"><option value="100">最近100条</option><option value="200">最近200条</option><option value="500">最近500条</option><option value="1000">最近1000条</option></select></div>
                     </div>
-                    <div class="log-container" id="log-container"><div class="empty-state">加载中...</div></div>
+                    <div class="log-container" id="log-container"><div class="empty-state"><span class="spin"></span>加载中...</div></div>
                 </div>
                 <div class="section-divider"></div>
                 <div class="stats-grid">
@@ -1186,7 +1188,7 @@
             return {
                 primary: cssVar('--primary'),
                 primaryRgb: cssVar('--primary-rgb'),
-                grid: 'rgba(' + cssVar('--primary-rgb') + ',.12)',
+                grid: 'rgba(120,140,170,.12)',
                 ticks: cssVar('--text-2'),
                 green: cssVar('--green'),
                 red: cssVar('--red'),
@@ -1293,7 +1295,7 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: '总连接', data: history.map(function(p){return p.count}), borderColor: c.primary, backgroundColor: 'rgba(' + c.primaryRgb + ',.10)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
+                        { label: '总连接', data: history.map(function(p){return p.count}), borderColor: c.primary, backgroundColor: function(context) { const chart = context.chart, area = chart.chartArea; if (!area) return 'rgba(' + c.primaryRgb + ',.10)'; const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom); g.addColorStop(0, 'rgba(' + c.primaryRgb + ',.18)'); g.addColorStop(1, 'rgba(' + c.primaryRgb + ',0)'); return g; }, fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
                         { label: 'PC', data: history.map(function(p){return p.pcs||0}), borderColor: c.green, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
                         { label: '手机', data: history.map(function(p){return p.phones||0}), borderColor: c.red, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
                     ]
@@ -1399,7 +1401,7 @@
                 if (phoneHistoryCache[deviceId]) {
                     renderPhoneHistoryDetail(detailRow, phoneHistoryCache[deviceId]);
                 } else {
-                    detailRow.cells[0].innerHTML = '<div class="text-muted" style="text-align:center;padding:12px;">加载中...</div>';
+                    detailRow.cells[0].innerHTML = '<div class="text-muted" style="text-align:center;padding:12px;"><span class="spin"></span>加载中...</div>';
                     try {
                         const r = await apiGet('/api/v1/device-history?device_id=' + encodeURIComponent(deviceId));
                         if (r && r.ok && r.history) {
