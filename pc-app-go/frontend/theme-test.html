@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>THEME-TEST</title>
+</head>
+<body>
+<script src="themes/theme-data.js"></script>
+<script src="js/theme.js"></script>
+<script>
+function snapshot(themeId, mode) {
+  window.ThemeEngine.applyTheme(themeId, mode);
+  var s = document.documentElement.style;
+  return '--primary=' + s.getPropertyValue('--primary') +
+         ' | --surface=' + s.getPropertyValue('--surface') +
+         ' | --surface-2=' + s.getPropertyValue('--surface-2') +
+         ' | --text-2=' + s.getPropertyValue('--text-2') +
+         ' | --input-bg=' + s.getPropertyValue('--input-bg') +
+         ' | --primary-rgb=' + s.getPropertyValue('--primary-rgb') +
+         ' | --grad-btn=' + s.getPropertyValue('--grad-btn') +
+         ' | --gold(old,should-be-empty)=' + s.getPropertyValue('--gold') +
+         ' | --bg2(old,should-be-empty)=' + s.getPropertyValue('--bg2');
+}
+document.title = 'R1:' + snapshot('sky-blue', 'light') + ' || R2:' + snapshot('dark-gold', 'dark');
+</script>
+</body>
+</html>

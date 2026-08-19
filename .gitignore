@@ -51,3 +51,11 @@ Desktop.ini
 # 缂栬瘧浜х墿
 *.exe
 *.apk
+# 构建产物与临时文件
+*.zip
+*.bak
+test_output*.txt
+
+# 工具状态（reasonix/workbuddy）
+.reasonix/
+reasonix.toml
