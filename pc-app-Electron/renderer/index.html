@@ -126,7 +126,7 @@
   .status-icon svg { width: 19px; height: 19px; }
   .status-icon.connected {
     color: var(--green);
-    box-shadow: 0 0 0 3px rgba(46,204,113,.16), 0 0 12px rgba(46,204,113,.35);
+    box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 12px rgba(64,192,87,.35);
     animation: pulse 1.5s infinite;
   }
   .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
@@ -177,7 +177,7 @@
     margin-left: auto;
   }
   .hero-icon-btn {
-    width: 26px; height: 26px;
+    width: 22px; height: 22px;
     border-radius: var(--r-sm);
     background: var(--icon-tile);
     border: 1px solid transparent;
@@ -186,7 +186,7 @@
     display: flex; align-items: center; justify-content: center;
     transition: all .15s;
   }
-  .hero-icon-btn svg { width: 13px; height: 13px; }
+  .hero-icon-btn svg { width: 12px; height: 12px; }
   .hero-icon-btn:hover { color: var(--primary); border-color: var(--border); }
   .hero-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -621,7 +621,7 @@
     <div class="number-box">
       <div class="number-row">
         <span class="number-lbl">号码</span>
-        <span class="clip-hint" id="clipHint">📋 已跟随剪贴板</span>
+        <span class="clip-hint" id="clipHint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4a3 3 0 0 1 6 0"/></svg> 已跟随剪贴板</span>
       </div>
       <input type="text" class="number-input" id="numberInput"
              placeholder="复制号码自动出现…" maxlength="20"
@@ -768,7 +768,7 @@ function updateHangupBtnText() {
   if (document.getElementById('hangupBtn').disabled) {
     label.textContent = '请连接手机';
   } else {
-    label.textContent = '挂 断';
+    label.textContent = '挂断';
   }
 }
 const callBtn = document.getElementById('callBtn');

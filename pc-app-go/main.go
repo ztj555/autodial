@@ -34,7 +34,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 243, G: 240, B: 255, A: 255}, // lavender light bg
+		BackgroundColour: &options.RGBA{R: 235, G: 244, B: 255, A: 255}, // sky-blue light bg #EBF4FF（与默认主题一致，避免启动闪色）
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		OnBeforeClose: func(ctx context.Context) bool {

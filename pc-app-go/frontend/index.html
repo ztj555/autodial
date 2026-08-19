@@ -125,7 +125,7 @@
   .status-icon svg { width: 19px; height: 19px; }
   .status-icon.connected {
     color: var(--green);
-    box-shadow: 0 0 0 3px rgba(46,204,113,.16), 0 0 12px rgba(46,204,113,.35);
+    box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 12px rgba(64,192,87,.35);
     animation: pulse 1.5s infinite;
   }
   .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
@@ -176,7 +176,7 @@
     margin-left: auto;
   }
   .hero-icon-btn {
-    width: 26px; height: 26px;
+    width: 22px; height: 22px;
     border-radius: var(--r-sm);
     background: var(--icon-tile);
     border: 1px solid transparent;
@@ -185,7 +185,7 @@
     display: flex; align-items: center; justify-content: center;
     transition: all .15s;
   }
-  .hero-icon-btn svg { width: 13px; height: 13px; }
+  .hero-icon-btn svg { width: 12px; height: 12px; }
   .hero-icon-btn:hover { color: var(--primary); border-color: var(--border); }
   .hero-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -562,7 +562,7 @@
       <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
   </div>
-  <div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;" id="settingsContent">
+  <div class="set-content" id="settingsContent">
     <!-- 窗口行为 -->
     <div class="set-group">
       <div class="set-group-title">窗口行为</div>
@@ -616,7 +616,7 @@
       <div class="set-divider"></div>
       <div id="cloudSection">
         <div class="set-row-title">云服务器管理</div>
-        <div class="set-row-sub" style="margin-top:2px;">支持多个云服务器，自动遍历连接，成功即停</div>
+        <div class="set-row-sub">支持多个云服务器，自动遍历连接，成功即停</div>
         <div id="cloudSummary" class="set-cloud-summary">未配置服务器</div>
         <div id="cloudStatus" class="set-row-sub"></div>
         <div id="cloudServerList" class="set-cloud-list"></div>
@@ -631,12 +631,12 @@
     <!-- 外观 -->
     <div class="set-group">
       <div class="set-group-title">外观</div>
-      <div class="set-row" style="flex-direction:column;align-items:stretch;gap:10px;">
+      <div class="set-row set-row-col">
         <div class="set-row-text"><div class="set-row-title">主题</div><div class="set-row-sub">选择界面风格和配色方案</div></div>
         <div class="set-theme-grid" id="themeGrid"></div>
       </div>
       <div class="set-divider"></div>
-      <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+      <div class="set-row set-row-col-sm">
         <div class="set-row-title">显示模式</div>
         <div class="set-mode-grid" id="modeSelect">
           <span class="set-opt active" data-val="dark" onclick="selectMode('dark')">🌑 暗夜</span>
@@ -650,12 +650,12 @@
       </div>
     </div>
 
-    <div class="set-btn-row" style="margin-top:4px;">
+    <div class="set-btn-row set-btn-row-tight">
       <button onclick="saveAllSettings()" class="set-btn-save">
-        <svg viewBox="0 0 24 24" fill="none" style="width:14px;height:14px;"><path d="M5 4h11l3 3v13H5zM8 4v6h8V4M8 20v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 4h11l3 3v13H5zM8 4v6h8V4M8 20v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         保存设置
       </button>
-      <button onclick="closeSettings()" class="set-btn-ghost" style="flex:0 0 auto;padding:12px 24px;">取消</button>
+      <button onclick="closeSettings()" class="set-btn-ghost set-btn-cancel">取消</button>
     </div>
   </div>
   <div class="set-footer">AutoDial v6.1</div>
@@ -708,6 +708,15 @@
 .cloud-server-row .cs-del { cursor:pointer; color:var(--red); font-size:14px; background:none; border:none; }
 .cloud-server-row .cs-up { cursor:pointer; color:var(--text-2); font-size:14px; background:none; border:none; }
 .cloud-server-row .cs-conn { padding:3px 8px; background:var(--grad-btn); color:#fff; border:none; border-radius:var(--r-sm); cursor:pointer; font-size:10px; }
+/* 布局辅助（内联样式清空后的承接 class） */
+.set-content { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:12px; }
+.set-row-col { display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+.set-row-col-sm { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.set-btn-row-tight { margin-top:4px; }
+.set-btn-cancel { flex:0 0 auto; padding:12px 24px; }
+.set-btn-save svg { width:14px; height:14px; }
+.sms-ov-tpl-row { display:flex; align-items:center; gap:8px; }
+.sms-ov-label-inline { margin:0; }
 /* SMS Overlay */
 #smsOverlay { position:fixed; inset:0; z-index:9998; background:var(--bg); display:none; flex-direction:column; }
 #smsOverlay.show { display:flex !important; }
@@ -820,7 +829,7 @@
     <div class="number-box">
       <div class="number-row">
         <span class="number-lbl">号码</span>
-        <span class="clip-hint" id="clipHint">📋 已跟随剪贴板</span>
+        <span class="clip-hint" id="clipHint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4a3 3 0 0 1 6 0"/></svg> 已跟随剪贴板</span>
       </div>
       <input type="text" class="number-input" id="numberInput"
              placeholder="复制号码自动出现…" maxlength="20"
@@ -989,7 +998,7 @@ function updateHangupBtnText() {
   if (document.getElementById('hangupBtn').disabled) {
     label.textContent = '请连接手机';
   } else {
-    label.textContent = '挂 断';
+    label.textContent = '挂断';
   }
 }
 const callBtn = document.getElementById('callBtn');
@@ -2037,8 +2046,8 @@ body.floatbar-mode #floatbar { display:flex !important; }
       <textarea class="sms-ov-textarea" id="smsContentInput" placeholder="输入短信内容..." maxlength="500" oninput="updateSmsCharCount()"></textarea>
       <div class="sms-ov-counter" id="smsCharCount">0/500</div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div class="sms-ov-label" style="margin:0;">快捷模板</div>
+    <div class="sms-ov-tpl-row">
+      <div class="sms-ov-label sms-ov-label-inline">快捷模板</div>
       <span class="sms-ov-mgr-link" onclick="openTplManager()">管理模板</span>
     </div>
     <div class="sms-ov-tpl-wrap" id="smsOvlTplList"></div>
