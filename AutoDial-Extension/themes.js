@@ -133,6 +133,21 @@ function _adBlend(a, b, p) {
 /* 派生 CSS 变量：popup/auth 消费；派生规则与手机端 ThemeManager blend 思路一致 */
 function AD_THEME_VARS(id) {
   var t = AD_THEMES[id] || AD_THEMES['sky-blue'];
+  // 默认天空蓝直接返回设计 Token 表权威值（不经过 blend 派生），
+  // 保证 popup/auth 默认态与手机端/云端默认视觉逐字一致
+  if (id === 'sky-blue') {
+    return {
+      bg: '#EBF4FF', bg2: '#FFFFFF', bg3: '#D8ECFC',
+      inputBg: '#F4F8FC', iconTile: '#EDF5FD',
+      borderC: '#DCEAF7', borderInput: '#DFEBF6', divider: '#E4EBF1',
+      heroBorder: '#BFD9F2', heroTop: '#EDF4FC',
+      bannerInfoBg: '#E3EEFB', bannerInfoBorder: '#C4DAF3',
+      text: '#162840', text2: '#5880A8',
+      accent: '#2B6CC4', accentLight: '#4A90E0', accentDark: '#1A56A8',
+      green: '#40C057', red: '#F03E3E',
+      primaryRgb: '43,108,196'
+    };
+  }
   return {
     bg: t.bg, bg2: t.bg2, bg3: t.bg3,
     inputBg: _adBlend(t.bg2, t.bg3, 55),
