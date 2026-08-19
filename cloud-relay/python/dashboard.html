@@ -41,6 +41,10 @@
             --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
             --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
         }
+        /* 暗色主题阴影加深（文档 3.2：sky-blue light 之外均为暗色主题） */
+        html[data-theme]:not([data-theme="sky-blue"]) {
+            --shadow-card: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { height: 100%; }
         body {
@@ -58,7 +62,7 @@
 
         /* ===== 侧边栏（手机端底部导航的桌面对应物） ===== */
         .sidebar {
-            width: 232px; flex-shrink: 0;
+            width: 240px; flex-shrink: 0;
             background: var(--surface);
             border-right: 1px solid var(--border);
             display: flex; flex-direction: column;
@@ -252,7 +256,8 @@
         .data-table th, .data-table td { padding: 11px 12px; text-align: left; }
         .data-table th {
             background: var(--input-bg); color: var(--text-2);
-            font-size: 11px; font-weight: 600; letter-spacing: .04em;
+            font-size: 11px; font-weight: 600; letter-spacing: .05em;
+            text-transform: uppercase;
             white-space: nowrap;
         }
         .data-table th:first-child { border-radius: var(--r-sm) 0 0 var(--r-sm); }
@@ -342,11 +347,13 @@
         .modal-overlay.active, .login-overlay.show { display: flex; }
         .modal-overlay.z-top { z-index: 1001; }
         .modal {
+            position: relative; overflow: hidden;
             background: var(--surface); border-radius: var(--r-xl);
             box-shadow: var(--shadow-float);
             min-width: 440px; max-width: 92%; padding: 26px 28px 24px;
             animation: modalIn .18s ease-out;
         }
+        .modal::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 8px; background: var(--grad-btn); }
         .modal-lg { min-width: 680px; max-width: 95%; max-height: 90vh; overflow-y: auto; }
         @keyframes modalIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
         .modal h3 { font-size: 17px; font-weight: 700; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
@@ -384,6 +391,7 @@
             font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
             max-height: 520px; overflow-y: auto; font-size: 12px; line-height: 1.6;
         }
+        .log-container::-webkit-scrollbar { width: 6px; height: 6px; }
         .log-container::-webkit-scrollbar-thumb { background: #2A3B5C; }
         .log-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
         .log-line.warn { color: #F0B429; }
@@ -398,6 +406,10 @@
         /* ===== 分页 ===== */
         .pagination { display: flex; gap: 8px; align-items: center; margin-top: 16px; font-size: 13px; color: var(--text-2); flex-wrap: wrap; }
         .chev-flip { display: inline-flex; transform: rotate(180deg); }
+        .pager-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border-input); color: var(--text-2); border-radius: var(--r-pill); padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; font-family: inherit; }
+        .pager-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .pager-btn:disabled { opacity: .45; cursor: default; }
+        .pager-btn svg { flex-shrink: 0; }
         .section-divider { border-top: 1px solid var(--border); margin: 24px 0 16px; }
 
         /* ===== 系统信息（定义列表） ===== */
@@ -441,7 +453,7 @@
             .side-item { justify-content: center; padding: 10px 0; }
         }
         @media (max-width: 768px) {
-            .sidebar { position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%); width: 232px; transition: transform .25s ease; }
+            .sidebar { position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%); width: 240px; transition: transform .25s ease; }
             .sidebar.open { transform: none; }
             .menu-btn { display: grid; }
             .side-logo .logo-text, .side-item span, .side-status { display: block; }
@@ -1487,9 +1499,9 @@
             }).join('');
             const pag = document.getElementById('calls-pagination');
             const totalPages = Math.ceil(d.total / d.limit);
-            pag.innerHTML = '<button class="btn btn-outline btn-sm" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ' + (callsOffset===0?'disabled':'') + '><span class="chev-flip">' + ic('chevron', 12) + '</span> 上一页</button>' +
+            pag.innerHTML = '<button class="pager-btn" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ' + (callsOffset===0?'disabled':'') + '><span class="chev-flip">' + ic('chevron', 12) + '</span> 上一页</button>' +
                 '<span>第 ' + (Math.floor(callsOffset/50)+1) + ' / ' + totalPages + ' 页 (共' + d.total + '条)</span>' +
-                '<button class="btn btn-outline btn-sm" onclick="callsOffset+=50;_loadCallsInternal()" ' + (callsOffset+50>=d.total?'disabled':'') + '>下一页 ' + ic('chevron', 12) + '</button>';
+                '<button class="pager-btn" onclick="callsOffset+=50;_loadCallsInternal()" ' + (callsOffset+50>=d.total?'disabled':'') + '>下一页 ' + ic('chevron', 12) + '</button>';
         }
 
         let callSearchTimer = null;
