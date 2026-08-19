@@ -851,23 +851,24 @@ class ConnectFragment : Fragment() {
     /** 更新状态条按钮的文本和颜色 */
     private fun updateBtnState(state: String) {
         if (!isAdded) return
+        val colors = ThemeManager.getColors(requireContext())
         when (state) {
             "connected" -> {
                 connectBtnText.text = "重连"
-                connectBtnText.setTextColor(Color.parseColor("#2B6CC4"))
+                connectBtnText.setTextColor(Color.parseColor(colors.primary))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setStroke(1, Color.parseColor("#2B6CC4"))
+                    setStroke(1, Color.parseColor(colors.primary))
                     cornerRadius = 12f * resources.displayMetrics.density
                     setColor(Color.TRANSPARENT)
                 }
             }
             "reconnect" -> {
                 connectBtnText.text = "重连"
-                connectBtnText.setTextColor(Color.parseColor("#2B6CC4"))
+                connectBtnText.setTextColor(Color.parseColor(colors.primary))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setStroke(1, Color.parseColor("#2B6CC4"))
+                    setStroke(1, Color.parseColor(colors.primary))
                     cornerRadius = 8f * resources.displayMetrics.density
                     setColor(Color.TRANSPARENT)
                 }
@@ -877,16 +878,16 @@ class ConnectFragment : Fragment() {
                 connectBtnText.setTextColor(Color.parseColor("#FFFFFF"))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setColor(Color.parseColor("#1677FF"))
+                    setColor(Color.parseColor(colors.primary))
                     cornerRadius = 8f * resources.displayMetrics.density
                 }
             }
             "connecting" -> {
                 connectBtnText.text = "取消"
-                connectBtnText.setTextColor(Color.parseColor("#666666"))
+                connectBtnText.setTextColor(Color.parseColor(colors.text2))
                 connectBtnText.background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    setStroke(1, Color.parseColor("#D9D9D9"))
+                    setStroke(1, Color.parseColor(colors.bg3))
                     cornerRadius = 6f * resources.displayMetrics.density
                     setColor(Color.TRANSPARENT)
                 }

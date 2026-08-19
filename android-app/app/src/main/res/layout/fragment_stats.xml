@@ -611,6 +611,7 @@
                 android:id="@+id/statsDateLabels"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minHeight="32dp"
                 android:tag="bg2"
                 android:background="#888888"
                 android:gravity="center"

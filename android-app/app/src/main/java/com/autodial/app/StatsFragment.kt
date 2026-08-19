@@ -668,7 +668,7 @@ class StatsFragment : Fragment() {
                 val dayOfWeek = dayOfWeekFormat.format(cal.time)
                 val dateStr = s.date.substring(5) // MM-dd
                 text = "$dayOfWeek\n$dateStr"
-                textSize = 10f
+                textSize = 11f
                 setTextColor(Color.parseColor(colors.text2))
                 gravity = Gravity.CENTER_HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
