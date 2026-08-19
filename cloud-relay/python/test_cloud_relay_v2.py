@@ -367,15 +367,15 @@ class TestDashboardHTML(unittest.TestCase):
                          f"Unbalanced <div> tags: {opens} open vs {closes} close")
 
     # --- Tab count ---
-    def test_seven_tabs(self):
-        """Dashboard should have exactly 7 tab pages."""
+    def test_eight_tabs(self):
+        """Dashboard should have exactly 8 tab pages."""
         pages = re.findall(r'class="page\b', self.html)
-        self.assertEqual(len(pages), 7, f"Expected 7 tab pages, found {len(pages)}")
+        self.assertEqual(len(pages), 8, f"Expected 8 tab pages, found {len(pages)}")
 
     def test_tab_names(self):
         """Verify expected tab page IDs exist."""
         expected_tabs = ['dashboard', 'phones', 'calls', 'visits',
-                         'pins', 'logs', 'settings']
+                         'pins', 'admin-accounts', 'logs', 'settings']
         for tab in expected_tabs:
             self.assertIn(f'id="page-{tab}"', self.html,
                           f"Missing tab page: {tab}")
