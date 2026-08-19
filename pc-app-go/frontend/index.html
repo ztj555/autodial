@@ -5,27 +5,32 @@
 <title>AutoDial</title>
   <style>
   :root {
-    --gold: #7C6FE0;
-    --gold-light: #9B8FFF;
-    --gold-dark: #5B4BC9;
-    --bg: #F3F0FF;
-    --bg2: #FFFFFF;
-    --bg3: #E8E2FC;
-    --text: #2D2649;
-    --text2: #6B6491;
-    --green: #2ECC71;
-    --red: #E74C3C;
-    --radius-sm: 10px;
-    --radius-md: 18px;
-    --radius-lg: 28px;
-    --shadow: 0 18px 48px rgba(5, 8, 20, 0.15);
-    --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    --gradient-green: linear-gradient(135deg, #27AE60, #1E8449);
-    --gradient-red: linear-gradient(135deg, #C0392B, #96281B);
-    --glow-text: none;
-    --floatbar-bg: rgba(255, 255, 255, 0.85);
-    --floatbar-border: rgba(201, 168, 76, 0.25);
-    --floatbar-blur: blur(20px);
+    /* 基础色（sky-blue × light 兜底，运行时由 theme.js 按主题覆盖） */
+    --bg:#EBF4FF; --surface:#FFFFFF; --surface-2:#D8ECFC;
+    --input-bg:#F4F8FC; --icon-tile:#EDF5FD; --border:#DCEAF7;
+    --border-input:#DFEBF6; --divider:#E4EBF1;
+    --hero-border:#BFD9F2; --hero-top:#EDF4FC;
+    --text:#162840; --text-2:#5880A8;
+    --primary:#2B6CC4; --primary-light:#4A90E0; --primary-dark:#1A56A8;
+    --green:#40C057; --red:#F03E3E;
+    --banner-info-bg:#E3EEFB; --banner-info-border:#C4DAF3;
+    --primary-rgb:43,108,196;
+    /* 圆角 4 档 */
+    --r-sm:10px; --r-md:14px; --r-lg:18px; --r-pill:999px;
+    /* 阴影 3 档 */
+    --shadow-card:0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+    --shadow-float:0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+    --shadow-btn:0 3px 10px rgba(var(--primary-rgb),.28);
+    /* 渐变 */
+    --grad-btn:linear-gradient(180deg, var(--primary-light), var(--primary-dark));
+    --grad-hero:linear-gradient(180deg, var(--hero-top), var(--surface));
+    /* 拨打/挂断渐变 + 悬浮条（主题注入覆盖） */
+    --gradient-green:linear-gradient(135deg, #27AE60, #1E8449);
+    --gradient-red:linear-gradient(135deg, #C0392B, #96281B);
+    --floatbar-bg:rgba(255,255,255,.85);
+    --floatbar-border:rgba(43,108,196,.25);
+    --floatbar-blur:blur(20px);
+    --font-family:system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -33,9 +38,12 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-family);
+    letter-spacing: .02em;
     overflow: hidden;
     user-select: none;
+    -webkit-font-smoothing: antialiased;
   }
+  ::selection { background: rgba(var(--primary-rgb), .16); }
   .wrap {
     width: 100%; height: 100%;
     display: flex;
@@ -44,8 +52,8 @@
 
   /* ---- 自定义标题栏 ---- */
   .titlebar {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
+    background: var(--surface);
+    border-bottom: 1px solid var(--divider);
     padding: 0;
     display: flex;
     align-items: center;
@@ -54,23 +62,23 @@
     height: 36px;
   }
   .titlebar .logo {
-    padding-left: 14px;
+    padding-left: 12px;
     font-size: 13px;
     font-weight: 700;
-    color: var(--gold-light);
-    letter-spacing: 2px;
+    color: var(--text);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     flex-shrink: 0;
   }
   .logo-icon {
     width: 20px; height: 20px;
-    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-    border-radius: var(--radius-sm);
+    background: var(--grad-btn);
+    border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px;
+    color: #fff;
   }
+  .logo-icon svg { width: 11px; height: 11px; }
   .titlebar-btns {
     display: flex;
     margin-left: auto;
@@ -78,44 +86,77 @@
     --wails-draggable: no-drag;
   }
   .titlebar-btn {
-    width: 46px; height: 36px;
+    width: 40px; height: 36px;
     background: none; border: none;
-    color: var(--text2);
-    font-size: 10px;
+    color: var(--text-2);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background 0.1s;
+    transition: background 0.15s, color 0.15s;
     --wails-draggable: no-drag;
   }
-  .titlebar-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .titlebar-btn:hover { background: var(--input-bg); color: var(--text); }
   .titlebar-btn.close:hover { background: #C42B1C; color: white; }
 
-  /* ---- 状态栏 ---- */
-  .header {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    padding: 8px 14px;
+  /* ---- Hero 状态大盘（合并原 header/status-display/banner 状态表达） ---- */
+  .hero-card {
+    background: var(--grad-hero);
+    border: 1px solid var(--hero-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    padding: 14px;
+    flex-shrink: 0;
+    animation: panelIn .22s ease-out;
+  }
+  @keyframes panelIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .hero-row1 {
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+  .status-icon {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--icon-tile);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
+    transition: all .3s;
   }
-  .chips {
+  .status-icon svg { width: 19px; height: 19px; }
+  .status-icon.connected {
+    color: var(--green);
+    box-shadow: 0 0 0 3px rgba(46,204,113,.16), 0 0 12px rgba(46,204,113,.35);
+    animation: pulse 1.5s infinite;
+  }
+  .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .status-text-large { font-size: 15px; font-weight: 700; color: var(--text); }
+  .status-subtext { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero-chips {
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
-    flex: 1;
-    justify-content: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--divider);
   }
-  .chip {
-    background: var(--bg);
-    border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-sm);
+  .hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
     padding: 4px 10px;
-    text-align: center;
+    font-size: 11px;
+    color: var(--text-2);
+    min-height: 26px;
   }
-  .chip .lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
-  .chip .val { font-size: 13px; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
-  .chip .val.ip { font-size: 12px; letter-spacing: 0.5px; }
+  .hero-chip svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); }
+  .hero-chip .val { color: var(--text); font-weight: 600; }
+  .hero-chip.clickable { cursor: pointer; }
+  .hero-chip.clickable:hover { border-color: var(--primary); color: var(--primary); }
+  .hero-chip.clickable:hover .val { color: var(--primary); }
   .status-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -127,28 +168,41 @@
     box-shadow: 0 0 6px var(--green);
     animation: pulse 1.5s infinite;
   }
-  .restart-icon {
-    margin-left: 8px; padding: 0 4px; font-size: 11px; cursor: pointer;
-    color: var(--text2); opacity: 0.5; transition: all 0.2s;
-    line-height: 1; display: inline; user-select: none;
-  }
-  .restart-icon:hover { opacity: 1; color: var(--gold); }
-  .restart-icon.spinning { animation: spin 0.8s linear infinite; }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
-  .status-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .hero-icon-btn {
+    width: 26px; height: 26px;
+    border-radius: var(--r-sm);
+    background: var(--icon-tile);
+    border: 1px solid transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .hero-icon-btn svg { width: 13px; height: 13px; }
+  .hero-icon-btn:hover { color: var(--primary); border-color: var(--border); }
+  .hero-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .topmost-switch {
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 5px;
     cursor: pointer; user-select: none;
     flex-shrink: 0;
+    padding: 4px 0;
   }
   .topmost-switch input { display: none; }
   .topmost-switch .sw-track {
     width: 28px; height: 14px;
-    background: var(--bg);
+    background: var(--surface-2);
     border-radius: 7px;
     position: relative;
     transition: background 0.2s;
-    border: 1px solid var(--text2);
+    border: 1px solid var(--border);
   }
   .topmost-switch .sw-track::after {
     content: '';
@@ -156,24 +210,37 @@
     top: 2px; left: 2px;
     width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--text2);
+    background: var(--text-2);
     transition: all 0.2s;
   }
   .topmost-switch input:checked + .sw-track {
-    background: var(--gold-dark);
-    border-color: var(--gold);
+    background: var(--primary);
+    border-color: var(--primary);
   }
   .topmost-switch input:checked + .sw-track::after {
     left: 16px;
-    background: var(--gold-light);
+    background: #fff;
   }
-  .topmost-switch .sw-label { font-size: 10px; color: var(--text2); }
+  .topmost-switch .sw-label { font-size: 10px; color: var(--text-2); }
+
+  /* ---- 连接成功横幅 ---- */
+  .banner {
+    display: none;
+    background: var(--banner-info-bg);
+    border: 1px solid var(--green);
+    border-radius: var(--r-md);
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    flex-shrink: 0;
+  }
+  .banner.show { display: block; }
 
   /* ---- 手机选择器 ---- */
   .phone-selector {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    padding: 6px 14px;
+    padding: 0;
     display: none;
     flex-direction: column;
     gap: 4px;
@@ -186,28 +253,27 @@
     flex-wrap: wrap;
   }
   .phone-tag {
-    background: var(--bg);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--text2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-2);
     cursor: pointer;
     transition: all 0.15s;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     white-space: nowrap;
-    max-width: 180px;
+    max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
-  .phone-tag:hover { border-color: var(--gold-dark); color: var(--text); background: var(--bg3); }
+  .phone-tag:hover { border-color: var(--primary); color: var(--text); background: var(--input-bg); }
   .phone-tag.active {
-    border-color: var(--gold);
-    color: var(--gold-light);
-    background: rgba(201,168,76,0.1);
-    box-shadow: 0 0 6px rgba(201,168,76,0.15);
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(var(--primary-rgb),0.08);
+    box-shadow: 0 0 6px rgba(var(--primary-rgb),0.15);
   }
   .phone-tag .phone-dot {
     width: 6px; height: 6px;
@@ -218,26 +284,29 @@
   .phone-tag .phone-name {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
   }
   .phone-tag .phone-note-hint {
-    font-size: 9px;
-    color: var(--text2);
+    font-size: 10px;
+    color: var(--text-2);
     margin-left: 2px;
+    opacity: .7;
   }
-  .phone-tag.active .phone-note-hint { color: var(--gold); }
+  .phone-tag.active .phone-note-hint { color: var(--primary); }
   .phone-reconnect-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    margin-left: auto; padding: 2px 8px;
-    background: transparent; border: 1px solid var(--bg3); border-radius: var(--radius-sm);
-    color: var(--text2); font-size: 10px; cursor: pointer;
+    margin-left: auto; padding: 2px 6px;
+    background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm);
+    color: var(--text-2); font-size: 10px; cursor: pointer;
     transition: all 0.2s; flex-shrink: 0;
   }
-  .phone-reconnect-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.08); }
-  .phone-reconnect-btn.spinning { color: var(--gold); border-color: var(--gold); pointer-events: none; }
+  .phone-reconnect-btn svg { width: 11px; height: 11px; }
+  .phone-reconnect-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),0.08); }
+  .phone-reconnect-btn.spinning { color: var(--primary); border-color: var(--primary); pointer-events: none; }
   .phone-rename-input {
-    background: var(--bg);
-    border: 1px solid var(--gold);
-    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    border: 1px solid var(--primary);
+    border-radius: var(--r-sm);
     padding: 3px 8px;
     font-size: 11px;
     color: var(--text);
@@ -245,78 +314,83 @@
     width: 120px;
   }
 
-  /* ---- 连接成功横幅 ---- */
-  .banner {
-    display: none;
-    background: rgba(46,204,113,0.12);
-    border-bottom: 1px solid var(--green);
-    padding: 6px 14px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--green);
-    letter-spacing: 1px;
-    flex-shrink: 0;
-  }
-  .banner.show { display: block; }
-
   /* ---- 主内容区 ---- */
   .body {
     flex: 1;
-    padding: 8px 12px 6px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     overflow-y: auto;
     overflow-x: hidden;
   }
-  .body::-webkit-scrollbar { width: 3px; }
-  .body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .body::-webkit-scrollbar { width: 6px; }
+  .body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
+  .body::-webkit-scrollbar-track { background: transparent; }
 
-  /* 号码输入框 */
+  /* 号码输入卡 */
   .number-box {
-    background: var(--bg2);
-    border: 2px solid var(--gold-dark);
-    border-radius: var(--radius-md);
-    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    padding: 12px 14px;
     flex-shrink: 0;
+    transition: border-color .15s, box-shadow .15s;
   }
-  .number-box:focus-within { border-color: var(--gold); }
+  .number-box:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .14);
+  }
   .number-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
-  .number-lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
-  .clip-hint { font-size: 9px; color: var(--gold); }
+  .number-lbl { font-size: 12px; font-weight: 500; color: var(--text-2); }
+  .clip-hint { font-size: 11px; color: var(--primary); }
   .clip-hint.flash { animation: flash 0.4s ease; }
   @keyframes flash { 50%{ filter: brightness(1.15); } }
   .number-input {
     background: none; border: none; outline: none;
     font-size: 24px; font-weight: 700;
     color: var(--text); width: 100%;
-    letter-spacing: 3px; caret-color: var(--gold);
+    letter-spacing: 3px; caret-color: var(--primary);
   }
-  .number-input::placeholder { color: var(--text2); font-size: 14px; font-weight: 400; letter-spacing: 1px; }
-  .number-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .number-input::placeholder { color: var(--text-2); font-size: 14px; font-weight: 400; letter-spacing: 1px; }
+  .number-actions { display: flex; gap: 8px; margin-top: 8px; }
   .btn-sm {
-    background: none;
-    border-radius: var(--radius-sm);
-    padding: 4px 10px;
-    font-size: 11px;
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.15s;
+    font-family: inherit;
   }
-  .btn-clear { border: 1px solid var(--bg3); color: var(--text2); }
-  .btn-clear:hover { border-color: var(--red); color: var(--red); }
+  .btn-clear { border: 1px solid var(--border); color: var(--text-2); }
+  .btn-clear:hover { border-color: var(--red); color: var(--red); background: rgba(240,62,62,.05); }
+  .btn-ghost-sm { border: 1px solid var(--border); color: var(--text-2); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; }
+  .btn-ghost-sm svg { width: 13px; height: 13px; }
+  .btn-ghost-sm:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),.06); }
+  .btn-ghost-sm .arrow { transition: transform .2s; display: inline-flex; }
+  .btn-ghost-sm .arrow svg { width: 12px; height: 12px; }
+  .btn-ghost-sm.expanded .arrow { transform: rotate(180deg); }
 
-  /* 拨号盘按钮样式（布局定义在下方） */
+  /* 拨号盘 */
+  .dialpad {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .dialpad.show { display: grid; }
   .dial-btn {
-    background: var(--bg2);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 7px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 9px 0;
     cursor: pointer;
     transition: all 0.12s;
     display: flex;
@@ -324,70 +398,70 @@
     align-items: center;
     justify-content: center;
     gap: 0px;
+    font-family: inherit;
   }
-  .dial-btn:hover { background: var(--bg3); border-color: var(--gold-dark); }
-  .dial-btn:active { transform: scale(0.93); background: rgba(201,168,76,0.1); border-color: var(--gold); }
+  .dial-btn:hover { background: var(--input-bg); border-color: var(--border-input); }
+  .dial-btn:active { transform: scale(0.93); background: rgba(var(--primary-rgb),0.08); border-color: var(--primary); }
   .dial-btn .num { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1; }
-  .dial-btn .sub { font-size: 7px; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; }
+  .dial-btn .sub { font-size: 9px; color: var(--text-2); letter-spacing: 1px; text-transform: uppercase; }
   .dial-btn.del .num { font-size: 16px; color: var(--red); }
 
   /* 操作按钮 */
-  .action-row { display: flex; gap: 6px; flex-shrink: 0; }
-  .call-btn {
+  .action-row { display: flex; gap: 10px; flex-shrink: 0; }
+  .call-btn, .hangup-btn {
     flex: 1;
-    padding: 10px;
-    background: var(--gradient-green);
-    border: none; border-radius: var(--radius-md);
-    color: white; font-size: 16px; font-weight: 700;
+    height: 46px;
+    border: none;
+    border-radius: var(--r-md);
+    color: white;
+    font-size: 15px; font-weight: 700;
     cursor: pointer; transition: all 0.2s;
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    letter-spacing: 1px;
+    letter-spacing: .02em;
+    font-family: inherit;
   }
+  .call-btn svg, .hangup-btn svg { width: 16px; height: 16px; }
+  .call-btn { background: var(--gradient-green); }
   .call-btn:hover:not(:disabled) { background: var(--gradient-green); filter: brightness(1.15); box-shadow: 0 6px 18px rgba(39,174,96,0.35); }
-  .call-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
-  .hangup-btn {
-    flex: 1;
-    padding: 10px;
-    background: var(--gradient-red);
-    border: none; border-radius: var(--radius-md);
-    color: white; font-size: 16px; font-weight: 700;
-    cursor: pointer; transition: all 0.2s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    letter-spacing: 1px;
-  }
+  .call-btn:disabled { background: var(--surface-2); color: var(--text-2); cursor: default; opacity: .7; }
+  .hangup-btn { background: var(--gradient-red); }
   .hangup-btn:hover:not(:disabled) { background: var(--gradient-red); filter: brightness(1.15); }
-  .hangup-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
+  .hangup-btn:disabled { background: var(--surface-2); color: var(--text-2); cursor: default; opacity: .7; }
 
   /* 发短信按钮 */
   .sms-row { flex-shrink: 0; }
   .sms-btn {
     width: 100%;
-    padding: 8px;
-    background: none;
-    border: 1px dashed var(--gold-dark);
-    border-radius: var(--radius-md);
-    color: var(--gold);
+    padding: 9px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    color: var(--primary);
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    letter-spacing: 1px;
+    letter-spacing: .02em;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    font-family: inherit;
   }
-  .sms-btn:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); }
+  .sms-btn svg { width: 14px; height: 14px; }
+  .sms-btn:hover { background: rgba(var(--primary-rgb),0.06); border-color: var(--primary); }
 
   /* 主界面快捷短信模板 */
   .index-tpl-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 6px;
+    gap: 6px;
+    margin-top: 8px;
   }
   .index-tpl-tag {
-    background: var(--bg2);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 4px 9px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-input);
+    border-radius: var(--r-pill);
+    padding: 5px 11px;
     font-size: 11px;
-    color: var(--text2);
+    color: var(--text-2);
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
@@ -395,7 +469,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .index-tpl-tag:hover { border-color: var(--gold-dark); color: var(--gold); background: rgba(201,168,76,0.07); }
+  .index-tpl-tag:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),.05); }
   .index-tpl-tag:active { transform: scale(0.94); }
 
   /* ---- 日志区（折叠） ---- */
@@ -404,133 +478,69 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 5px 10px;
-    background: var(--bg2);
-    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
     cursor: pointer;
-    font-size: 11px;
-    color: var(--text2);
-    border: 1px solid var(--bg3);
-    transition: border-color 0.2s;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    transition: border-color 0.2s, border-radius 0.2s;
+    font-family: inherit;
   }
-  .log-toggle:hover { border-color: var(--gold-dark); }
-  .log-toggle .arrow { transition: transform 0.2s; font-size: 10px; }
+  .log-toggle:hover { border-color: var(--primary); }
+  .log-toggle .arrow { transition: transform 0.2s; display: inline-flex; }
+  .log-toggle .arrow svg { width: 13px; height: 13px; color: var(--text-2); }
+  .log-toggle.open { border-radius: var(--r-lg) var(--r-lg) 0 0; }
   .log-toggle.open .arrow { transform: rotate(180deg); }
+  .log-toggle .log-toggle-label { display: inline-flex; align-items: center; gap: 7px; }
+  .log-toggle .log-toggle-label svg { width: 14px; height: 14px; color: var(--text-2); }
   .log-body {
     display: none;
     max-height: 130px;
     overflow-y: auto;
-    padding: 6px 8px;
+    padding: 8px;
     gap: 4px;
     flex-direction: column;
-    background: var(--bg2);
-    border-radius: 0 0 8px 8px;
-    border: 1px solid var(--bg3);
-    border-top: none;
+    background: var(--surface);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    border: 1px solid var(--border);
+    border-top: 1px solid var(--divider);
     margin-top: -1px;
   }
   .log-body.open { display: flex; }
-  .log-body::-webkit-scrollbar { width: 3px; }
-  .log-body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .log-body::-webkit-scrollbar { width: 6px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
   .log-entry {
     display: flex; align-items: baseline; gap: 6px;
-    font-size: 11px; padding: 3px 6px;
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    border-left: 2px solid var(--bg3);
+    font-size: 11px; padding: 4px 8px;
+    border-radius: var(--r-sm);
+    background: var(--input-bg);
+    border-left: 2px solid var(--border);
     animation: fadein 0.2s;
   }
   @keyframes fadein { from{opacity:0;} to{opacity:1;} }
   .log-entry.success { border-left-color: var(--green); }
   .log-entry.error   { border-left-color: var(--red);   }
-  .log-entry.info    { border-left-color: var(--gold);  }
-  .log-entry .lt { color: var(--text2); flex-shrink: 0; font-size: 10px; }
+  .log-entry.info    { border-left-color: var(--primary);  }
+  .log-entry .lt { color: var(--text-2); flex-shrink: 0; font-size: 10px; }
   .log-entry .lm { color: var(--text); }
 
-  /* ---- 连接状态优化（方案3） ---- */
-  .status-display {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 14px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    flex-shrink: 0;
-  }
+  /* ---- 状态大盘显示（结构并入 hero-card 后此区废除，保留空壳承载 id） ---- */
   .status-display.hidden { display: none; }
-  .status-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--bg);
-    border: 3px solid var(--red);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    margin-bottom: 10px;
-    transition: all 0.3s;
-  }
-  .status-icon.connected {
-    border-color: var(--green);
-    box-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
-    animation: pulse 1.5s infinite;
-  }
-  .status-text-large {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .status-subtext {
-    font-size: 11px;
-    color: var(--text2);
-  }
-  
-  /* ---- 拨号盘切换按钮（方案1） ---- */
-  .dialpad-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px;
-    background: var(--bg2);
-    border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-md);
-    color: var(--gold);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-  .dialpad-toggle:hover {
-    background: rgba(201, 168, 76, 0.1);
-    border-color: var(--gold);
-  }
-  .dialpad-toggle .arrow {
-    transition: transform 0.2s;
-  }
-  .dialpad-toggle.expanded .arrow {
-    transform: rotate(180deg);
-  }
-  
-  /* ---- 拨号盘（方案1：默认隐藏） ---- */
-  .dialpad {
-    display: none;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    flex-shrink: 0;
-  }
-  .dialpad.show {
-    display: grid;
-  }
+
+  /* ---- 拨号盘切换按钮（已移入号码卡按钮行，样式见 .btn-ghost-sm） ---- */
+  .dialpad-toggle { margin-left: auto; }
+
+  /* ---- Toast ---- */
   .toast {
-    position: fixed; bottom: 12px; left: 50%;
+    position: fixed; bottom: 14px; left: 50%;
     transform: translateX(-50%) translateY(80px);
-    background: var(--bg3); border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-md); padding: 8px 18px;
-    font-size: 12px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-pill); box-shadow: var(--shadow-float);
+    padding: 9px 18px;
+    font-size: 12px; font-weight: 500; color: var(--text);
     transition: transform 0.25s; z-index: 999; white-space: nowrap;
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
@@ -542,78 +552,93 @@
 </head>
 <body>
 <!-- Wails 适配: 完整设置面板 (对齐原版 settings.html) -->
-<div id="settingsOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;flex-direction:column;">
-  <div style="background:var(--bg2);border-bottom:1px solid var(--gold-dark);display:flex;align-items:center;padding:0 14px;height:36px;flex-shrink:0;">
-    <span style="font-size:13px;font-weight:700;color:var(--gold-light);letter-spacing:2px;">&#x2699; 设置</span>
-    <button onclick="closeSettings()" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
+<div id="settingsOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;">
+  <div class="set-header">
+    <div class="set-header-title">
+      <span class="set-header-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+      设置
+    </div>
+    <button onclick="closeSettings()" class="set-header-close" title="关闭">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
   </div>
-  <div style="flex:1;overflow-y:auto;padding:16px;" id="settingsContent">
+  <div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;" id="settingsContent">
     <!-- 窗口行为 -->
-    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">窗口行为</div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div><div style="font-size:14px;font-weight:600;">关闭按钮行为</div><div style="font-size:11px;color:var(--text2);">点击标题栏 X 时执行的操作</div></div>
-      <div style="display:flex;gap:5px;" id="setCloseAction">
-        <span class="set-opt active" data-val="minimize" onclick="setSelect('closeAction','minimize')">最小化</span>
-        <span class="set-opt" data-val="exit" onclick="setSelect('closeAction','exit')">退出</span>
+    <div class="set-group">
+      <div class="set-group-title">窗口行为</div>
+      <div class="set-row">
+        <div class="set-row-text"><div class="set-row-title">关闭按钮行为</div><div class="set-row-sub">点击标题栏 X 时执行的操作</div></div>
+        <div class="set-seg" id="setCloseAction">
+          <span class="set-opt active" data-val="minimize" onclick="setSelect('closeAction','minimize')">最小化</span>
+          <span class="set-opt" data-val="exit" onclick="setSelect('closeAction','exit')">退出</span>
+        </div>
+      </div>
+      <div class="set-divider"></div>
+      <div class="set-row">
+        <div class="set-row-text"><div class="set-row-title">托盘图标退出</div><div class="set-row-sub">右键托盘退出时直接退出程序</div></div>
+        <label class="set-switch">
+          <input type="checkbox" id="setTrayExit" checked onchange="settingChanged()">
+          <span class="sw-track"></span>
+        </label>
       </div>
     </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div><div style="font-size:14px;font-weight:600;">托盘图标退出</div><div style="font-size:11px;color:var(--text2);">右键托盘退出时直接退出程序</div></div>
-      <label style="cursor:pointer;display:flex;align-items:center;gap:8px;"><input type="checkbox" id="setTrayExit" checked onchange="settingChanged()" style="width:16px;height:16px;accent-color:var(--gold);"></label>
-    </div>
-
-    <div style="height:14px;"></div>
 
     <!-- 启动 -->
-    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">启动</div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div><div style="font-size:14px;font-weight:600;">开机自启动</div><div style="font-size:11px;color:var(--text2);">Windows 启动时自动运行 AutoDial</div></div>
-      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setAutoStart" onchange="settingChanged()"></label>
-    </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div><div style="font-size:14px;font-weight:600;">隐藏界面启动</div><div style="font-size:11px;color:var(--text2);">开机自启动时不显示主窗口，仅托盘运行</div></div>
-      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setSilentStart" onchange="settingChanged()"></label>
-    </div>
-
-    <div style="height:14px;"></div>
-
-    <!-- 云中转 -->
-    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">云中转</div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div><div style="font-size:14px;font-weight:600;">启用云中转</div><div style="font-size:11px;color:var(--text2);">手机不在同一局域网时通过云服务器中转</div></div>
-      <label style="cursor:pointer;"><input type="checkbox" style="width:16px;height:16px;accent-color:var(--gold);" id="setCloudEnabled" onchange="cloudToggleChanged()"></label>
-    </div>
-
-    <div id="cloudSection" style="padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);opacity:0.5;">
-      <div style="font-size:14px;font-weight:600;margin-bottom:2px;">云服务器管理</div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:8px;">支持多个云服务器，自动遍历连接，成功即停</div>
-      <div id="cloudSummary" style="font-size:12px;color:var(--gold-light);margin-bottom:4px;">未配置服务器</div>
-      <div id="cloudStatus" style="font-size:11px;color:var(--text2);margin-bottom:8px;"></div>
-      <div id="cloudServerList" style="margin-bottom:8px;"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button onclick="addCloudServer()" style="flex:1;padding:8px;background:var(--gold-dark);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;">+ 添加服务器</button>
-        <button onclick="testCloudServers()" style="padding:8px 14px;background:var(--bg3);color:var(--text);border:none;border-radius:5px;cursor:pointer;font-size:13px;">测试全部</button>
-        <button onclick="fetchCloudServers()" style="padding:8px 14px;background:var(--gold-dark);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:13px;">获取列表</button>
+    <div class="set-group">
+      <div class="set-group-title">启动</div>
+      <div class="set-row">
+        <div class="set-row-text"><div class="set-row-title">开机自启动</div><div class="set-row-sub">Windows 启动时自动运行 AutoDial</div></div>
+        <label class="set-switch">
+          <input type="checkbox" id="setAutoStart" onchange="settingChanged()">
+          <span class="sw-track"></span>
+        </label>
+      </div>
+      <div class="set-divider"></div>
+      <div class="set-row">
+        <div class="set-row-text"><div class="set-row-title">隐藏界面启动</div><div class="set-row-sub">开机自启动时不显示主窗口，仅托盘运行</div></div>
+        <label class="set-switch">
+          <input type="checkbox" id="setSilentStart" onchange="settingChanged()">
+          <span class="sw-track"></span>
+        </label>
       </div>
     </div>
 
-    <div style="height:14px;"></div>
+    <!-- 云中转 -->
+    <div class="set-group">
+      <div class="set-group-title">云中转</div>
+      <div class="set-row">
+        <div class="set-row-text"><div class="set-row-title">启用云中转</div><div class="set-row-sub">手机不在同一局域网时通过云服务器中转</div></div>
+        <label class="set-switch">
+          <input type="checkbox" id="setCloudEnabled" onchange="cloudToggleChanged()">
+          <span class="sw-track"></span>
+        </label>
+      </div>
+      <div class="set-divider"></div>
+      <div id="cloudSection">
+        <div class="set-row-title">云服务器管理</div>
+        <div class="set-row-sub" style="margin-top:2px;">支持多个云服务器，自动遍历连接，成功即停</div>
+        <div id="cloudSummary" class="set-cloud-summary">未配置服务器</div>
+        <div id="cloudStatus" class="set-row-sub"></div>
+        <div id="cloudServerList" class="set-cloud-list"></div>
+        <div class="set-btn-row">
+          <button onclick="addCloudServer()" class="set-btn-primary">+ 添加服务器</button>
+          <button onclick="testCloudServers()" class="set-btn-ghost">测试全部</button>
+          <button onclick="fetchCloudServers()" class="set-btn-primary">获取列表</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 外观 -->
-    <div style="font-size:11px;color:var(--text2);letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bg3);">外观</div>
-
-    <div style="padding:12px 14px;background:var(--bg2);border-radius:10px;margin-bottom:8px;border:1px solid var(--bg3);">
-      <div style="font-size:14px;font-weight:600;margin-bottom:2px;">主题</div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">选择界面风格和配色方案</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;" id="themeGrid"></div>
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bg3);">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">显示模式</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;" id="modeSelect">
+    <div class="set-group">
+      <div class="set-group-title">外观</div>
+      <div class="set-row" style="flex-direction:column;align-items:stretch;gap:10px;">
+        <div class="set-row-text"><div class="set-row-title">主题</div><div class="set-row-sub">选择界面风格和配色方案</div></div>
+        <div class="set-theme-grid" id="themeGrid"></div>
+      </div>
+      <div class="set-divider"></div>
+      <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <div class="set-row-title">显示模式</div>
+        <div class="set-mode-grid" id="modeSelect">
           <span class="set-opt active" data-val="dark" onclick="selectMode('dark')">🌑 暗夜</span>
           <span class="set-opt" data-val="dusk" onclick="selectMode('dusk')">🌆 黄昏</span>
           <span class="set-opt" data-val="dawn" onclick="selectMode('dawn')">🌅 朝阳</span>
@@ -625,67 +650,115 @@
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-top:4px;">
-      <button onclick="saveAllSettings()" style="flex:1;padding:12px;background:var(--gold);color:var(--bg);border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:15px;">💾 保存设置</button>
-      <button onclick="closeSettings()" style="padding:12px 24px;background:var(--bg3);color:var(--text2);border:none;border-radius:8px;cursor:pointer;font-size:15px;">取消</button>
+    <div class="set-btn-row" style="margin-top:4px;">
+      <button onclick="saveAllSettings()" class="set-btn-save">
+        <svg viewBox="0 0 24 24" fill="none" style="width:14px;height:14px;"><path d="M5 4h11l3 3v13H5zM8 4v6h8V4M8 20v-6h8v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        保存设置
+      </button>
+      <button onclick="closeSettings()" class="set-btn-ghost" style="flex:0 0 auto;padding:12px 24px;">取消</button>
     </div>
   </div>
-  <div style="text-align:center;padding:10px;font-size:10px;color:var(--text2);flex-shrink:0;">AutoDial v3.4</div>
+  <div class="set-footer">AutoDial v6.1</div>
 </div>
 
 <style>
-.set-opt { padding:4px 10px; background:var(--bg); border:1px solid var(--bg3); border-radius:5px; font-size:11px; color:var(--text2); cursor:pointer; white-space:nowrap; }
-.set-opt:hover { border-color:var(--gold-dark); color:var(--text); }
-.set-opt.active { background:var(--gold-dark); border-color:var(--gold); color:var(--gold-light); font-weight:600; }
-input[type=checkbox]:checked + .sw-track { background:var(--gold-dark); border-color:var(--gold); }
-input[type=checkbox]:checked + .sw-track i { display:none; }
-.sw-track { transition:background 0.2s,border-color 0.2s; }
-.cloud-server-row { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid var(--bg3); gap:6px; font-size:12px; }
+/* ===== 设置浮层（v6.1） ===== */
+.set-header { background:var(--surface); border-bottom:1px solid var(--divider); display:flex; align-items:center; padding:0 14px; height:44px; flex-shrink:0; }
+.set-header-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--text); }
+.set-header-ico { width:22px; height:22px; border-radius:var(--r-sm); background:var(--icon-tile); color:var(--primary); display:grid; place-items:center; }
+.set-header-ico svg { width:13px; height:13px; }
+.set-header-close { margin-left:auto; background:none; border:none; color:var(--text-2); cursor:pointer; width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; transition:all .15s; }
+.set-header-close svg { width:14px; height:14px; }
+.set-header-close:hover { background:var(--input-bg); color:var(--text); }
+.set-group { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-card); padding:4px 14px; flex-shrink:0; }
+.set-group-title { font-size:11px; font-weight:500; color:var(--text-2); padding:10px 0 4px; }
+.set-row { display:flex; align-items:center; justify-content:space-between; padding:11px 0; gap:10px; }
+.set-row-text { min-width:0; }
+.set-row-title { font-size:13px; font-weight:600; color:var(--text); }
+.set-row-sub { font-size:11px; color:var(--text-2); margin-top:2px; }
+.set-divider { height:1px; background:var(--divider); }
+.set-seg { display:flex; gap:5px; flex-shrink:0; }
+.set-mode-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.set-theme-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.set-opt { padding:5px 12px; background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); font-size:11px; color:var(--text-2); cursor:pointer; white-space:nowrap; transition:all .15s; }
+.set-opt:hover { border-color:var(--primary); color:var(--text); }
+.set-opt.active { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
+.set-switch { cursor:pointer; display:flex; align-items:center; flex-shrink:0; }
+.set-switch input { display:none; }
+.set-switch .sw-track { width:34px; height:18px; background:var(--surface-2); border:1px solid var(--border); border-radius:9px; position:relative; transition:background 0.2s,border-color 0.2s; display:block; }
+.set-switch .sw-track::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--text-2); transition:all 0.2s; }
+.set-switch input:checked + .sw-track { background:var(--primary); border-color:var(--primary); }
+.set-switch input:checked + .sw-track::after { left:18px; background:#fff; }
+.set-cloud-summary { font-size:12px; color:var(--primary); margin:6px 0 2px; }
+.set-cloud-list { display:flex; flex-direction:column; gap:4px; margin:6px 0; }
+.set-btn-row { display:flex; gap:8px; flex-wrap:wrap; }
+.set-btn-primary { padding:8px 12px; background:var(--grad-btn); color:#fff; border:none; border-radius:var(--r-sm); cursor:pointer; font-size:12px; font-family:inherit; transition:filter .15s; flex:1; }
+.set-btn-primary:hover { filter:brightness(1.08); }
+.set-btn-ghost { padding:8px 14px; background:var(--surface); color:var(--text-2); border:1px solid var(--border); border-radius:var(--r-sm); cursor:pointer; font-size:12px; font-family:inherit; transition:all .15s; }
+.set-btn-ghost:hover { border-color:var(--primary); color:var(--primary); }
+.set-btn-save { flex:1; padding:12px; background:var(--grad-btn); color:#fff; border:none; border-radius:var(--r-md); cursor:pointer; font-weight:700; font-size:14px; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:7px; box-shadow:var(--shadow-btn); transition:filter .15s; }
+.set-btn-save:hover { filter:brightness(1.06); }
+.set-footer { text-align:center; padding:10px; font-size:10px; color:var(--text-2); flex-shrink:0; }
+.theme-item { background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); padding:8px 4px; font-size:11px; color:var(--text-2); text-align:center; cursor:pointer; transition:all .15s; font-family:inherit; }
+.theme-item:hover { border-color:var(--primary); color:var(--text); }
+.theme-item.active { border-color:var(--primary); color:var(--primary); font-weight:600; box-shadow:0 0 0 2px rgba(var(--primary-rgb),.18); }
+.theme-item .theme-dot { display:block; width:14px; height:14px; border-radius:50%; margin:0 auto 4px; }
+.cloud-server-row { display:flex; align-items:center; padding:6px 8px; background:var(--input-bg); border-radius:var(--r-sm); gap:6px; font-size:12px; }
 .cloud-server-row .cs-addr { flex:1; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.cloud-server-row .cs-del { cursor:pointer; color:var(--red); font-size:14px; }
-.cloud-server-row .cs-up { cursor:pointer; color:var(--text2); font-size:14px; }
-.cloud-server-row .cs-conn { padding:3px 8px; background:var(--gold-dark); color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:10px; }
+.cloud-server-row .cs-del { cursor:pointer; color:var(--red); font-size:14px; background:none; border:none; }
+.cloud-server-row .cs-up { cursor:pointer; color:var(--text-2); font-size:14px; background:none; border:none; }
+.cloud-server-row .cs-conn { padding:3px 8px; background:var(--grad-btn); color:#fff; border:none; border-radius:var(--r-sm); cursor:pointer; font-size:10px; }
 /* SMS Overlay */
 #smsOverlay { position:fixed; inset:0; z-index:9998; background:var(--bg); display:none; flex-direction:column; }
 #smsOverlay.show { display:flex !important; }
-.sms-ov-header { background:var(--bg2); border-bottom:1px solid var(--gold-dark); display:flex; align-items:center; padding:0 14px; height:36px; flex-shrink:0; }
-.sms-ov-header span { font-size:13px; font-weight:700; color:var(--gold-light); letter-spacing:2px; }
-.sms-ov-body { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
-.sms-ov-label { font-size:11px; color:var(--text2); letter-spacing:1px; }
-.sms-ov-input { width:100%; padding:10px 12px; background:var(--bg2); border:1px solid var(--bg3); border-radius:8px; color:var(--gold); font-size:16px; outline:none; transition:border-color 0.2s; }
-.sms-ov-input:focus { border-color:var(--gold); }
-.sms-ov-textarea { width:100%; height:140px; padding:10px 12px; background:var(--bg2); border:1px solid var(--bg3); border-radius:8px; color:var(--text); font-size:14px; outline:none; resize:none; transition:border-color 0.2s; font-family:var(--font-family); }
-.sms-ov-textarea:focus { border-color:var(--gold); }
-.sms-ov-counter { text-align:right; font-size:11px; color:var(--text2); margin-top:-8px; }
+.sms-ov-header { background:var(--surface); border-bottom:1px solid var(--divider); display:flex; align-items:center; padding:0 14px; height:44px; flex-shrink:0; }
+.sms-ov-header .sms-ov-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--text); }
+.sms-ov-header .sms-ov-ico { width:22px; height:22px; border-radius:var(--r-sm); background:var(--icon-tile); color:var(--primary); display:grid; place-items:center; }
+.sms-ov-header .sms-ov-ico svg { width:13px; height:13px; }
+.sms-ov-header .sms-ov-close { margin-left:auto; background:none; border:none; color:var(--text-2); cursor:pointer; width:30px; height:30px; border-radius:var(--r-sm); display:grid; place-items:center; transition:all .15s; }
+.sms-ov-header .sms-ov-close svg { width:14px; height:14px; }
+.sms-ov-header .sms-ov-close:hover { background:var(--input-bg); color:var(--text); }
+.sms-ov-body { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:12px; }
+.sms-ov-label { font-size:11px; font-weight:500; color:var(--text-2); margin-bottom:6px; }
+.sms-ov-input { width:100%; padding:10px 12px; background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); color:var(--text); font-size:16px; outline:none; transition:border-color 0.2s, box-shadow 0.2s; font-family:var(--font-family); }
+.sms-ov-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(var(--primary-rgb),.14); }
+.sms-ov-textarea { width:100%; height:140px; padding:10px 12px; background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); color:var(--text); font-size:14px; outline:none; resize:none; transition:border-color 0.2s, box-shadow 0.2s; font-family:var(--font-family); }
+.sms-ov-textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(var(--primary-rgb),.14); }
+.sms-ov-counter { text-align:right; font-size:11px; color:var(--text-2); margin-top:-8px; }
 .sms-ov-counter.warn { color:var(--red); }
 .sms-ov-tpl-wrap { display:flex; flex-wrap:wrap; gap:6px; }
-.sms-ov-tpl-tag { padding:4px 10px; background:var(--bg3); border:1px solid var(--bg3); border-radius:12px; font-size:11px; color:var(--text2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
-.sms-ov-tpl-tag:hover { border-color:var(--gold-dark); color:var(--gold); }
-.sms-ov-send { width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer; font-size:14px; font-weight:600; letter-spacing:1px; transition:all 0.2s; }
-.sms-ov-send:not(:disabled) { background:linear-gradient(135deg,#C9A84C,#8B6914); color:#fff; }
-.sms-ov-send:not(:disabled):hover { background:linear-gradient(135deg,#F0C040,#C9A84C); }
-.sms-ov-send:disabled { background:var(--bg3); color:var(--text2); cursor:not-allowed; }
+.sms-ov-tpl-tag { padding:5px 11px; background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-pill); font-size:11px; color:var(--text-2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.sms-ov-tpl-tag:hover { border-color:var(--primary); color:var(--primary); }
+.sms-ov-send { width:100%; padding:12px; border-radius:var(--r-md); border:none; cursor:pointer; font-size:14px; font-weight:700; letter-spacing:.02em; transition:all 0.2s; font-family:var(--font-family); }
+.sms-ov-send:not(:disabled) { background:var(--grad-btn); color:#fff; box-shadow:var(--shadow-btn); }
+.sms-ov-send:not(:disabled):hover { filter:brightness(1.08); }
+.sms-ov-send:disabled { background:var(--surface-2); color:var(--text-2); cursor:not-allowed; }
 .sms-ov-send.sending { opacity:0.7; }
-.sms-ov-mgr-link { font-size:11px; color:var(--gold); cursor:pointer; text-decoration:underline; }
+.sms-ov-mgr-link { font-size:11px; color:var(--primary); cursor:pointer; text-decoration:underline; }
+.sms-ov-mgr-link:hover { color:var(--primary-dark); }
 /* Template Manager Modal */
-#tplManagerOverlay { position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; }
+#tplManagerOverlay { position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; }
 #tplManagerOverlay.show { display:flex !important; }
-.tpl-mgr-box { background:var(--bg2); border:1px solid var(--gold-dark); border-radius:12px; padding:20px; width:360px; max-height:480px; display:flex; flex-direction:column; gap:10px; }
-.tpl-mgr-box h3 { color:var(--gold-light); font-size:14px; margin:0; }
+.tpl-mgr-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-float); padding:18px; width:360px; max-height:480px; display:flex; flex-direction:column; gap:10px; }
+.tpl-mgr-box h3 { color:var(--text); font-size:14px; margin:0; display:flex; align-items:center; gap:8px; }
+.tpl-mgr-box h3 svg { width:15px; height:15px; color:var(--primary); }
 .tpl-mgr-list { flex:1; overflow-y:auto; max-height:280px; }
-.tpl-mgr-item { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--bg3); font-size:12px; }
-.tpl-mgr-item .tpl-mgr-name { color:var(--gold); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.tpl-mgr-item { display:flex; align-items:center; justify-content:space-between; padding:8px 4px; border-bottom:1px solid var(--divider); font-size:12px; }
+.tpl-mgr-item .tpl-mgr-name { color:var(--primary); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
 .tpl-mgr-item .tpl-mgr-del { color:var(--red); cursor:pointer; font-size:14px; margin-left:8px; }
 .tpl-mgr-add { display:flex; gap:6px; }
-.tpl-mgr-add input { flex:1; padding:6px 8px; background:var(--bg); border:1px solid var(--bg3); border-radius:5px; color:var(--text); font-size:12px; outline:none; }
-.tpl-mgr-add input:focus { border-color:var(--gold); }
-.tpl-mgr-add button { padding:6px 12px; background:var(--gold-dark); border:none; border-radius:5px; color:#fff; cursor:pointer; font-size:12px; }
-.tpl-mgr-close { align-self:flex-end; padding:6px 14px; background:var(--bg3); border:none; border-radius:5px; color:var(--text2); cursor:pointer; font-size:12px; }
+.tpl-mgr-add input { flex:1; padding:6px 8px; background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); color:var(--text); font-size:12px; outline:none; transition:border-color .15s; font-family:var(--font-family); }
+.tpl-mgr-add input:focus { border-color:var(--primary); }
+.tpl-mgr-add button { padding:6px 12px; background:var(--grad-btn); border:none; border-radius:var(--r-sm); color:#fff; cursor:pointer; font-size:12px; font-family:var(--font-family); }
+.tpl-mgr-close { align-self:flex-end; padding:6px 14px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); color:var(--text-2); cursor:pointer; font-size:12px; font-family:var(--font-family); transition:all .15s; }
+.tpl-mgr-close:hover { border-color:var(--primary); color:var(--primary); }
 </style>
 <div class="wrap">
   <!-- 自定义标题栏 -->
   <div class="titlebar">
-    <div class="logo"><div class="logo-icon">&#x1F4DE;</div>AutoDial</div>
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg></div>AutoDial
+    </div>
     <div class="titlebar-btns">
       <button class="titlebar-btn" id="btnSettings" title="设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
       <button class="titlebar-btn" id="btnMinimize" title="最小化"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></button>
@@ -693,53 +766,70 @@ input[type=checkbox]:checked + .sw-track i { display:none; }
     </div>
   </div>
 
-  <!-- 状态栏 -->
-  <div class="header">
-    <div class="chips">
-      <div class="chip"><div class="lbl">IP</div><div class="val ip" id="localIP">&#x2026;</div></div>
-      <div class="chip"><div class="lbl">配对码</div><div class="val" id="pinCode">----</div></div>
-    </div>
-    <div class="status-dot" id="statusDot"></div>
-    <div class="status-text" id="statusText">等待连接</div>
-    <span class="restart-icon" id="restartCloudIcon" title="重连云端">☁</span>
-    <span class="restart-icon" id="restartAppIcon" title="重启软件">⟳</span>
-    <label class="topmost-switch" title="窗口置顶">
-      <input type="checkbox" id="topmostToggle">
-      <span class="sw-track"></span>
-      <span class="sw-label">置顶</span>
-    </label>
-  </div>
-
-  <div class="status-display" id="statusDisplay">
-    <div class="status-icon" id="statusIcon">📵</div>
-    <div class="status-text-large" id="statusTextLarge">等待连接</div>
-    <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
-  </div>
-
-  <div class="banner" id="banner">&#x2705; 手机已连接，可以拨号</div>
-
-  <!-- 多手机选择器 -->
-  <div class="phone-selector" id="phoneSelector">
-    <div class="phone-list" id="phoneList"></div>
-  </div>
-
+  <!-- Hero 状态大盘（原 header + status-display + banner 合并） -->
   <div class="body">
+    <div class="hero-card">
+      <div class="hero-row1">
+        <div class="status-icon" id="statusIcon">
+          <svg id="statusIconSvg" viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="hero-text">
+          <div class="status-text-large" id="statusTextLarge">等待连接</div>
+          <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
+        </div>
+        <label class="topmost-switch" title="窗口置顶">
+          <input type="checkbox" id="topmostToggle">
+          <span class="sw-track"></span>
+          <span class="sw-label">置顶</span>
+        </label>
+      </div>
+      <div class="hero-chips">
+        <span class="hero-chip">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">等待连接</span>
+        </span>
+        <span class="hero-chip" title="本机 IP">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="val ip" id="localIP">…</span>
+        </span>
+        <span class="hero-chip clickable" title="点击修改配对码">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 4L7 20M17 4l-2 16M4 9h17M3 15h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="val" id="pinCode">----</span>
+        </span>
+        <span class="hero-actions">
+          <button class="hero-icon-btn" id="restartCloudIcon" title="重连云端">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="hero-icon-btn" id="restartAppIcon" title="重启软件">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </span>
+      </div>
+    </div>
+
+    <div class="banner" id="banner">✅ 手机已连接，可以拨号</div>
+
+    <!-- 多手机选择器 -->
+    <div class="phone-selector" id="phoneSelector">
+      <div class="phone-list" id="phoneList"></div>
+    </div>
+
     <div class="number-box">
       <div class="number-row">
         <span class="number-lbl">号码</span>
-        <span class="clip-hint" id="clipHint">&#x1F4CB; 已跟随剪贴板</span>
+        <span class="clip-hint" id="clipHint">📋 已跟随剪贴板</span>
       </div>
       <input type="text" class="number-input" id="numberInput"
-             placeholder="复制号码自动出现&#x2026;" maxlength="20"
+             placeholder="复制号码自动出现…" maxlength="20"
              inputmode="tel" autocomplete="off">
       <div class="number-actions">
         <button class="btn-sm btn-clear" id="btnClear">清除</button>
+        <button class="btn-sm btn-ghost-sm" id="dialpadToggle">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          拨号盘
+          <span class="arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
       </div>
-    </div>
-
-    <div class="dialpad-toggle" id="dialpadToggle">
-      <span>&#x1F4DE; 拨号盘</span>
-      <span class="arrow">&#x25BC;</span>
     </div>
 
     <div class="dialpad" id="dialpad">
@@ -752,24 +842,36 @@ input[type=checkbox]:checked + .sw-track i { display:none; }
       <button class="dial-btn" data-key="7"><span class="num">7</span><span class="sub">PQRS</span></button>
       <button class="dial-btn" data-key="8"><span class="num">8</span><span class="sub">TUV</span></button>
       <button class="dial-btn" data-key="9"><span class="num">9</span><span class="sub">WXYZ</span></button>
-      <button class="dial-btn" data-key="*"><span class="num">&#x2731;</span></button>
+      <button class="dial-btn" data-key="*"><span class="num">✱</span></button>
       <button class="dial-btn" data-key="0"><span class="num">0</span><span class="sub">+</span></button>
-      <button class="dial-btn del" data-key="del"><span class="num">&#x232B;</span></button>
+      <button class="dial-btn del" data-key="del"><span class="num">⌫</span></button>
     </div>
 
     <div class="action-row">
-      <button class="call-btn" id="callBtn" disabled>&#x1F4DE; 拨号</button>
-      <button class="hangup-btn" id="hangupBtn" disabled>&#x1F4F5; 挂断</button>
+      <button class="call-btn" id="callBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="callBtnLabel">请输入号码</span>
+      </button>
+      <button class="hangup-btn" id="hangupBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span id="hangupBtnLabel">请连接手机</span>
+      </button>
     </div>
     <div class="sms-row">
-      <button class="sms-btn" id="smsBtn">&#x1F4AC; 发短信</button>
+      <button class="sms-btn" id="smsBtn">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        发短信
+      </button>
       <div class="index-tpl-list" id="indexTplList"></div>
     </div>
 
     <div class="log-section">
       <div class="log-toggle" id="logToggle">
-        <span>&#x1F4DD; 日志</span>
-        <span class="arrow">&#x25BC;</span>
+        <span class="log-toggle-label">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6zM9 12h6M9 16h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          日志
+        </span>
+        <span class="arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </div>
       <div class="log-body" id="logBody"></div>
     </div>
@@ -813,6 +915,7 @@ document.getElementById('pinCode').addEventListener('click', function() {
 // 设置面板开关
 function openSettings() {
   document.getElementById('settingsOverlay').style.display = 'flex';
+  loadSettingsIntoUI();
 }
 function closeSettings() {
   document.getElementById('settingsOverlay').style.display = 'none';
@@ -861,24 +964,29 @@ document.getElementById('smsBtn').addEventListener('click', () => {
 });
 
 // ==================== 按钮状态文字 ====================
+const ICON_PHONE_ON = '<svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PHONE_OFF = '<svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const ICON_SPINNER = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function updateCallBtnText() {
   const btn = document.getElementById('callBtn');
+  const label = document.getElementById('callBtnLabel');
   btn.style.pointerEvents = '';  // v6: 始终恢复可点击性
   if (btn.disabled) {
-    btn.textContent = '\uD83D\uDD0D 请输入号码';
+    label.textContent = '请输入号码';
   } else if (!isConnected) {
     // v6: 未连接 → 重连按钮
-    btn.textContent = '\uD83D\uDD04 重连手机';
+    label.textContent = '重连手机';
   } else {
-    btn.innerHTML = '\uD83D\uDCDE \u62E8\u53F7';
+    label.textContent = '拨 号';
   }
 }
 function updateHangupBtnText() {
-  const btn = document.getElementById('hangupBtn');
-  if (btn.disabled) {
-    btn.textContent = '\uD83D\uDCF1 请连接手机';
+  const label = document.getElementById('hangupBtnLabel');
+  if (document.getElementById('hangupBtn').disabled) {
+    label.textContent = '请连接手机';
   } else {
-    btn.innerHTML = '\uD83D\uDD0E \u6302\u65AD';
+    label.textContent = '挂 断';
   }
 }
 const callBtn = document.getElementById('callBtn');
@@ -934,7 +1042,7 @@ async function init() {
     const list = document.getElementById('phoneList');
     list.querySelectorAll('.phone-reconnect-btn').forEach(btn => {
       btn.classList.remove('spinning');
-      btn.textContent = '🔄';
+      btn.innerHTML = ICON_SPINNER;
     });
     // 恢复主拨号按钮
     const callBtn = document.getElementById('callBtn');
@@ -1022,7 +1130,7 @@ function setPhoneConnected(connected, phoneIP) {
   
   if (connected) {
     // 方案3：优化连接状态显示
-    statusIcon.textContent = '✅';
+    statusIcon.innerHTML = ICON_PHONE_ON;
     statusIcon.className = 'status-icon connected';
     statusTextLarge.textContent = '手机已连接';
     statusSubtext.textContent = phoneIP ? '手机IP: ' + phoneIP : '可以拨号了';
@@ -1032,7 +1140,7 @@ function setPhoneConnected(connected, phoneIP) {
     banner.className = 'banner show';
   } else {
     // 方案3：优化连接状态显示
-    statusIcon.textContent = '📵';
+    statusIcon.innerHTML = ICON_PHONE_OFF;
     statusIcon.className = 'status-icon';
     statusTextLarge.textContent = '等待连接';
     statusSubtext.textContent = '请确保手机和电脑在同一局域网';
@@ -1114,12 +1222,12 @@ function updatePhoneSelector(phones, activeId) {
     const reconnectBtn = document.createElement('span');
     reconnectBtn.className = 'phone-reconnect-btn';
     reconnectBtn.title = '强制重连此手机';
-    reconnectBtn.textContent = '🔄';
+    reconnectBtn.innerHTML = ICON_SPINNER;
     reconnectBtn.addEventListener('click', (e) => {
       e.stopPropagation(); // 不触发选中切换
       if (reconnectBtn.classList.contains('spinning')) return;
       reconnectBtn.classList.add('spinning');
-      reconnectBtn.textContent = '⏳';
+      reconnectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
       window.api.send('force-reconnect', phone.id);
     });
     tag.appendChild(reconnectBtn);
@@ -1195,7 +1303,7 @@ function dial() {
     const targetPin = lastDialPin || activePin;
     if (!targetPin) { showToast('无可用手机', 'error'); return; }
     const btn = document.getElementById('callBtn');
-    btn.textContent = '⏳ 正在唤醒手机...';
+    document.getElementById('callBtnLabel').textContent = '正在唤醒手机…';
     btn.style.pointerEvents = 'none';
     window.api.send('force-reconnect', targetPin);
     addLog('info', '唤醒手机 (PIN=' + targetPin + ')...');
@@ -1523,7 +1631,7 @@ function fbExit() {
   var bar = document.getElementById('floatBar');
   var dragging = false, offsetX = 0, offsetY = 0;
   bar.addEventListener('mousedown', function(e) {
-    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.id === 'fbResizeHandle') return;
+    if (e.target.closest('button, input') || e.target.id === 'fbResizeHandle') return;
     dragging = true;
     bar.classList.add('dragging');
     var rect = bar.getBoundingClientRect();
@@ -1571,10 +1679,10 @@ function fbExit() {
 
 // 按钮文本（对齐原版禁用状态文字）
 function updateFbBtnText() {
-  var d = document.getElementById('fbDialBtn');
-  var h = document.getElementById('fbHangupBtn');
-  if (d) d.innerHTML = d.disabled ? (fbIsConnected ? '🔍 请输入号码' : '📱 请连接手机') : '📞 拨打';
-  if (h) h.innerHTML = h.disabled ? '📱 请连接手机' : '📵 挂断';
+  var dLabel = document.getElementById('fbDialLabel');
+  var hLabel = document.getElementById('fbHangupLabel');
+  if (dLabel) dLabel.textContent = document.getElementById('fbDialBtn').disabled ? (fbIsConnected ? '请输入号码' : '请连接手机') : '拨打';
+  if (hLabel) hLabel.textContent = document.getElementById('fbHangupBtn').disabled ? '请连接手机' : '挂断';
 }
 
 // 输入框变化
@@ -1705,8 +1813,93 @@ async function addCloudServer(){var a=prompt('输入云服务器地址（如 101
 function removeCloudServer(i){_cloudServers.splice(i,1);renderCloudServerList();updateCloudConfig();}
 async function testCloudServers(){if(!_cloudServers.length)return;var s=document.getElementById('cloudSummary');s.textContent='测试中...';try{var r=await window.go.main.App.TestCloudServers(_cloudServers);if(r&&r.length){var ok=r.filter(function(x){return x.ok}).length;s.textContent=ok+'/'+r.length+' 个可达';s.style.color=ok>0?'var(--green)':'var(--red)';}}catch(e){s.textContent='测试失败';}}
 async function fetchCloudServers(){try{var list=await window.go.main.App.FetchCloudServers();if(list&&list.length){_cloudServers=list.map(function(x){return x.replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();updateCloudConfig();document.getElementById('cloudSummary').textContent='获取到 '+list.length+' 个服务器';document.getElementById('cloudSummary').style.color='var(--green)';}}catch(e){document.getElementById('cloudSummary').textContent='获取失败';}}
-function renderCloudServerList(){var e=document.getElementById('cloudServerList');if(!_cloudServers.length){e.innerHTML='<div style="font-size:12px;color:var(--text2);padding:4px 0;">点击 [+ 添加] 或 [获取列表]</div>';}else{e.innerHTML=_cloudServers.map(function(s,i){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--bg);border-radius:5px;margin-bottom:4px;font-size:13px;"><span>'+s+'</span><button onclick="removeCloudServer('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;">\u00d7</button></div>';}).join('');}}
+function renderCloudServerList(){var e=document.getElementById('cloudServerList');if(!_cloudServers.length){e.innerHTML='<div style="font-size:12px;color:var(--text-2);padding:4px 0;">点击 [+ 添加] 或 [获取列表]</div>';}else{e.innerHTML=_cloudServers.map(function(s,i){return '<div class="cloud-server-row"><span class="cs-addr">'+s+'</span><button class="cs-del" onclick="removeCloudServer('+i+')" title="删除">\u00d7</button></div>';}).join('');}}
 async function updateCloudConfig(){try{await window.go.main.App.UpdateCloudConfig(_cloudEnabled,_cloudServers);}catch(e){}}
+
+// ==================== 设置面板（v6.1 补齐） ====================
+let _pendingTheme = null, _pendingMode = null;
+
+function renderThemeGrid() {
+  var grid = document.getElementById('themeGrid');
+  if (!grid || typeof THEME_DATA === 'undefined') return;
+  var current = _pendingTheme || (window.ThemeEngine ? ThemeEngine.getCurrentThemeInfo().id : DEFAULT_THEME);
+  grid.innerHTML = '';
+  THEME_DATA.forEach(function(t) {
+    var colors = t[t.defaultMode] || t.dark;
+    var el = document.createElement('div');
+    el.className = 'theme-item' + (current === t.id ? ' active' : '');
+    el.innerHTML = '<span class="theme-dot" style="background:' + colors.gold + ';"></span>' + t.name;
+    el.addEventListener('click', function() {
+      _pendingTheme = t.id;
+      grid.querySelectorAll('.theme-item').forEach(function(x) { x.classList.remove('active'); });
+      el.classList.add('active');
+      if (window.ThemeEngine) ThemeEngine.applyTheme(t.id, _pendingMode || undefined);
+    });
+    grid.appendChild(el);
+  });
+}
+
+function setSelect(group, val) {
+  var box = document.getElementById('setCloseAction');
+  if (!box) return;
+  box.querySelectorAll('.set-opt').forEach(function(o) {
+    o.classList.toggle('active', o.getAttribute('data-val') === val);
+  });
+}
+
+function selectMode(mode) {
+  _pendingMode = mode;
+  document.querySelectorAll('#modeSelect .set-opt').forEach(function(o) {
+    o.classList.toggle('active', o.getAttribute('data-val') === mode);
+  });
+  if (window.ThemeEngine) ThemeEngine.applyTheme(undefined, mode);
+}
+
+function settingChanged() {}
+
+function saveAllSettings() {
+  var closeAction = 'minimize';
+  var activeClose = document.querySelector('#setCloseAction .set-opt.active');
+  if (activeClose) closeAction = activeClose.getAttribute('data-val');
+  var payload = {
+    closeAction: closeAction,
+    trayExit:    document.getElementById('setTrayExit').checked,
+    autoStart:   document.getElementById('setAutoStart').checked,
+    silentStart: document.getElementById('setSilentStart').checked,
+    cloudEnabled: _cloudEnabled,
+    cloudServers: _cloudServers,
+    theme: _pendingTheme || (window.ThemeEngine ? ThemeEngine.getCurrentThemeInfo().id : 'sky-blue'),
+    mode:  _pendingMode  || (window.ThemeEngine ? ThemeEngine.getCurrentThemeInfo().mode : 'light')
+  };
+  if (window.go && window.go.main && window.go.main.App) {
+    window.go.main.App.UpdateSettings(payload).then(function() {
+      showToast('设置已保存', 'success');
+    }).catch(function(e) {
+      showToast('保存失败: ' + e, 'error');
+    });
+  }
+  if (window.ThemeEngine) ThemeEngine.applyTheme(payload.theme, payload.mode);
+  closeSettings();
+}
+
+function loadSettingsIntoUI() {
+  if (!(window.go && window.go.main && window.go.main.App)) return;
+  window.go.main.App.GetSettings().then(function(s) {
+    if (!s) return;
+    setSelect('closeAction', s.closeAction || 'minimize');
+    document.getElementById('setTrayExit').checked = !!s.trayExit;
+    document.getElementById('setAutoStart').checked = !!s.autoStart;
+    document.getElementById('setSilentStart').checked = !!s.silentStart;
+    _pendingTheme = s.theme || null;
+    _pendingMode = s.mode || null;
+    if (_pendingMode) {
+      document.querySelectorAll('#modeSelect .set-opt').forEach(function(o) {
+        o.classList.toggle('active', o.getAttribute('data-val') === _pendingMode);
+      });
+    }
+    renderThemeGrid();
+  }).catch(function() {});
+}
 (function initCC(){if(window.go&&window.go.main&&window.go.main.App){window.go.main.App.GetSettings().then(function(s){if(s&&s.cloudServers&&s.cloudServers.length){_cloudServers=s.cloudServers.map(function(x){return(x||'').replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();}if(s&&s.cloudEnabled){_cloudEnabled=true;document.getElementById('setCloudEnabled').checked=true;document.getElementById('cloudSection').style.opacity='1';}}).catch(function(){});}else{setTimeout(initCC,200);}})();
 </script>
 <script src="/wails/runtime.js"></script>
@@ -1717,83 +1910,101 @@ async function updateCloudConfig(){try{await window.go.main.App.UpdateCloudConfi
   <div class="float-bar" id="floatBar">
     <div class="fb-dot" id="fbDot"></div>
     <div class="fb-sep"></div>
-    <button class="fb-clear-btn" id="fbClearBtn" onclick="fbClear()">清空</button>
+    <button class="fb-btn fb-clear-btn" id="fbClearBtn" onclick="fbClear()">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      清空
+    </button>
     <input type="text" class="fb-input" id="fbInput" placeholder="输入或复制号码..." inputmode="tel" autocomplete="off">
     <div class="fb-sep"></div>
-    <button class="fb-dial-btn" id="fbDialBtn" disabled onclick="fbDial()">📞 拨打</button>
-    <button class="fb-hangup-btn" id="fbHangupBtn" disabled onclick="fbHangup()">📵 挂断</button>
-    <button class="fb-sms-btn" id="fbSmsBtn" onclick="fbSms()">💬 短信</button>
+    <button class="fb-btn fb-dial-btn" id="fbDialBtn" disabled onclick="fbDial()">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="fbDialLabel">请连接手机</span>
+    </button>
+    <button class="fb-btn fb-hangup-btn" id="fbHangupBtn" disabled onclick="fbHangup()">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span id="fbHangupLabel">请连接手机</span>
+    </button>
+    <button class="fb-btn fb-sms-btn" id="fbSmsBtn" onclick="fbSms()">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      短信
+    </button>
     <div class="fb-sep"></div>
-    <button class="fb-restore-btn" id="fbRestoreBtn" onclick="restoreMain()" title="恢复主界面">⬆</button>
-    <button class="fb-close-btn" id="fbCloseBtn" onclick="fbExit()" title="退出">✕</button>
+    <button class="fb-btn fb-restore-btn" id="fbRestoreBtn" onclick="restoreMain()" title="恢复主界面">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="fb-btn fb-close-btn" id="fbCloseBtn" onclick="fbExit()" title="退出">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
     <div class="fb-resize-handle" id="fbResizeHandle"></div>
   </div>
   <div class="fb-toast" id="fbToast"></div>
 </div>
 
 <!-- 浮动横条右键菜单 -->
-<div id="fbMenu" style="display:none;position:fixed;min-width:160px;background:rgba(26,29,36,0.9);border:1px solid rgba(201,168,76,0.25);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:9999;">
-  <div class="fb-menu-item" onclick="restoreMain()">🏠 显示主窗口</div>
-  <div class="fb-menu-item" onclick="openSettings()">⚙ 打开设置</div>
+<div id="fbMenu" class="fb-menu" style="display:none;position:fixed;min-width:170px;z-index:9999;">
+  <div class="fb-menu-item" onclick="restoreMain()"><svg viewBox="0 0 24 24" fill="none"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2h-4v-7h-6v7H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>显示主窗口</div>
+  <div class="fb-menu-item" onclick="openSettings()"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>打开设置</div>
   <div class="fb-menu-sep"></div>
-  <div class="fb-menu-item" onclick="fbDial()">📞 拨打</div>
-  <div class="fb-menu-item" onclick="fbHangup()">📵 挂断</div>
-  <div class="fb-menu-item" onclick="fbSms()">💬 短信</div>
+  <div class="fb-menu-item" onclick="fbDial()"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>拨打</div>
+  <div class="fb-menu-item" onclick="fbHangup()"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>挂断</div>
+  <div class="fb-menu-item" onclick="fbSms()"><svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>短信</div>
   <div class="fb-menu-sep"></div>
-  <div class="fb-menu-item fb-menu-danger" onclick="fbClear()">✕ 清空号码</div>
-  <div class="fb-menu-item fb-menu-danger" onclick="fbExit()">⟳ 退出</div>
+  <div class="fb-menu-item fb-menu-danger" onclick="fbClear()"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>清空号码</div>
+  <div class="fb-menu-item fb-menu-danger" onclick="fbExit()"><svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>退出</div>
 </div>
 
 <style>
 #floatbar { position:fixed; inset:0; z-index:8888; display:none; align-items:center; justify-content:center; }
-.float-bar { display:inline-flex; align-items:center; gap:5px; background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:24px; padding:0 8px 0 10px; height:36px; box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); cursor:move; user-select:none; transition:box-shadow 0.2s,border-color 0.2s; position:relative; }
-.float-bar:hover { border-color:var(--gold); box-shadow:0 4px 30px rgba(201,168,76,0.12),inset 0 1px 0 rgba(255,255,255,0.1); }
+.float-bar { display:inline-flex; align-items:center; gap:5px; background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:var(--r-pill); padding:0 8px 0 12px; height:38px; box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter:var(--floatbar-blur); -webkit-backdrop-filter:var(--floatbar-blur); cursor:move; user-select:none; transition:box-shadow 0.2s,border-color 0.2s; position:relative; }
+.float-bar:hover { border-color:var(--primary); box-shadow:0 4px 30px rgba(var(--primary-rgb),.12),inset 0 1px 0 rgba(255,255,255,0.1); }
 .float-bar.dragging { box-shadow:0 8px 32px rgba(0,0,0,0.5); opacity:0.92; }
 .fb-dot { width:8px; height:8px; border-radius:50%; background:var(--red); box-shadow:0 0 6px var(--red); flex-shrink:0; }
 .fb-dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:pulse 1.5s infinite; }
-.fb-sep { width:1px; height:20px; background:rgba(255,255,255,0.08); flex-shrink:0; margin:0 1px; }
-.fb-clear-btn { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:3px 6px; color:var(--gold-light); font-size:11px; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
-.fb-clear-btn:hover { background:rgba(255,255,255,0.1); border-color:var(--gold); }
+.fb-sep { width:1px; height:20px; background:var(--divider); flex-shrink:0; margin:0 1px; }
+.fb-btn { display:inline-flex; align-items:center; gap:4px; border-radius:var(--r-sm); padding:4px 8px; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; font-family:var(--font-family); }
+.fb-btn svg { width:13px; height:13px; }
+.fb-clear-btn { background:var(--surface); border:1px solid var(--border); color:var(--text-2); }
+.fb-clear-btn:hover { background:var(--input-bg); border-color:var(--red); color:var(--red); }
 .fb-clear-btn:active { transform:scale(0.95); }
-.fb-input { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:3px 8px; color:var(--text); font-size:12px; font-weight:600; flex:1; min-width:0; max-width:130px; outline:none; letter-spacing:0.5px; transition:border-color 0.15s; }
-.fb-input::placeholder { color:var(--text2); font-size:10px; font-weight:400; }
-.fb-input:focus { border-color:var(--gold); }
-.fb-dial-btn { background:var(--gradient-green); border:none; border-radius:10px; padding:3px 8px; color:white; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; display:flex; align-items:center; gap:2px; }
+.fb-input { background:var(--input-bg); border:1px solid var(--border-input); border-radius:var(--r-sm); padding:4px 8px; color:var(--text); font-size:12px; font-weight:600; flex:1; min-width:0; max-width:130px; outline:none; letter-spacing:0.5px; transition:border-color 0.15s, box-shadow 0.15s; }
+.fb-input::placeholder { color:var(--text-2); font-size:10px; font-weight:400; }
+.fb-input:focus { border-color:var(--primary); box-shadow:0 0 0 2px rgba(var(--primary-rgb),.12); }
+.fb-dial-btn { background:var(--gradient-green); border:none; color:white; }
 .fb-dial-btn:hover:not(:disabled) { filter:brightness(1.15); }
-.fb-dial-btn:disabled { background:var(--bg3); color:var(--red); cursor:default; opacity:0.7; font-size:10px; }
-.fb-hangup-btn { background:var(--gradient-red); border:none; border-radius:10px; padding:3px 8px; color:white; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; display:flex; align-items:center; gap:2px; }
+.fb-dial-btn:disabled { background:var(--surface-2); color:var(--text-2); cursor:default; opacity:0.7; }
+.fb-hangup-btn { background:var(--gradient-red); border:none; color:white; }
 .fb-hangup-btn:hover:not(:disabled) { filter:brightness(1.15); }
-.fb-hangup-btn:disabled { background:var(--bg3); color:var(--red); cursor:default; opacity:0.7; font-size:10px; }
-.fb-sms-btn { background:none; border:1px solid var(--gold-dark); border-radius:10px; padding:3px 8px; color:var(--gold); font-size:11px; cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0; }
-.fb-sms-btn:hover { background:rgba(201,168,76,0.12); border-color:var(--gold); }
-.fb-restore-btn { background:none; border:1px solid var(--text2); border-radius:10px; padding:3px 6px; color:var(--text2); font-size:12px; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
-.fb-restore-btn:hover { border-color:var(--gold); color:var(--gold); }
-.fb-close-btn { background:none; border:1px solid transparent; border-radius:10px; padding:3px 6px; color:var(--text2); font-size:13px; cursor:pointer; transition:all 0.15s; flex-shrink:0; }
+.fb-hangup-btn:disabled { background:var(--surface-2); color:var(--text-2); cursor:default; opacity:0.7; }
+.fb-sms-btn { background:var(--surface); border:1px solid var(--border); color:var(--primary); }
+.fb-sms-btn:hover { background:rgba(var(--primary-rgb),.08); border-color:var(--primary); }
+.fb-restore-btn { background:var(--surface); border:1px solid var(--border); color:var(--text-2); }
+.fb-restore-btn:hover { border-color:var(--primary); color:var(--primary); }
+.fb-close-btn { background:none; border:1px solid transparent; color:var(--text-2); padding:4px 6px; }
 .fb-close-btn:hover { background:rgba(231,76,60,0.15); color:var(--red); }
 .fb-resize-handle { position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:10; opacity:0; pointer-events:none; transition:opacity 0.2s; }
-.fb-resize-handle::before { content:''; position:absolute; width:8px; height:8px; bottom:3px; right:3px; border-right:2px solid var(--gold); border-bottom:2px solid var(--gold); opacity:0.5; }
-.fb-resize-handle::after { content:''; position:absolute; width:5px; height:5px; bottom:3px; right:3px; border-right:2px solid var(--gold); border-bottom:2px solid var(--gold); opacity:0.8; }
+.fb-resize-handle::before { content:''; position:absolute; width:8px; height:8px; bottom:3px; right:3px; border-right:2px solid var(--primary); border-bottom:2px solid var(--primary); opacity:0.5; }
+.fb-resize-handle::after { content:''; position:absolute; width:5px; height:5px; bottom:3px; right:3px; border-right:2px solid var(--primary); border-bottom:2px solid var(--primary); opacity:0.8; }
 .float-bar:hover .fb-resize-handle { opacity:1; pointer-events:auto; }
-.fb-toast { position:fixed; top:90px; left:50%; transform:translateX(-50%) translateY(-20px); background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:10px; padding:6px 14px; font-size:11px; color:var(--text); transition:transform 0.25s; z-index:999; white-space:nowrap; pointer-events:none; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); opacity:0; }
+.fb-toast { position:fixed; top:90px; left:50%; transform:translateX(-50%) translateY(-20px); background:var(--floatbar-bg); border:1px solid var(--floatbar-border); border-radius:var(--r-pill); padding:7px 16px; font-size:11px; font-weight:500; color:var(--text); transition:transform 0.25s; z-index:999; white-space:nowrap; pointer-events:none; backdrop-filter:var(--floatbar-blur); -webkit-backdrop-filter:var(--floatbar-blur); opacity:0; }
 .fb-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
 .fb-toast.success { border-color:var(--green); color:var(--green); }
 .fb-toast.error { border-color:var(--red); color:var(--red); }
-.fb-menu-item { padding:8px 12px; font-size:12px; color:var(--text); cursor:pointer; transition:background 0.1s; white-space:nowrap; }
-.fb-menu-item:hover { background:var(--bg3); }
-.fb-menu-item:first-child { border-radius:5px 5px 0 0; }
-.fb-menu-item:last-child { border-radius:0 0 5px 5px; }
+.fb-menu { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--shadow-float); backdrop-filter:var(--floatbar-blur); -webkit-backdrop-filter:var(--floatbar-blur); padding:6px 0; }
+.fb-menu-item { display:flex; align-items:center; gap:8px; padding:8px 12px; margin:0 4px; font-size:12px; color:var(--text); cursor:pointer; transition:background 0.1s; white-space:nowrap; border-radius:var(--r-sm); }
+.fb-menu-item svg { width:14px; height:14px; color:var(--text-2); flex-shrink:0; }
+.fb-menu-item:hover { background:var(--input-bg); }
 .fb-menu-item.fb-menu-danger { color:var(--red); }
+.fb-menu-item.fb-menu-danger svg { color:var(--red); }
 .fb-menu-item.fb-menu-danger:hover { background:rgba(231,76,60,0.1); }
-.fb-menu-sep { height:1px; background:rgba(255,255,255,0.08); margin:2px 8px; }
+.fb-menu-sep { height:1px; background:var(--divider); margin:4px 8px; }
 
 /* 悬浮条模式：隐藏所有非悬浮条内容 */
 body.floatbar-mode .wrap,
 body.floatbar-mode .titlebar,
-body.floatbar-mode .header,
+body.floatbar-mode .hero-card,
 body.floatbar-mode .body,
 body.floatbar-mode .banner,
 body.floatbar-mode .phone-selector,
-body.floatbar-mode .status-display,
 body.floatbar-mode #logToggle,
 body.floatbar-mode #logBody,
 body.floatbar-mode #settingsOverlay,
@@ -1805,8 +2016,13 @@ body.floatbar-mode #floatbar { display:flex !important; }
 <!-- SMS Overlay Panel -->
 <div id="smsOverlay">
   <div class="sms-ov-header">
-    <span>&#x1F4AC; 发送短信</span>
-    <button onclick="closeSmsOverlay()" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:4px 8px;">&#x2715;</button>
+    <span class="sms-ov-title">
+      <span class="sms-ov-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      发送短信
+    </span>
+    <button onclick="closeSmsOverlay()" class="sms-ov-close" title="关闭">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
   </div>
   <div class="sms-ov-body">
     <div>
@@ -1830,7 +2046,10 @@ body.floatbar-mode #floatbar { display:flex !important; }
 <!-- Template Manager Modal -->
 <div id="tplManagerOverlay">
   <div class="tpl-mgr-box">
-    <h3>&#x1F4CB; 短信模板管理</h3>
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4a3 3 0 0 1 6 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      短信模板管理
+    </h3>
     <div id="tplMgrList" class="tpl-mgr-list"></div>
     <div class="tpl-mgr-add">
       <input type="text" id="tplNameInput" placeholder="模板名称" maxlength="10">

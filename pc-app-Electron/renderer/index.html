@@ -6,27 +6,32 @@
 <title>AutoDial</title>
   <style>
   :root {
-    --gold: #C9A84C;
-    --gold-light: #F0C040;
-    --gold-dark: #8B6914;
-    --bg: #111318;
-    --bg2: #1A1D24;
-    --bg3: #22262F;
-    --text: #E8DCC8;
-    --text2: #A09070;
-    --green: #2ECC71;
-    --red: #E74C3C;
-    --radius-sm: 10px;
-    --radius-md: 18px;
-    --radius-lg: 28px;
-    --shadow: 0 18px 48px rgba(5, 8, 20, 0.28);
-    --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    --gradient-green: linear-gradient(135deg, #27AE60, #1E8449);
-    --gradient-red: linear-gradient(135deg, #C0392B, #96281B);
-    --glow-text: none;
-    --floatbar-bg: rgba(26, 29, 36, 0.72);
-    --floatbar-border: rgba(201, 168, 76, 0.25);
-    --floatbar-blur: blur(20px);
+    /* 基础色（sky-blue × light 兜底，运行时由 theme.js 按主题覆盖） */
+    --bg:#EBF4FF; --surface:#FFFFFF; --surface-2:#D8ECFC;
+    --input-bg:#F4F8FC; --icon-tile:#EDF5FD; --border:#DCEAF7;
+    --border-input:#DFEBF6; --divider:#E4EBF1;
+    --hero-border:#BFD9F2; --hero-top:#EDF4FC;
+    --text:#162840; --text-2:#5880A8;
+    --primary:#2B6CC4; --primary-light:#4A90E0; --primary-dark:#1A56A8;
+    --green:#40C057; --red:#F03E3E;
+    --banner-info-bg:#E3EEFB; --banner-info-border:#C4DAF3;
+    --primary-rgb:43,108,196;
+    /* 圆角 4 档 */
+    --r-sm:10px; --r-md:14px; --r-lg:18px; --r-pill:999px;
+    /* 阴影 3 档 */
+    --shadow-card:0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+    --shadow-float:0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+    --shadow-btn:0 3px 10px rgba(var(--primary-rgb),.28);
+    /* 渐变 */
+    --grad-btn:linear-gradient(180deg, var(--primary-light), var(--primary-dark));
+    --grad-hero:linear-gradient(180deg, var(--hero-top), var(--surface));
+    /* 拨打/挂断渐变 + 悬浮条（主题注入覆盖） */
+    --gradient-green:linear-gradient(135deg, #27AE60, #1E8449);
+    --gradient-red:linear-gradient(135deg, #C0392B, #96281B);
+    --floatbar-bg:rgba(255,255,255,.85);
+    --floatbar-border:rgba(43,108,196,.25);
+    --floatbar-blur:blur(20px);
+    --font-family:system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -34,9 +39,12 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-family);
+    letter-spacing: .02em;
     overflow: hidden;
     user-select: none;
+    -webkit-font-smoothing: antialiased;
   }
+  ::selection { background: rgba(var(--primary-rgb), .16); }
   .wrap {
     width: 100%; height: 100%;
     display: flex;
@@ -45,8 +53,8 @@
 
   /* ---- 自定义标题栏 ---- */
   .titlebar {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
+    background: var(--surface);
+    border-bottom: 1px solid var(--divider);
     padding: 0;
     display: flex;
     align-items: center;
@@ -55,23 +63,23 @@
     height: 36px;
   }
   .titlebar .logo {
-    padding-left: 14px;
+    padding-left: 12px;
     font-size: 13px;
     font-weight: 700;
-    color: var(--gold-light);
-    letter-spacing: 2px;
+    color: var(--text);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     flex-shrink: 0;
   }
   .logo-icon {
     width: 20px; height: 20px;
-    background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-    border-radius: var(--radius-sm);
+    background: var(--grad-btn);
+    border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px;
+    color: #fff;
   }
+  .logo-icon svg { width: 11px; height: 11px; }
   .titlebar-btns {
     display: flex;
     margin-left: auto;
@@ -79,44 +87,77 @@
     -webkit-app-region: no-drag;
   }
   .titlebar-btn {
-    width: 46px; height: 36px;
+    width: 40px; height: 36px;
     background: none; border: none;
-    color: var(--text2);
-    font-size: 10px;
+    color: var(--text-2);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background 0.1s;
+    transition: background 0.15s, color 0.15s;
     -webkit-app-region: no-drag;
   }
-  .titlebar-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .titlebar-btn:hover { background: var(--input-bg); color: var(--text); }
   .titlebar-btn.close:hover { background: #C42B1C; color: white; }
 
-  /* ---- 状态栏 ---- */
-  .header {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    padding: 8px 14px;
+  /* ---- Hero 状态大盘（合并原 header/status-display/banner 状态表达） ---- */
+  .hero-card {
+    background: var(--grad-hero);
+    border: 1px solid var(--hero-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    padding: 14px;
+    flex-shrink: 0;
+    animation: panelIn .22s ease-out;
+  }
+  @keyframes panelIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .hero-row1 {
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+  .status-icon {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--icon-tile);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
+    transition: all .3s;
   }
-  .chips {
+  .status-icon svg { width: 19px; height: 19px; }
+  .status-icon.connected {
+    color: var(--green);
+    box-shadow: 0 0 0 3px rgba(46,204,113,.16), 0 0 12px rgba(46,204,113,.35);
+    animation: pulse 1.5s infinite;
+  }
+  .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .status-text-large { font-size: 15px; font-weight: 700; color: var(--text); }
+  .status-subtext { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero-chips {
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
-    flex: 1;
-    justify-content: center;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--divider);
   }
-  .chip {
-    background: var(--bg);
-    border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-sm);
+  .hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
     padding: 4px 10px;
-    text-align: center;
+    font-size: 11px;
+    color: var(--text-2);
+    min-height: 26px;
   }
-  .chip .lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
-  .chip .val { font-size: 13px; font-weight: 700; color: var(--gold-light); letter-spacing: 2px; }
-  .chip .val.ip { font-size: 12px; letter-spacing: 0.5px; }
+  .hero-chip svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-2); }
+  .hero-chip .val { color: var(--text); font-weight: 600; }
+  .hero-chip.clickable { cursor: pointer; }
+  .hero-chip.clickable:hover { border-color: var(--primary); color: var(--primary); }
+  .hero-chip.clickable:hover .val { color: var(--primary); }
   .status-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -128,28 +169,41 @@
     box-shadow: 0 0 6px var(--green);
     animation: pulse 1.5s infinite;
   }
-  .restart-icon {
-    margin-left: 8px; padding: 0 4px; font-size: 11px; cursor: pointer;
-    color: var(--text2); opacity: 0.5; transition: all 0.2s;
-    line-height: 1; display: inline; user-select: none;
-  }
-  .restart-icon:hover { opacity: 1; color: var(--gold); }
-  .restart-icon.spinning { animation: spin 0.8s linear infinite; }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
-  .status-text { font-size: 11px; color: var(--text2); white-space: nowrap; }
+  .hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .hero-icon-btn {
+    width: 26px; height: 26px;
+    border-radius: var(--r-sm);
+    background: var(--icon-tile);
+    border: 1px solid transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .hero-icon-btn svg { width: 13px; height: 13px; }
+  .hero-icon-btn:hover { color: var(--primary); border-color: var(--border); }
+  .hero-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .topmost-switch {
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 5px;
     cursor: pointer; user-select: none;
     flex-shrink: 0;
+    padding: 4px 0;
   }
   .topmost-switch input { display: none; }
   .topmost-switch .sw-track {
     width: 28px; height: 14px;
-    background: var(--bg);
+    background: var(--surface-2);
     border-radius: 7px;
     position: relative;
     transition: background 0.2s;
-    border: 1px solid var(--text2);
+    border: 1px solid var(--border);
   }
   .topmost-switch .sw-track::after {
     content: '';
@@ -157,24 +211,37 @@
     top: 2px; left: 2px;
     width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--text2);
+    background: var(--text-2);
     transition: all 0.2s;
   }
   .topmost-switch input:checked + .sw-track {
-    background: var(--gold-dark);
-    border-color: var(--gold);
+    background: var(--primary);
+    border-color: var(--primary);
   }
   .topmost-switch input:checked + .sw-track::after {
     left: 16px;
-    background: var(--gold-light);
+    background: #fff;
   }
-  .topmost-switch .sw-label { font-size: 10px; color: var(--text2); }
+  .topmost-switch .sw-label { font-size: 10px; color: var(--text-2); }
+
+  /* ---- 连接成功横幅 ---- */
+  .banner {
+    display: none;
+    background: var(--banner-info-bg);
+    border: 1px solid var(--green);
+    border-radius: var(--r-md);
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    flex-shrink: 0;
+  }
+  .banner.show { display: block; }
 
   /* ---- 手机选择器 ---- */
   .phone-selector {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    padding: 6px 14px;
+    padding: 0;
     display: none;
     flex-direction: column;
     gap: 4px;
@@ -187,28 +254,27 @@
     flex-wrap: wrap;
   }
   .phone-tag {
-    background: var(--bg);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--text2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-2);
     cursor: pointer;
     transition: all 0.15s;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     white-space: nowrap;
-    max-width: 180px;
+    max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
-  .phone-tag:hover { border-color: var(--gold-dark); color: var(--text); background: var(--bg3); }
+  .phone-tag:hover { border-color: var(--primary); color: var(--text); background: var(--input-bg); }
   .phone-tag.active {
-    border-color: var(--gold);
-    color: var(--gold-light);
-    background: rgba(201,168,76,0.1);
-    box-shadow: 0 0 6px rgba(201,168,76,0.15);
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(var(--primary-rgb),0.08);
+    box-shadow: 0 0 6px rgba(var(--primary-rgb),0.15);
   }
   .phone-tag .phone-dot {
     width: 6px; height: 6px;
@@ -219,26 +285,29 @@
   .phone-tag .phone-name {
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
   }
   .phone-tag .phone-note-hint {
-    font-size: 9px;
-    color: var(--text2);
+    font-size: 10px;
+    color: var(--text-2);
     margin-left: 2px;
+    opacity: .7;
   }
-  .phone-tag.active .phone-note-hint { color: var(--gold); }
+  .phone-tag.active .phone-note-hint { color: var(--primary); }
   .phone-reconnect-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    margin-left: auto; padding: 2px 8px;
-    background: transparent; border: 1px solid var(--bg3); border-radius: var(--radius-sm);
-    color: var(--text2); font-size: 10px; cursor: pointer;
+    margin-left: auto; padding: 2px 6px;
+    background: transparent; border: 1px solid var(--border); border-radius: var(--r-sm);
+    color: var(--text-2); font-size: 10px; cursor: pointer;
     transition: all 0.2s; flex-shrink: 0;
   }
-  .phone-reconnect-btn:hover { border-color: var(--gold); color: var(--gold); background: rgba(201,168,76,0.08); }
-  .phone-reconnect-btn.spinning { color: var(--gold); border-color: var(--gold); pointer-events: none; }
+  .phone-reconnect-btn svg { width: 11px; height: 11px; }
+  .phone-reconnect-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),0.08); }
+  .phone-reconnect-btn.spinning { color: var(--primary); border-color: var(--primary); pointer-events: none; }
   .phone-rename-input {
-    background: var(--bg);
-    border: 1px solid var(--gold);
-    border-radius: var(--radius-sm);
+    background: var(--input-bg);
+    border: 1px solid var(--primary);
+    border-radius: var(--r-sm);
     padding: 3px 8px;
     font-size: 11px;
     color: var(--text);
@@ -246,78 +315,83 @@
     width: 120px;
   }
 
-  /* ---- 连接成功横幅 ---- */
-  .banner {
-    display: none;
-    background: rgba(46,204,113,0.12);
-    border-bottom: 1px solid var(--green);
-    padding: 6px 14px;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--green);
-    letter-spacing: 1px;
-    flex-shrink: 0;
-  }
-  .banner.show { display: block; }
-
   /* ---- 主内容区 ---- */
   .body {
     flex: 1;
-    padding: 8px 12px 6px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     overflow-y: auto;
     overflow-x: hidden;
   }
-  .body::-webkit-scrollbar { width: 3px; }
-  .body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .body::-webkit-scrollbar { width: 6px; }
+  .body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
+  .body::-webkit-scrollbar-track { background: transparent; }
 
-  /* 号码输入框 */
+  /* 号码输入卡 */
   .number-box {
-    background: var(--bg2);
-    border: 2px solid var(--gold-dark);
-    border-radius: var(--radius-md);
-    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    padding: 12px 14px;
     flex-shrink: 0;
+    transition: border-color .15s, box-shadow .15s;
   }
-  .number-box:focus-within { border-color: var(--gold); }
+  .number-box:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .14);
+  }
   .number-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
-  .number-lbl { font-size: 9px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
-  .clip-hint { font-size: 9px; color: var(--gold); }
+  .number-lbl { font-size: 12px; font-weight: 500; color: var(--text-2); }
+  .clip-hint { font-size: 11px; color: var(--primary); }
   .clip-hint.flash { animation: flash 0.4s ease; }
   @keyframes flash { 50%{ filter: brightness(1.15); } }
   .number-input {
     background: none; border: none; outline: none;
     font-size: 24px; font-weight: 700;
     color: var(--text); width: 100%;
-    letter-spacing: 3px; caret-color: var(--gold);
+    letter-spacing: 3px; caret-color: var(--primary);
   }
-  .number-input::placeholder { color: var(--text2); font-size: 14px; font-weight: 400; letter-spacing: 1px; }
-  .number-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .number-input::placeholder { color: var(--text-2); font-size: 14px; font-weight: 400; letter-spacing: 1px; }
+  .number-actions { display: flex; gap: 8px; margin-top: 8px; }
   .btn-sm {
-    background: none;
-    border-radius: var(--radius-sm);
-    padding: 4px 10px;
-    font-size: 11px;
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    padding: 6px 14px;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.15s;
+    font-family: inherit;
   }
-  .btn-clear { border: 1px solid var(--bg3); color: var(--text2); }
-  .btn-clear:hover { border-color: var(--red); color: var(--red); }
+  .btn-clear { border: 1px solid var(--border); color: var(--text-2); }
+  .btn-clear:hover { border-color: var(--red); color: var(--red); background: rgba(240,62,62,.05); }
+  .btn-ghost-sm { border: 1px solid var(--border); color: var(--text-2); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; }
+  .btn-ghost-sm svg { width: 13px; height: 13px; }
+  .btn-ghost-sm:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),.06); }
+  .btn-ghost-sm .arrow { transition: transform .2s; display: inline-flex; }
+  .btn-ghost-sm .arrow svg { width: 12px; height: 12px; }
+  .btn-ghost-sm.expanded .arrow { transform: rotate(180deg); }
 
-  /* 拨号盘按钮样式（布局定义在下方） */
+  /* 拨号盘 */
+  .dialpad {
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .dialpad.show { display: grid; }
   .dial-btn {
-    background: var(--bg2);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 7px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 9px 0;
     cursor: pointer;
     transition: all 0.12s;
     display: flex;
@@ -325,70 +399,70 @@
     align-items: center;
     justify-content: center;
     gap: 0px;
+    font-family: inherit;
   }
-  .dial-btn:hover { background: var(--bg3); border-color: var(--gold-dark); }
-  .dial-btn:active { transform: scale(0.93); background: rgba(201,168,76,0.1); border-color: var(--gold); }
+  .dial-btn:hover { background: var(--input-bg); border-color: var(--border-input); }
+  .dial-btn:active { transform: scale(0.93); background: rgba(var(--primary-rgb),0.08); border-color: var(--primary); }
   .dial-btn .num { font-size: 18px; font-weight: 600; color: var(--text); line-height: 1; }
-  .dial-btn .sub { font-size: 7px; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; }
+  .dial-btn .sub { font-size: 9px; color: var(--text-2); letter-spacing: 1px; text-transform: uppercase; }
   .dial-btn.del .num { font-size: 16px; color: var(--red); }
 
   /* 操作按钮 */
-  .action-row { display: flex; gap: 6px; flex-shrink: 0; }
-  .call-btn {
+  .action-row { display: flex; gap: 10px; flex-shrink: 0; }
+  .call-btn, .hangup-btn {
     flex: 1;
-    padding: 10px;
-    background: var(--gradient-green);
-    border: none; border-radius: var(--radius-md);
-    color: white; font-size: 16px; font-weight: 700;
+    height: 46px;
+    border: none;
+    border-radius: var(--r-md);
+    color: white;
+    font-size: 15px; font-weight: 700;
     cursor: pointer; transition: all 0.2s;
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    letter-spacing: 1px;
+    letter-spacing: .02em;
+    font-family: inherit;
   }
+  .call-btn svg, .hangup-btn svg { width: 16px; height: 16px; }
+  .call-btn { background: var(--gradient-green); }
   .call-btn:hover:not(:disabled) { background: var(--gradient-green); filter: brightness(1.15); box-shadow: 0 6px 18px rgba(39,174,96,0.35); }
-  .call-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
-  .hangup-btn {
-    flex: 1;
-    padding: 10px;
-    background: var(--gradient-red);
-    border: none; border-radius: var(--radius-md);
-    color: white; font-size: 16px; font-weight: 700;
-    cursor: pointer; transition: all 0.2s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    letter-spacing: 1px;
-  }
+  .call-btn:disabled { background: var(--surface-2); color: var(--text-2); cursor: default; opacity: .7; }
+  .hangup-btn { background: var(--gradient-red); }
   .hangup-btn:hover:not(:disabled) { background: var(--gradient-red); filter: brightness(1.15); }
-  .hangup-btn:disabled { background: var(--bg3); color: var(--red); cursor: default; opacity: 0.7; font-size: 14px; }
+  .hangup-btn:disabled { background: var(--surface-2); color: var(--text-2); cursor: default; opacity: .7; }
 
   /* 发短信按钮 */
   .sms-row { flex-shrink: 0; }
   .sms-btn {
     width: 100%;
-    padding: 8px;
-    background: none;
-    border: 1px dashed var(--gold-dark);
-    border-radius: var(--radius-md);
-    color: var(--gold);
+    padding: 9px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    color: var(--primary);
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    letter-spacing: 1px;
+    letter-spacing: .02em;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    font-family: inherit;
   }
-  .sms-btn:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); }
+  .sms-btn svg { width: 14px; height: 14px; }
+  .sms-btn:hover { background: rgba(var(--primary-rgb),0.06); border-color: var(--primary); }
 
   /* 主界面快捷短信模板 */
   .index-tpl-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 6px;
+    gap: 6px;
+    margin-top: 8px;
   }
   .index-tpl-tag {
-    background: var(--bg2);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-md);
-    padding: 4px 9px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-input);
+    border-radius: var(--r-pill);
+    padding: 5px 11px;
     font-size: 11px;
-    color: var(--text2);
+    color: var(--text-2);
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
@@ -396,7 +470,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .index-tpl-tag:hover { border-color: var(--gold-dark); color: var(--gold); background: rgba(201,168,76,0.07); }
+  .index-tpl-tag:hover { border-color: var(--primary); color: var(--primary); background: rgba(var(--primary-rgb),.05); }
   .index-tpl-tag:active { transform: scale(0.94); }
 
   /* ---- 日志区（折叠） ---- */
@@ -405,133 +479,66 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 5px 10px;
-    background: var(--bg2);
-    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
     cursor: pointer;
-    font-size: 11px;
-    color: var(--text2);
-    border: 1px solid var(--bg3);
-    transition: border-color 0.2s;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    transition: border-color 0.2s, border-radius 0.2s;
+    font-family: inherit;
   }
-  .log-toggle:hover { border-color: var(--gold-dark); }
-  .log-toggle .arrow { transition: transform 0.2s; font-size: 10px; }
+  .log-toggle:hover { border-color: var(--primary); }
+  .log-toggle .arrow { transition: transform 0.2s; display: inline-flex; }
+  .log-toggle .arrow svg { width: 13px; height: 13px; color: var(--text-2); }
+  .log-toggle.open { border-radius: var(--r-lg) var(--r-lg) 0 0; }
   .log-toggle.open .arrow { transform: rotate(180deg); }
+  .log-toggle .log-toggle-label { display: inline-flex; align-items: center; gap: 7px; }
+  .log-toggle .log-toggle-label svg { width: 14px; height: 14px; color: var(--text-2); }
   .log-body {
     display: none;
     max-height: 130px;
     overflow-y: auto;
-    padding: 6px 8px;
+    padding: 8px;
     gap: 4px;
     flex-direction: column;
-    background: var(--bg2);
-    border-radius: 0 0 8px 8px;
-    border: 1px solid var(--bg3);
-    border-top: none;
+    background: var(--surface);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    border: 1px solid var(--border);
+    border-top: 1px solid var(--divider);
     margin-top: -1px;
   }
   .log-body.open { display: flex; }
-  .log-body::-webkit-scrollbar { width: 3px; }
-  .log-body::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .log-body::-webkit-scrollbar { width: 6px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
   .log-entry {
     display: flex; align-items: baseline; gap: 6px;
-    font-size: 11px; padding: 3px 6px;
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    border-left: 2px solid var(--bg3);
+    font-size: 11px; padding: 4px 8px;
+    border-radius: var(--r-sm);
+    background: var(--input-bg);
+    border-left: 2px solid var(--border);
     animation: fadein 0.2s;
   }
   @keyframes fadein { from{opacity:0;} to{opacity:1;} }
   .log-entry.success { border-left-color: var(--green); }
   .log-entry.error   { border-left-color: var(--red);   }
-  .log-entry.info    { border-left-color: var(--gold);  }
-  .log-entry .lt { color: var(--text2); flex-shrink: 0; font-size: 10px; }
+  .log-entry.info    { border-left-color: var(--primary);  }
+  .log-entry .lt { color: var(--text-2); flex-shrink: 0; font-size: 10px; }
   .log-entry .lm { color: var(--text); }
 
-  /* ---- 连接状态优化（方案3） ---- */
-  .status-display {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px 14px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
-    flex-shrink: 0;
-  }
-  .status-display.hidden { display: none; }
-  .status-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--bg);
-    border: 3px solid var(--red);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    margin-bottom: 10px;
-    transition: all 0.3s;
-  }
-  .status-icon.connected {
-    border-color: var(--green);
-    box-shadow: 0 0 20px rgba(46, 204, 113, 0.3);
-    animation: pulse 1.5s infinite;
-  }
-  .status-text-large {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-  .status-subtext {
-    font-size: 11px;
-    color: var(--text2);
-  }
-  
-  /* ---- 拨号盘切换按钮（方案1） ---- */
-  .dialpad-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 8px;
-    background: var(--bg2);
-    border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-md);
-    color: var(--gold);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-  .dialpad-toggle:hover {
-    background: rgba(201, 168, 76, 0.1);
-    border-color: var(--gold);
-  }
-  .dialpad-toggle .arrow {
-    transition: transform 0.2s;
-  }
-  .dialpad-toggle.expanded .arrow {
-    transform: rotate(180deg);
-  }
-  
-  /* ---- 拨号盘（方案1：默认隐藏） ---- */
-  .dialpad {
-    display: none;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    flex-shrink: 0;
-  }
-  .dialpad.show {
-    display: grid;
-  }
+  /* ---- 拨号盘切换按钮（移入号码卡按钮行） ---- */
+  .dialpad-toggle { margin-left: auto; }
+
+  /* ---- Toast ---- */
   .toast {
-    position: fixed; bottom: 12px; left: 50%;
+    position: fixed; bottom: 14px; left: 50%;
     transform: translateX(-50%) translateY(80px);
-    background: var(--bg3); border: 1px solid var(--gold-dark);
-    border-radius: var(--radius-md); padding: 8px 18px;
-    font-size: 12px; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-pill); box-shadow: var(--shadow-float);
+    padding: 9px 18px;
+    font-size: 12px; font-weight: 500; color: var(--text);
     transition: transform 0.25s; z-index: 999; white-space: nowrap;
   }
   .toast.show { transform: translateX(-50%) translateY(0); }
@@ -545,7 +552,9 @@
 <div class="wrap">
   <!-- 自定义标题栏 -->
   <div class="titlebar">
-    <div class="logo"><div class="logo-icon">&#x1F4DE;</div>AutoDial</div>
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg></div>AutoDial
+    </div>
     <div class="titlebar-btns">
       <button class="titlebar-btn" id="btnSettings" title="设置"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></button>
       <button class="titlebar-btn" id="btnMinimize" title="最小化"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></button>
@@ -553,58 +562,75 @@
     </div>
   </div>
 
-  <!-- 状态栏 -->
-  <div class="header">
-    <div class="chips">
-      <div class="chip"><div class="lbl">IP</div><div class="val ip" id="localIP">&#x2026;</div></div>
-      <div class="chip" id="pinChip" title="点击设置配对码" style="cursor:pointer"><div class="lbl">配对码</div><div class="val" id="pinCode">----</div></div>
-    </div>
-    <div class="status-dot" id="statusDot"></div>
-    <div class="status-text" id="statusText">等待连接</div>
-    <span class="restart-icon" id="restartCloudIcon" title="重连云端">☁</span>
-    <span class="restart-icon" id="restartAppIcon" title="重启软件">⟳</span>
-    <label class="topmost-switch" title="窗口置顶">
-      <input type="checkbox" id="topmostToggle">
-      <span class="sw-track"></span>
-      <span class="sw-label">置顶</span>
-    </label>
-    <label class="topmost-switch" title="悬浮横条">
-      <input type="checkbox" id="floatbarToggle" checked>
-      <span class="sw-track"></span>
-      <span class="sw-label">悬浮条</span>
-    </label>
-  </div>
-
-  <div class="status-display" id="statusDisplay">
-    <div class="status-icon" id="statusIcon">📵</div>
-    <div class="status-text-large" id="statusTextLarge">等待连接</div>
-    <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
-  </div>
-
-  <div class="banner" id="banner">&#x2705; 手机已连接，可以拨号</div>
-
-  <!-- 多手机选择器 -->
-  <div class="phone-selector" id="phoneSelector">
-    <div class="phone-list" id="phoneList"></div>
-  </div>
-
+  <!-- Hero 状态大盘（原 header + status-display + banner 合并） -->
   <div class="body">
+    <div class="hero-card">
+      <div class="hero-row1">
+        <div class="status-icon" id="statusIcon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="hero-text">
+          <div class="status-text-large" id="statusTextLarge">等待连接</div>
+          <div class="status-subtext" id="statusSubtext">请确保手机和电脑在同一局域网</div>
+        </div>
+        <label class="topmost-switch" title="窗口置顶">
+          <input type="checkbox" id="topmostToggle">
+          <span class="sw-track"></span>
+          <span class="sw-label">置顶</span>
+        </label>
+        <label class="topmost-switch" title="悬浮横条">
+          <input type="checkbox" id="floatbarToggle" checked>
+          <span class="sw-track"></span>
+          <span class="sw-label">悬浮条</span>
+        </label>
+      </div>
+      <div class="hero-chips">
+        <span class="hero-chip">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">等待连接</span>
+        </span>
+        <span class="hero-chip" title="本机 IP">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="val ip" id="localIP">…</span>
+        </span>
+        <span class="hero-chip clickable" id="pinChip" title="点击设置配对码">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 4L7 20M17 4l-2 16M4 9h17M3 15h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="val" id="pinCode">----</span>
+        </span>
+        <span class="hero-actions">
+          <button class="hero-icon-btn" id="restartCloudIcon" title="重连云端">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="hero-icon-btn" id="restartAppIcon" title="重启软件">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </span>
+      </div>
+    </div>
+
+    <div class="banner" id="banner">✅ 手机已连接，可以拨号</div>
+
+    <!-- 多手机选择器 -->
+    <div class="phone-selector" id="phoneSelector">
+      <div class="phone-list" id="phoneList"></div>
+    </div>
+
     <div class="number-box">
       <div class="number-row">
         <span class="number-lbl">号码</span>
-        <span class="clip-hint" id="clipHint">&#x1F4CB; 已跟随剪贴板</span>
+        <span class="clip-hint" id="clipHint">📋 已跟随剪贴板</span>
       </div>
       <input type="text" class="number-input" id="numberInput"
-             placeholder="复制号码自动出现&#x2026;" maxlength="20"
+             placeholder="复制号码自动出现…" maxlength="20"
              inputmode="tel" autocomplete="off">
       <div class="number-actions">
         <button class="btn-sm btn-clear" id="btnClear">清除</button>
+        <button class="btn-sm btn-ghost-sm" id="dialpadToggle">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          拨号盘
+          <span class="arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
       </div>
-    </div>
-
-    <div class="dialpad-toggle" id="dialpadToggle">
-      <span>&#x1F4DE; 拨号盘</span>
-      <span class="arrow">&#x25BC;</span>
     </div>
 
     <div class="dialpad" id="dialpad">
@@ -617,24 +643,36 @@
       <button class="dial-btn" data-key="7"><span class="num">7</span><span class="sub">PQRS</span></button>
       <button class="dial-btn" data-key="8"><span class="num">8</span><span class="sub">TUV</span></button>
       <button class="dial-btn" data-key="9"><span class="num">9</span><span class="sub">WXYZ</span></button>
-      <button class="dial-btn" data-key="*"><span class="num">&#x2731;</span></button>
+      <button class="dial-btn" data-key="*"><span class="num">✱</span></button>
       <button class="dial-btn" data-key="0"><span class="num">0</span><span class="sub">+</span></button>
-      <button class="dial-btn del" data-key="del"><span class="num">&#x232B;</span></button>
+      <button class="dial-btn del" data-key="del"><span class="num">⌫</span></button>
     </div>
 
     <div class="action-row">
-      <button class="call-btn" id="callBtn" disabled>&#x1F4DE; 拨号</button>
-      <button class="hangup-btn" id="hangupBtn" disabled>&#x1F4F5; 挂断</button>
+      <button class="call-btn" id="callBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="callBtnLabel">请输入号码</span>
+      </button>
+      <button class="hangup-btn" id="hangupBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span id="hangupBtnLabel">请连接手机</span>
+      </button>
     </div>
     <div class="sms-row">
-      <button class="sms-btn" id="smsBtn">&#x1F4AC; 发短信</button>
+      <button class="sms-btn" id="smsBtn">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        发短信
+      </button>
       <div class="index-tpl-list" id="indexTplList"></div>
     </div>
 
     <div class="log-section">
       <div class="log-toggle" id="logToggle">
-        <span>&#x1F4DD; 日志</span>
-        <span class="arrow">&#x25BC;</span>
+        <span class="log-toggle-label">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6 3h8l4 4v14H6zM9 12h6M9 16h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          日志
+        </span>
+        <span class="arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </div>
       <div class="log-body" id="logBody"></div>
     </div>
@@ -705,24 +743,29 @@ document.getElementById('smsBtn').addEventListener('click', () => {
 });
 
 // ==================== 按钮状态文字 ====================
+const ICON_PHONE_ON = '<svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PHONE_OFF = '<svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+const ICON_SPINNER = '<svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function updateCallBtnText() {
   const btn = document.getElementById('callBtn');
+  const label = document.getElementById('callBtnLabel');
   btn.style.pointerEvents = '';  // v6: 始终恢复可点击性
   if (btn.disabled) {
-    btn.textContent = '\uD83D\uDD0D 请输入号码';
+    label.textContent = '请输入号码';
   } else if (!isConnected) {
     // v6: 未连接 → 重连按钮
-    btn.textContent = '\uD83D\uDD04 重连手机';
+    label.textContent = '重连手机';
   } else {
-    btn.innerHTML = '\uD83D\uDCDE \u62E8\u53F7';
+    label.textContent = '拨 号';
   }
 }
 function updateHangupBtnText() {
-  const btn = document.getElementById('hangupBtn');
-  if (btn.disabled) {
-    btn.textContent = '\uD83D\uDCF1 请连接手机';
+  const label = document.getElementById('hangupBtnLabel');
+  if (document.getElementById('hangupBtn').disabled) {
+    label.textContent = '请连接手机';
   } else {
-    btn.innerHTML = '\uD83D\uDD0E \u6302\u65AD';
+    label.textContent = '挂 断';
   }
 }
 const callBtn = document.getElementById('callBtn');
@@ -778,7 +821,7 @@ async function init() {
     const list = document.getElementById('phoneList');
     list.querySelectorAll('.phone-reconnect-btn').forEach(btn => {
       btn.classList.remove('spinning');
-      btn.textContent = '🔄';
+      btn.innerHTML = ICON_SPINNER;
     });
     // 恢复主拨号按钮
     const callBtn = document.getElementById('callBtn');
@@ -880,7 +923,7 @@ function setPhoneConnected(connected, phoneIP) {
   
   if (connected) {
     // 方案3：优化连接状态显示
-    statusIcon.textContent = '✅';
+    statusIcon.innerHTML = ICON_PHONE_ON;
     statusIcon.className = 'status-icon connected';
     statusTextLarge.textContent = '手机已连接';
     statusSubtext.textContent = phoneIP ? '手机IP: ' + phoneIP : '可以拨号了';
@@ -890,7 +933,7 @@ function setPhoneConnected(connected, phoneIP) {
     banner.className = 'banner show';
   } else {
     // 方案3：优化连接状态显示
-    statusIcon.textContent = '📵';
+    statusIcon.innerHTML = ICON_PHONE_OFF;
     statusIcon.className = 'status-icon';
     statusTextLarge.textContent = '等待连接';
     statusSubtext.textContent = '请确保手机和电脑在同一局域网';
@@ -972,12 +1015,12 @@ function updatePhoneSelector(phones, activeId) {
     const reconnectBtn = document.createElement('span');
     reconnectBtn.className = 'phone-reconnect-btn';
     reconnectBtn.title = '强制重连此手机';
-    reconnectBtn.textContent = '🔄';
+    reconnectBtn.innerHTML = ICON_SPINNER;
     reconnectBtn.addEventListener('click', (e) => {
       e.stopPropagation(); // 不触发选中切换
       if (reconnectBtn.classList.contains('spinning')) return;
       reconnectBtn.classList.add('spinning');
-      reconnectBtn.textContent = '⏳';
+      reconnectBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
       window.api.send('force-reconnect', phone.id);
     });
     tag.appendChild(reconnectBtn);
@@ -1053,7 +1096,7 @@ function dial() {
     const targetPin = lastDialPin || activePin;
     if (!targetPin) { showToast('无可用手机', 'error'); return; }
     const btn = document.getElementById('callBtn');
-    btn.textContent = '⏳ 正在唤醒手机...';
+    document.getElementById('callBtnLabel').textContent = '正在唤醒手机…';
     btn.style.pointerEvents = 'none';
     window.api.send('force-reconnect', targetPin);
     addLog('info', '唤醒手机 (PIN=' + targetPin + ')...');
@@ -1176,14 +1219,14 @@ renderIndexTemplates();
 init();
 </script>
 <!-- PIN 设置弹窗 -->
-<div id="pinModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;justify-content:center;align-items:center;">
-  <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--radius-md);padding:24px;width:300px;">
-    <div style="font-size:15px;font-weight:600;color:var(--gold-light);margin-bottom:16px;">设置配对码</div>
-    <input id="pinInput" type="text" maxlength="11" placeholder="输入11位手机号" style="width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-sm);color:var(--text);font-size:16px;text-align:center;outline:none;letter-spacing:2px;">
+<div id="pinModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-float);padding:20px;width:300px;">
+    <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;">设置配对码</div>
+    <input id="pinInput" type="text" maxlength="11" placeholder="输入11位手机号" style="width:100%;padding:10px 12px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:16px;text-align:center;outline:none;letter-spacing:2px;">
     <div id="pinError" style="display:none;font-size:11px;color:var(--red);margin-top:8px;text-align:center;"></div>
-    <div style="display:flex;gap:10px;margin-top:16px;">
-      <button id="btnPinCancel" style="flex:1;padding:10px;background:var(--bg3);color:var(--text);border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">取消</button>
-      <button id="btnPinSave" style="flex:1;padding:10px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600;">保存</button>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button id="btnPinCancel" style="flex:1;padding:10px;background:var(--surface);color:var(--text-2);border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;font-size:13px;font-family:inherit;">取消</button>
+      <button id="btnPinSave" style="flex:1;padding:10px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;">保存</button>
     </div>
   </div>
 </div>

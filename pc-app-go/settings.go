@@ -29,7 +29,7 @@ func defaultSettings() Settings {
 		TrayExit:    true,
 		AutoStart:   false,
 		SilentStart: false,
-		Theme:       "lavender",
+		Theme:       "sky-blue",
 		Mode:        "light",
 		PhoneNotes:  make(map[string]string),
 	}

@@ -1991,5 +1991,5 @@ const THEME_DATA = [
   },
 ];
 
-var DEFAULT_THEME = 'dark-gold';
-var DEFAULT_MODE = 'dark';
+var DEFAULT_THEME = 'sky-blue';
+var DEFAULT_MODE = 'light';

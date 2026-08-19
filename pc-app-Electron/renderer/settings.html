@@ -6,27 +6,32 @@
 <title>AutoDial 设置</title>
 <style>
   :root {
-    --gold: #C9A84C;
-    --gold-light: #F0C040;
-    --gold-dark: #8B6914;
-    --bg: #111318;
-    --bg2: #1A1D24;
-    --bg3: #22262F;
-    --text: #E8DCC8;
-    --text2: #A09070;
-    --green: #2ECC71;
-    --red: #E74C3C;
-    --radius-sm: 5px;
-    --radius-md: 10px;
-    --radius-lg: 24px;
-    --shadow: none;
-    --font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    --gradient-green: linear-gradient(135deg, #27AE60, #1E8449);
-    --gradient-red: linear-gradient(135deg, #C0392B, #96281B);
-    --glow-text: none;
-    --floatbar-bg: rgba(26, 29, 36, 0.72);
-    --floatbar-border: rgba(201, 168, 76, 0.25);
-    --floatbar-blur: blur(20px);
+    /* 基础色（sky-blue × light 兜底，运行时由 theme.js 按主题覆盖） */
+    --bg:#EBF4FF; --surface:#FFFFFF; --surface-2:#D8ECFC;
+    --input-bg:#F4F8FC; --icon-tile:#EDF5FD; --border:#DCEAF7;
+    --border-input:#DFEBF6; --divider:#E4EBF1;
+    --hero-border:#BFD9F2; --hero-top:#EDF4FC;
+    --text:#162840; --text-2:#5880A8;
+    --primary:#2B6CC4; --primary-light:#4A90E0; --primary-dark:#1A56A8;
+    --green:#40C057; --red:#F03E3E;
+    --banner-info-bg:#E3EEFB; --banner-info-border:#C4DAF3;
+    --primary-rgb:43,108,196;
+    /* 圆角 4 档 */
+    --r-sm:10px; --r-md:14px; --r-lg:18px; --r-pill:999px;
+    /* 阴影 3 档 */
+    --shadow-card:0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+    --shadow-float:0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+    --shadow-btn:0 3px 10px rgba(var(--primary-rgb),.28);
+    /* 渐变 */
+    --grad-btn:linear-gradient(180deg, var(--primary-light), var(--primary-dark));
+    --grad-hero:linear-gradient(180deg, var(--hero-top), var(--surface));
+    /* 拨打/挂断渐变 + 悬浮条（主题注入覆盖） */
+    --gradient-green:linear-gradient(135deg, #27AE60, #1E8449);
+    --gradient-red:linear-gradient(135deg, #C0392B, #96281B);
+    --floatbar-bg:rgba(255,255,255,.85);
+    --floatbar-border:rgba(43,108,196,.25);
+    --floatbar-blur:blur(20px);
+    --font-family:system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -34,9 +39,12 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-family);
+    letter-spacing: .02em;
     overflow: hidden;
     user-select: none;
+    -webkit-font-smoothing: antialiased;
   }
+  ::selection { background: rgba(var(--primary-rgb), .16); }
   .wrap {
     width: 100%; height: 100%;
     display: flex;
@@ -45,24 +53,31 @@
 
   /* 标题栏 */
   .titlebar {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--gold-dark);
+    background: var(--surface);
+    border-bottom: 1px solid var(--divider);
     display: flex;
     align-items: center;
     flex-shrink: 0;
     -webkit-app-region: drag;
-    height: 36px;
+    height: 44px;
     padding: 0 14px;
   }
   .titlebar .logo {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
-    color: var(--gold-light);
-    letter-spacing: 2px;
+    color: var(--text);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
+  .titlebar .logo .logo-ico {
+    width: 22px; height: 22px;
+    border-radius: var(--r-sm);
+    background: var(--icon-tile);
+    color: var(--primary);
+    display: grid; place-items: center;
+  }
+  .titlebar .logo .logo-ico svg { width: 13px; height: 13px; }
   .titlebar-btns {
     display: flex;
     margin-left: auto;
@@ -70,67 +85,75 @@
     -webkit-app-region: no-drag;
   }
   .titlebar-btn {
-    width: 46px; height: 36px;
+    width: 40px; height: 44px;
     background: none; border: none;
-    color: var(--text2);
-    font-size: 10px;
+    color: var(--text-2);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background 0.1s;
+    transition: background 0.15s;
   }
-  .titlebar-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .titlebar-btn:hover { background: var(--input-bg); color: var(--text); }
 
   /* 内容 */
   .content {
     flex: 1;
-    padding: 16px;
+    padding: 14px;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
-  .content::-webkit-scrollbar { width: 3px; }
-  .content::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+  .content::-webkit-scrollbar { width: 6px; }
+  .content::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
 
   .section-title {
     font-size: 11px;
-    color: var(--text2);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--bg3);
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: .02em;
+    margin-bottom: 6px;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
+  .setting-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-card);
+    padding: 4px 14px;
+    flex-shrink: 0;
+  }
   .setting-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px;
-    background: var(--bg2);
-    border-radius: var(--radius-md);
-    margin-bottom: 8px;
-    border: 1px solid var(--bg3);
-    transition: border-color 0.2s;
+    padding: 11px 0;
+    gap: 10px;
   }
-  .setting-item:hover { border-color: var(--gold-dark); }
+  .setting-item + .setting-item,
+  .setting-item + .setting-item.column { border-top: 1px solid var(--divider); }
 
   /* 纵向布局的设置项（主题选择器） */
   .setting-item.column {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .setting-info {
     flex: 1;
   }
   .setting-label {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text);
     margin-bottom: 2px;
   }
   .setting-desc {
     font-size: 11px;
-    color: var(--text2);
+    color: var(--text-2);
     line-height: 1.4;
+    margin-top: 2px;
   }
 
   /* 开关 */
@@ -144,12 +167,13 @@
   }
   .switch input { display: none; }
   .switch .sw-track {
-    width: 36px; height: 18px;
-    background: var(--bg);
+    width: 34px; height: 18px;
+    background: var(--surface-2);
     border-radius: 9px;
     position: relative;
     transition: background 0.2s;
-    border: 1px solid var(--text2);
+    border: 1px solid var(--border);
+    display: block;
   }
   .switch .sw-track::after {
     content: '';
@@ -157,16 +181,16 @@
     top: 2px; left: 2px;
     width: 12px; height: 12px;
     border-radius: 50%;
-    background: var(--text2);
+    background: var(--text-2);
     transition: all 0.2s;
   }
   .switch input:checked + .sw-track {
-    background: var(--gold-dark);
-    border-color: var(--gold);
+    background: var(--primary);
+    border-color: var(--primary);
   }
   .switch input:checked + .sw-track::after {
-    left: 20px;
-    background: var(--gold-light);
+    left: 18px;
+    background: #fff;
   }
 
   /* 选择框 */
@@ -179,25 +203,25 @@
     justify-content: flex-end;
   }
   .select-option {
-    padding: 4px 10px;
-    background: var(--bg);
-    border: 1px solid var(--bg3);
-    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-input);
+    border-radius: var(--r-sm);
     font-size: 11px;
-    color: var(--text2);
+    color: var(--text-2);
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
   }
-  .select-option:hover { border-color: var(--gold-dark); color: var(--text); }
+  .select-option:hover { border-color: var(--primary); color: var(--text); }
   .select-option.active {
-    background: var(--gold-dark);
-    border-color: var(--gold);
-    color: var(--gold-light);
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
     font-weight: 600;
   }
 
-  .spacer { height: 14px; }
+  .spacer { height: 4px; }
 
   /* ==================== 主题选择器 ==================== */
   .theme-grid {
@@ -210,16 +234,18 @@
   .theme-card {
     cursor: pointer;
     text-align: center;
-    transition: transform 0.15s;
-    padding: 4px;
+    transition: all 0.15s;
+    padding: 6px 2px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-input);
+    border-radius: var(--r-sm);
   }
-  .theme-card:hover { transform: scale(1.05); }
-  .theme-card.active { transform: scale(1.05); }
+  .theme-card:hover { border-color: var(--primary); }
+  .theme-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(var(--primary-rgb),.18); }
   .theme-preview {
     width: 100%;
-    height: 32px;
-    border-radius: var(--radius-sm);
-    border: 2px solid transparent;
+    height: 24px;
+    border-radius: 6px;
     overflow: hidden;
     display: flex;
     margin-bottom: 4px;
@@ -229,27 +255,21 @@
     flex: 1;
     height: 100%;
   }
-  .theme-card.active .theme-preview {
-    border-color: var(--gold);
-    box-shadow: 0 0 8px rgba(201,168,76,0.4);
-  }
   .theme-name {
-    font-size: 9px;
-    color: var(--text2);
+    font-size: 10px;
+    color: var(--text-2);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.2;
   }
+  .theme-card.active .theme-name { color: var(--primary); }
 
   /* 模式选择行 */
   .mode-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid var(--bg3);
+    border-top: 1px solid var(--divider);
     flex-wrap: wrap;
     gap: 8px;
   }
@@ -274,7 +294,7 @@
     text-align: center;
     padding: 10px;
     font-size: 10px;
-    color: var(--text2);
+    color: var(--text-2);
     flex-shrink: 0;
   }
 </style>
@@ -284,13 +304,13 @@
 <body>
 <div class="wrap">
   <div class="titlebar">
-    <div class="logo">&#x2699; 设置</div>
+    <div class="logo">
+      <span class="logo-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+      设置
+    </div>
     <div class="titlebar-btns">
       <button class="titlebar-btn" id="btnClose">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/>
-          <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.2"/>
-        </svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>
   </div>
@@ -298,151 +318,146 @@
   <div class="content">
     <!-- 配对码 -->
     <div class="section-title">配对码</div>
-    <div class="setting-item column">
-      <div class="setting-info" style="width:100%">
-        <div class="setting-label">手机号（11位）</div>
-        <div class="setting-desc">用于手机配对，必须与手机上设置的配对码一致</div>
+    <div class="setting-group">
+      <div class="setting-item column">
+        <div class="setting-info">
+          <div class="setting-label">手机号（11位）</div>
+          <div class="setting-desc">用于手机配对，必须与手机上设置的配对码一致</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <input id="pinInput" type="text" maxlength="11" placeholder="输入11位手机号作为配对码" style="flex:1;padding:10px 12px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:14px;outline:none;">
+          <button id="btnSavePin" style="padding:10px 20px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:13px;white-space:nowrap;font-family:inherit;font-weight:600;">保存</button>
+        </div>
+        <div id="pinMsg" style="margin-top:6px;font-size:11px;color:var(--text-2);"></div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <input id="pinInput" type="text" maxlength="11" placeholder="输入11位手机号作为配对码" style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-sm);color:var(--text);font-size:14px;outline:none;">
-        <button id="btnSavePin" style="padding:10px 20px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;white-space:nowrap;">保存</button>
-      </div>
-      <div id="pinMsg" style="margin-top:6px;font-size:11px;color:var(--text2);"></div>
     </div>
-
-    <div class="spacer"></div>
 
     <!-- 窗口行为 -->
     <div class="section-title">窗口行为</div>
-
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">关闭按钮行为</div>
-        <div class="setting-desc">点击标题栏 X 时执行的操作</div>
+    <div class="setting-group">
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">关闭按钮行为</div>
+          <div class="setting-desc">点击标题栏 X 时执行的操作</div>
+        </div>
+        <div class="select-group" id="closeAction">
+          <div class="select-option active" data-value="minimize">最小化</div>
+          <div class="select-option" data-value="exit">退出</div>
+        </div>
       </div>
-      <div class="select-group" id="closeAction">
-        <div class="select-option active" data-value="minimize">最小化</div>
-        <div class="select-option" data-value="exit">退出</div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">托盘图标退出</div>
+          <div class="setting-desc">右键托盘退出时直接退出程序</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="trayExit" checked>
+          <span class="sw-track"></span>
+        </label>
       </div>
     </div>
-
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">托盘图标退出</div>
-        <div class="setting-desc">右键托盘退出时直接退出程序</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="trayExit" checked>
-        <span class="sw-track"></span>
-      </label>
-    </div>
-
-    <div class="spacer"></div>
 
     <!-- 启动 -->
     <div class="section-title">启动</div>
-
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">开机自启动</div>
-        <div class="setting-desc">Windows 启动时自动运行 AutoDial</div>
+    <div class="setting-group">
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">开机自启动</div>
+          <div class="setting-desc">Windows 启动时自动运行 AutoDial</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="autoStart">
+          <span class="sw-track"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="autoStart">
-        <span class="sw-track"></span>
-      </label>
-    </div>
-
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">隐藏界面启动</div>
-        <div class="setting-desc">开机自启动时不显示主窗口，仅托盘运行</div>
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">隐藏界面启动</div>
+          <div class="setting-desc">开机自启动时不显示主窗口，仅托盘运行</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="silentStart">
+          <span class="sw-track"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="silentStart">
-        <span class="sw-track"></span>
-      </label>
     </div>
-
-    <div class="spacer"></div>
 
     <!-- 云中转 -->
     <div class="section-title">云中转</div>
-
-    <div class="setting-item">
-      <div class="setting-info">
-        <div class="setting-label">启用云中转</div>
-        <div class="setting-desc">手机不在同一局域网时通过云服务器中转</div>
+    <div class="setting-group">
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">启用云中转</div>
+          <div class="setting-desc">手机不在同一局域网时通过云服务器中转</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="cloudEnabled">
+          <span class="sw-track"></span>
+        </label>
       </div>
-      <label class="switch">
-        <input type="checkbox" id="cloudEnabled">
-        <span class="sw-track"></span>
-      </label>
+      <div class="setting-item column" id="cloudServerSection">
+        <div class="setting-info">
+          <div class="setting-label">云服务器管理</div>
+          <div class="setting-desc">支持多个云服务器，自动遍历连接，成功即停</div>
+        </div>
+        <div id="cloudServerSummary" style="margin-top:8px;font-size:12px;color:var(--primary);">未配置服务器</div>
+        <div id="cloudStatus" style="margin-top:6px;font-size:11px;color:var(--text-2);"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button id="btnManageServers" style="flex:1;padding:8px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:12px;font-family:inherit;">管理服务器</button>
+          <button id="btnTestServers" style="padding:8px 14px;background:var(--surface);color:var(--text-2);border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;font-size:12px;font-family:inherit;">测试全部</button>
+          <button id="btnFetchServers" style="padding:8px 14px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:12px;font-family:inherit;">获取列表</button>
+        </div>
+      </div>
     </div>
-
-    <div class="setting-item column" id="cloudServerSection">
-      <div class="setting-info" style="width:100%">
-        <div class="setting-label">云服务器管理</div>
-        <div class="setting-desc">支持多个云服务器，自动遍历连接，成功即停</div>
-      </div>
-      <div id="cloudServerSummary" style="margin-top:8px;font-size:12px;color:var(--gold-light);">未配置服务器</div>
-      <div id="cloudStatus" style="margin-top:6px;font-size:11px;color:var(--text2);"></div>
-      <div style="display:flex;gap:8px;margin-top:10px;">
-        <button id="btnManageServers" style="flex:1;padding:8px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">管理服务器</button>
-        <button id="btnTestServers" style="padding:8px 14px;background:var(--bg3);color:var(--text);border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">测试全部</button>
-        <button id="btnFetchServers" style="padding:8px 14px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">获取列表</button>
-      </div>
-    </div>
-
-    <div class="spacer"></div>
 
     <!-- 外观 -->
     <div class="section-title">外观</div>
-
-    <div class="setting-item column">
-      <div class="setting-info" style="width:100%">
-        <div class="setting-label">主题</div>
-        <div class="setting-desc">选择界面风格和配色方案</div>
-      </div>
-      <div class="theme-grid" id="themeGrid"></div>
-      <div class="mode-row">
-        <div class="setting-label">显示模式</div>
-        <div class="mode-grid" id="modeSelect">
-          <div class="select-option active" data-value="dark">&#x1F311; 暗夜</div>
-          <div class="select-option" data-value="dusk">&#x1F306; 黄昏</div>
-          <div class="select-option" data-value="dawn">&#x1F305; 朝阳</div>
-          <div class="select-option" data-value="twilight">&#x1F307; 暮光</div>
-          <div class="select-option" data-value="warm">&#x1F324; 暖光</div>
-          <div class="select-option" data-value="mist">&#x1F325; 晨雾</div>
-          <div class="select-option" data-value="light">&#x2600; 亮白</div>
+    <div class="setting-group">
+      <div class="setting-item column">
+        <div class="setting-info">
+          <div class="setting-label">主题</div>
+          <div class="setting-desc">选择界面风格和配色方案</div>
+        </div>
+        <div class="theme-grid" id="themeGrid"></div>
+        <div class="mode-row">
+          <div class="setting-label">显示模式</div>
+          <div class="mode-grid" id="modeSelect">
+            <div class="select-option active" data-value="dark">🌑 暗夜</div>
+            <div class="select-option" data-value="dusk">🌆 黄昏</div>
+            <div class="select-option" data-value="dawn">🌅 朝阳</div>
+            <div class="select-option" data-value="twilight">🌇 暮光</div>
+            <div class="select-option" data-value="warm">🌤 暖光</div>
+            <div class="select-option" data-value="mist">🌥 晨雾</div>
+            <div class="select-option" data-value="light">☀ 亮白</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="footer">AutoDial v3.4</div>
+  <div class="footer">AutoDial v6.1</div>
 </div>
 
 <!-- 服务器管理弹窗 -->
-<div id="serverModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;justify-content:center;align-items:center;">
-  <div style="background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-md);padding:20px;width:380px;max-height:80vh;display:flex;flex-direction:column;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <span style="font-size:16px;color:var(--gold-light);font-weight:600;">云服务器列表</span>
-      <span id="btnCloseModal" style="cursor:pointer;color:var(--text2);font-size:18px;padding:0 4px;">✕</span>
+<div id="serverModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-float);padding:18px;width:380px;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span style="font-size:15px;color:var(--text);font-weight:700;">云服务器列表</span>
+      <span id="btnCloseModal" style="cursor:pointer;color:var(--text-2);font-size:18px;padding:0 4px;">✕</span>
     </div>
     <div id="serverList" style="flex:1;overflow-y:auto;min-height:60px;"></div>
     <div style="display:flex;gap:8px;margin-top:12px;">
-      <button id="btnAddServer" style="flex:1;padding:8px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;">+ 添加服务器</button>
+      <button id="btnAddServer" style="flex:1;padding:9px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:12px;font-family:inherit;">+ 添加服务器</button>
     </div>
   </div>
 </div>
 
 <!-- 测试结果弹窗 -->
-<div id="testModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;justify-content:center;align-items:center;">
-  <div style="background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-md);padding:20px;width:380px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <span id="testTitle" style="font-size:16px;color:var(--gold-light);font-weight:600;">正在测试...</span>
-      <span id="btnCloseTest" style="cursor:pointer;color:var(--text2);font-size:18px;padding:0 4px;">✕</span>
+<div id="testModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-float);padding:18px;width:380px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span id="testTitle" style="font-size:15px;color:var(--text);font-weight:700;">正在测试...</span>
+      <span id="btnCloseTest" style="cursor:pointer;color:var(--text-2);font-size:18px;padding:0 4px;">✕</span>
     </div>
     <div id="testResults"></div>
   </div>
@@ -457,8 +472,8 @@ document.getElementById('btnClose').addEventListener('click', () => {
 });
 
 // ==================== 主题选择器 ====================
-let currentTheme = 'dark-gold';
-let currentMode = 'dark';
+let currentTheme = 'sky-blue';
+let currentMode = 'light';
 
 function renderThemeCards() {
   const grid = document.getElementById('themeGrid');
@@ -542,17 +557,17 @@ function renderServerList() {
   const container = document.getElementById('serverList');
   container.innerHTML = '';
   if (cloudServers.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--text2);padding:20px;font-size:13px;">暂无服务器，点击下方添加</div>';
+    container.innerHTML = '<div style="text-align:center;color:var(--text-2);padding:20px;font-size:13px;">暂无服务器，点击下方添加</div>';
     return;
   }
   cloudServers.forEach((addr, index) => {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--bg3);gap:8px;';
+    row.style.cssText = 'display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--divider);gap:8px;';
 
     // 序号
     const idx = document.createElement('span');
     idx.textContent = index === 0 ? '①' : '②';
-    idx.style.cssText = 'font-size:14px;min-width:20px;color:' + (index === 0 ? 'var(--gold)' : 'var(--text2)') + ';';
+    idx.style.cssText = 'font-size:14px;min-width:20px;color:' + (index === 0 ? 'var(--primary)' : 'var(--text-2)') + ';';
 
     // 地址
     const addrEl = document.createElement('span');
@@ -562,12 +577,12 @@ function renderServerList() {
     // 连接按钮
     const connBtn = document.createElement('button');
     connBtn.textContent = '连接';
-    connBtn.style.cssText = 'padding:4px 10px;background:var(--gold-dark);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;';
+    connBtn.style.cssText = 'padding:4px 10px;background:var(--grad-btn);color:#fff;border:none;border-radius:var(--r-sm);cursor:pointer;font-size:11px;';
     connBtn.addEventListener('click', () => {
       const enabled = document.getElementById('cloudEnabled').checked;
       window.api.send('connect-cloud-specific', addr);
       document.getElementById('cloudStatus').textContent = '正在连接 ' + stripCloudPrefix(addr) + ' ...';
-      document.getElementById('cloudStatus').style.color = 'var(--gold)';
+      document.getElementById('cloudStatus').style.color = 'var(--primary)';
       document.getElementById('serverModal').style.display = 'none';
     });
 
@@ -577,7 +592,7 @@ function renderServerList() {
     if (index > 0) {
       const upBtn = document.createElement('span');
       upBtn.textContent = '↑';
-      upBtn.style.cssText = 'cursor:pointer;color:var(--text2);font-size:16px;padding:0 4px;';
+      upBtn.style.cssText = 'cursor:pointer;color:var(--text-2);font-size:16px;padding:0 4px;';
       upBtn.addEventListener('click', () => {
         cloudServers.splice(index, 1);
         cloudServers.splice(index - 1, 0, addr);
@@ -616,7 +631,7 @@ document.getElementById('btnAddServer').addEventListener('click', () => {
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = '如: 1.2.3.4:35430';
-  input.style.cssText = 'width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--bg3);border-radius:var(--radius-sm);color:var(--text);font-size:13px;outline:none;margin-bottom:10px;';
+  input.style.cssText = 'width:100%;padding:8px 12px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:13px;outline:none;margin-bottom:10px;';
 
   const listEl = document.getElementById('serverList');
   listEl.insertBefore(input, listEl.firstChild);
@@ -634,7 +649,7 @@ document.getElementById('btnAddServer').addEventListener('click', () => {
       } else if (exists) {
         // 提示已存在 - 临时显示
         input.style.borderColor = 'var(--red)';
-        setTimeout(() => { input.style.borderColor = 'var(--bg3)'; }, 1000);
+        setTimeout(() => { input.style.borderColor = 'var(--border-input)'; }, 1000);
       }
     }
   });
@@ -716,8 +731,8 @@ async function loadSettings() {
     updateCloudSummary();
     document.getElementById('cloudServerSection').style.opacity = (s.cloudEnabled ? '1' : '0.5');
     // 主题设置
-    currentTheme = s.theme || 'dark-gold';
-    currentMode = s.mode || 'dark';
+    currentTheme = s.theme || 'sky-blue';
+    currentMode = s.mode || 'light';
     // 兼容旧版模式名称
     const modeCompat = { 'auto': 'dawn' };
     if (modeCompat[currentMode]) {
@@ -783,7 +798,7 @@ if (typeof window !== 'undefined' && window.api) {
       statusEl.style.color = 'var(--green)';
     } else if (data.enabled && data.servers && data.servers.length > 0) {
       statusEl.textContent = '遍历连接中...';
-      statusEl.style.color = 'var(--gold)';
+      statusEl.style.color = 'var(--primary)';
     } else if (data.enabled) {
       statusEl.textContent = '';
     } else {

@@ -69,6 +69,8 @@
             return await window.go.main.App.GetInfo();
           case 'get-settings':
             return await window.go.main.App.GetSettings();
+          case 'get-theme-setting':
+            return await window.go.main.App.GetSettings();
           case 'read-clipboard':
             return await window.go.main.App.ReadClipboard();
           default:

@@ -16,8 +16,8 @@ const DEFAULT_SETTINGS = {
   trayExit: true,            // 托盘右键退出直接退出程序
   autoStart: false,          // 开机自启动
   silentStart: false,        // 隐藏界面启动
-  theme: 'dark-gold',        // 主题ID
-  mode: 'dark',              // 显示模式 dark/dusk/dawn/twilight/warm/mist/light
+theme: 'sky-blue',        // 主题ID
+mode: 'light',              // 显示模式 dark/dusk/dawn/twilight/warm/mist/light
   phoneNotes: {},            // 手机备注 { "pin|name": "备注" }
   cloudServer: '',           // 云中转服务器地址
   cloudEnabled: false,       // 是否启用云中转

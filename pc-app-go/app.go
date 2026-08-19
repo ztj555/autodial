@@ -120,7 +120,9 @@ func (a *App) GetSettings() map[string]interface{} {
 		"closeAction":  appSettings.CloseAction,
 		"trayExit":     appSettings.TrayExit,
 		"autoStart":    appSettings.AutoStart,
+		"silentStart":  appSettings.SilentStart,
 		"theme":        appSettings.Theme,
+		"mode":         appSettings.Mode,
 		"cloudEnabled": appSettings.CloudEnabled,
 		"cloudServers": appSettings.CloudServers,
 	}

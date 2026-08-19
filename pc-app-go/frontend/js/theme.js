@@ -26,12 +26,25 @@
 
   // CSS变量名映射：JS驼峰 -> CSS连字符
   const COLOR_MAP = {
-    gold: 'gold', goldLight: 'gold-light', goldDark: 'gold-dark',
-    bg: 'bg', bg2: 'bg2', bg3: 'bg3',
-    text: 'text', text2: 'text2',
+    gold: 'primary', goldLight: 'primary-light', goldDark: 'primary-dark',
+    bg: 'bg', bg2: 'surface', bg3: 'surface-2',
+    text: 'text', text2: 'text-2',
     green: 'green', red: 'red',
     floatbarBg: 'floatbar-bg', floatbarBorder: 'floatbar-border', floatbarBlur: 'floatbar-blur'
   };
+
+  // 颜色工具：blend 派生规则与插件端 themes.js 一致
+  function _hexRgb(h) {
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function _blend(a, b, p) {
+    const A = _hexRgb(a), B = _hexRgb(b);
+    return '#' + [0, 1, 2].map(i => {
+      const v = Math.round(A[i] * (100 - p) / 100 + B[i] * p / 100);
+      return v.toString(16).padStart(2, '0');
+    }).join('').toUpperCase();
+  }
 
   const STYLE_MAP = {
     radiusSm: 'radius-sm', radiusMd: 'radius-md', radiusLg: 'radius-lg',
@@ -49,14 +62,32 @@
     // 优先使用指定模式，没有则回退
     const colors = theme[currentMode] || theme.dark;
 
-    // 注入颜色变量（含 floatbar 相关）
+    // 注入颜色变量（含 floatbar 相关）——变量名取 COLOR_MAP 的 value（语义名）
     const colorVars = {};
     for (const [jsKey, cssName] of Object.entries(COLOR_MAP)) {
       if (colors[jsKey] !== undefined) {
-        colorVars[jsKey] = colors[jsKey];
+        colorVars[cssName] = colors[jsKey];
       }
     }
     setCSSVars(colorVars);
+
+    // 注入派生 token（blend 规则与插件端 themes.js 一致）
+    const derived = {
+      inputBg:       _blend(colors.bg2, colors.bg3, 55),
+      iconTile:      _blend(colors.bg2, colors.gold, 8),
+      border:        _blend(colors.bg2, colors.text2, 26),
+      borderInput:   _blend(colors.bg2, colors.text2, 20),
+      divider:       _blend(colors.bg2, colors.text2, 14),
+      heroBorder:    _blend(colors.bg2, colors.gold, 52),
+      heroTop:       _blend(colors.bg2, colors.gold, 5),
+      bannerInfoBg:  _blend(colors.bg2, colors.gold, 10),
+      bannerInfoBorder: _blend(colors.bg2, colors.gold, 32)
+    };
+    setCSSVars(derived);
+    const root = document.documentElement;
+    root.style.setProperty('--primary-rgb', _hexRgb(colors.gold).join(','));
+    root.style.setProperty('--grad-btn',  'linear-gradient(180deg, ' + colors.goldLight + ', ' + colors.goldDark + ')');
+    root.style.setProperty('--grad-hero', 'linear-gradient(180deg, ' + derived.heroTop + ', ' + colors.bg2 + ')');
 
     // 注入风格变量
     if (theme.style) {
