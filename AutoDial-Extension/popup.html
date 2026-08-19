@@ -137,7 +137,7 @@ body::-webkit-scrollbar-track { background: transparent; }
   border: 1px solid var(--border); border-radius: var(--r-pill);
   padding: 10px 12px;
 }
-.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: #B9D4F0; }
+.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: var(--primary); }
 .btn-danger {
   background: var(--surface); color: var(--red);
   border: 1px solid rgba(240,62,62,.3); border-radius: var(--r-pill);
@@ -167,11 +167,11 @@ body::-webkit-scrollbar-track { background: transparent; }
 .info-row:last-child { border-bottom: none; }
 .info-row:hover { background: var(--input-bg); }
 .row-ico {
-  width: 22px; height: 22px; border-radius: 7px;
+  width: 22px; height: 22px; border-radius: var(--r-sm);
   background: var(--icon-tile); color: var(--primary);
   display: grid; place-items: center; flex-shrink: 0;
 }
-.row-ico svg { width: 13px; height: 13px; }
+.row-ico svg { width: 14px; height: 14px; }
 .info-row .label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
 .info-row .value {
   font-size: 13px; font-weight: 500; text-align: right; margin-left: auto;
@@ -189,7 +189,7 @@ body::-webkit-scrollbar-track { background: transparent; }
 .hint-card {
   display: flex; align-items: flex-start; gap: 8px;
   background: var(--banner-info-bg); border: 1px solid var(--banner-info-border);
-  border-radius: 12px; padding: 10px 12px; margin-bottom: 12px;
+  border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 12px;
 }
 .hint-card svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--primary); }
 .hint-card span { font-size: 12px; color: var(--text-2); line-height: 1.5; }
@@ -204,7 +204,7 @@ body::-webkit-scrollbar-track { background: transparent; }
 .group-divider { height: 1px; background: var(--divider); }
 .section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .section-ico {
-  width: 24px; height: 24px; border-radius: 8px;
+  width: 24px; height: 24px; border-radius: var(--r-sm);
   background: var(--icon-tile); color: var(--text-2);
   display: grid; place-items: center; flex-shrink: 0;
 }
@@ -220,7 +220,7 @@ input {
   font-family: inherit; outline: none;
   transition: border-color .15s, background .15s, box-shadow .15s;
 }
-input::placeholder { color: #9AB4CC; }
+input::placeholder { color: var(--text-2); opacity: .7; }
 input:focus {
   border-color: var(--primary);
   background: var(--surface);

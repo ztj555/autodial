@@ -99,7 +99,7 @@
       },
       menuItem: {
         padding: '8px 10px',
-        margin: '0 4px',
+        margin: '0 2px',
         borderRadius: '8px',
         cursor: 'pointer',
         display: 'flex',
@@ -130,6 +130,7 @@
     cloud: '<path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z"/>',
     lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    sync: '<path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4"/>',
   };
   function adIcon(name, size) {
     var s = size || 16;
@@ -666,6 +667,7 @@
         boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
         border: `1px solid ${t.accent}33`,
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        backdropFilter: 'blur(16px)',
         transition: 'opacity .18s ease, transform .18s ease',
       });
 
@@ -867,7 +869,7 @@
         if (item.type === 'account') {
           const row = document.createElement('div');
           Object.assign(row.style, {
-            padding: '8px 10px', margin: '0 4px', borderRadius: '8px',
+            padding: '8px 10px', margin: '0 2px', borderRadius: '8px',
             display: 'flex', alignItems: 'center', gap: '8px',
             whiteSpace: 'nowrap', fontSize: '12px',
           });
@@ -904,7 +906,7 @@
         const row = document.createElement('div');
         Object.assign(row.style, {
           padding: '8px 10px',
-          margin: '0 4px',
+          margin: '0 2px',
           borderRadius: '8px',
           cursor: 'pointer',
           display: 'flex',
@@ -1119,7 +1121,7 @@
           display: 'inline-block',
           flexShrink: '0',
           boxShadow: isActive
-            ? `0 0 0 2px ${t.bg2}, 0 0 0 4px ${theme.accent}`
+            ? `0 0 0 2px ${t.bg2}, 0 0 0 4px ${theme.accent}55`
             : `0 1px 4px ${theme.accent}55`,
         });
         row.appendChild(swatch);
@@ -1234,14 +1236,29 @@
         if (e.key === 'Escape') { closeSettings(); document.removeEventListener('keydown', escClose); }
       });
 
-      // ── 标题 ──
+      // ── 标题（20px 图标底座 + 15px/700 标题 + 右侧 × 关闭） ──
       const title = document.createElement('div');
-      title.innerHTML = adIcon('gear', 17) + '<span>设置</span>';
       Object.assign(title.style, {
-        fontSize: '16px', fontWeight: '700', marginBottom: '18px',
-        color: t.accent, letterSpacing: '0.5px',
-        display: 'flex', alignItems: 'center', gap: '8px',
+        display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px',
       });
+      const tile = document.createElement('span');
+      Object.assign(tile.style, {
+        width: '20px', height: '20px', borderRadius: '6px',
+        background: t.accent + '1F', color: t.accent,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0',
+      });
+      tile.innerHTML = adIcon('gear', 12);
+      const titleText = document.createElement('span');
+      titleText.textContent = '设置';
+      Object.assign(titleText.style, { fontSize: '15px', fontWeight: '700', color: t.text, letterSpacing: '0.5px' });
+      const titleCloseBtn = document.createElement('button');
+      titleCloseBtn.innerHTML = adIcon('x', 14);
+      Object.assign(titleCloseBtn.style, {
+        marginLeft: 'auto', background: 'transparent', border: 'none', cursor: 'pointer',
+        color: t.text2, padding: '4px', display: 'inline-flex', alignItems: 'center', borderRadius: '6px',
+      });
+      titleCloseBtn.addEventListener('click', closeSettings);
+      title.append(tile, titleText, titleCloseBtn);
       dialog.appendChild(title);
 
       // ═══════════════════ PIN 区 ═══════════════════
