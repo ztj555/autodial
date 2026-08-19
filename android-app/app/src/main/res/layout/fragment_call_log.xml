@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:tag="bg"
-    android:background="#888888">
+    android:background="?attr/ad_colorBg">
 
 <LinearLayout
     android:layout_width="match_parent"
@@ -19,7 +19,7 @@
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:tag="topBar"
-        android:background="#888888"
+        android:background="?attr/ad_colorSurface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="4dp"
@@ -32,7 +32,7 @@
             android:drawableStart="@drawable/ic_ph_clipboard_text"
             android:drawablePadding="6dp"
             android:tag="primaryLight"
-            android:textColor="#888888"
+            android:textColor="?attr/ad_colorPrimaryLight"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -148,7 +148,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:tag="bg2"
-        android:background="#888888"
+        android:background="?attr/ad_colorSurface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
@@ -209,7 +209,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:tag="bg2"
-        android:background="#888888"
+        android:background="?attr/ad_colorSurface"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingStart="4dp"
@@ -294,7 +294,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:tag="infoBanner"
-        android:background="#888888"
+        android:background="?attr/ad_colorBanner"
         android:gravity="center"
         android:padding="10dp"
         android:text="需要通话记录权限才能显示"
@@ -311,7 +311,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:tag="infoBanner"
-        android:background="#888888"
+        android:background="?attr/ad_colorBanner"
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingStart="16dp"
@@ -334,7 +334,7 @@
             android:layout_weight="1"
             android:text="上次：卡1  04-25"
             android:tag="primaryLight"
-            android:textColor="#888888"
+            android:textColor="?attr/ad_colorPrimaryLight"
             android:textSize="15sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -359,7 +359,7 @@
             android:tag="primaryBtn"
             android:text="全部"
             android:textSize="12sp"
-            android:textColor="#888888"
+            android:textColor="?attr/ad_colorPrimary"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"
             android:layout_marginEnd="8dp" />
@@ -467,7 +467,7 @@
             android:tag="text"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="#1A1A1A" />
+            android:textColor="?attr/ad_colorTextPrimary" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -476,7 +476,7 @@
             android:text="开始您的第一次拨号吧"
             android:tag="text2"
             android:textSize="14sp"
-            android:textColor="#888888" />
+            android:textColor="?attr/ad_colorTextSecondary" />
 
         <TextView
             android:id="@+id/emptyDialBtn"
@@ -489,7 +489,7 @@
             android:paddingEnd="32dp"
             android:layout_marginTop="24dp"
             android:textSize="16sp"
-            android:textColor="#888888" />
+            android:textColor="?attr/ad_colorPrimary" />
     </LinearLayout>
 
 </LinearLayout><!-- end inner LinearLayout -->
@@ -506,7 +506,7 @@
         android:tag="primaryBtn"
         android:text=""
         android:drawableStart="@drawable/ic_dialpad"
-        android:textColor="#888888"
+        android:textColor="?attr/ad_colorPrimary"
         android:textSize="24sp"
         android:elevation="6dp" />
 

@@ -1,13 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 主主题：暗色 -->
+    <!-- 主主题：默认天空蓝·亮色（与 ThemeManager DEFAULT_THEME sky-blue × light 一致） -->
     <style name="Theme.AutoDial" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#C9A84C</item>
-        <item name="colorPrimaryDark">#111318</item>
-        <item name="colorAccent">#F0C040</item>
-        <item name="android:windowBackground">#111318</item>
-        <item name="android:statusBarColor">#111318</item>
-        <item name="android:navigationBarColor">#111318</item>
+        <item name="colorPrimary">#2B6CC4</item>
+        <item name="colorPrimaryDark">#1A56A8</item>
+        <item name="colorAccent">#4A90E0</item>
+        <item name="android:windowBackground">#EBF4FF</item>
+        <item name="android:statusBarColor">#EBF4FF</item>
+        <item name="android:navigationBarColor">#EBF4FF</item>
+        <!-- 布局占位色收口到主题属性（运行时 ThemeManager 按 tag 覆盖） -->
+        <item name="ad_colorPrimary">#2B6CC4</item>
+        <item name="ad_colorPrimaryLight">#4A90E0</item>
+        <item name="ad_colorBg">#EBF4FF</item>
+        <item name="ad_colorSurface">#FFFFFF</item>
+        <item name="ad_colorSurface2">#D8ECFC</item>
+        <item name="ad_colorTextPrimary">#162840</item>
+        <item name="ad_colorTextSecondary">#5880A8</item>
+        <item name="ad_colorGreen">#40C057</item>
+        <item name="ad_colorDivider">#E4EBF1</item>
+        <item name="ad_colorBanner">#E3EEFB</item>
     </style>
 
     <!-- BottomSheetDialog 主题：透明背景 + 圆角 -->

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AutoDial 主题属性（sky-blue 默认值定义在 themes.xml；运行时由 ThemeManager 注入覆盖） -->
+    <attr name="ad_colorPrimary" format="color" />
+    <attr name="ad_colorPrimaryLight" format="color" />
+    <attr name="ad_colorBg" format="color" />
+    <attr name="ad_colorSurface" format="color" />
+    <attr name="ad_colorSurface2" format="color" />
+    <attr name="ad_colorTextPrimary" format="color" />
+    <attr name="ad_colorTextSecondary" format="color" />
+    <attr name="ad_colorGreen" format="color" />
+    <attr name="ad_colorDivider" format="color" />
+    <attr name="ad_colorBanner" format="color" />
+</resources>
