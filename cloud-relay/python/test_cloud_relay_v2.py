@@ -279,8 +279,8 @@ class TestAuthBoundaries(unittest.TestCase):
     def test_write_endpoints_have_auth_check(self):
         """Write operations must call _check_admin."""
         write_endpoints = [
-            "if path == '/api/v1/advisor/set_admin':",
-            "if path == '/api/v1/advisor/del_admin':",
+            "if path == '/api/v1/admin/add':",
+            "if path == '/api/v1/admin/del':",
             "if path == '/api/v1/pin/set_group':",
             "if path == '/api/v1/group/add':",
             "if path == '/api/v1/group/del':",
