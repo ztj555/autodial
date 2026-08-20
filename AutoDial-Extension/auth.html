@@ -170,7 +170,8 @@ async function respond(allow) {
       type: 'respondAuth',
       request_id: rid,
       allow: allow,
-      api: api
+      api: api,
+      pin: pin
     });
     if (r && r.ok) {
       st.className = 'status success';

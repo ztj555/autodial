@@ -41,8 +41,10 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
         private const val CACHE_COL_SIM_SLOT = "sim_slot"
         private const val CACHE_COL_TIME = "call_time"
 
-        private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        private val dateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        // F9修复: SimpleDateFormat 非线程安全，改用 ThreadLocal（与 FileLogger 同款修法）
+        // 此前该单例被主线程与同步 executor 线程并发 format()，偶发崩溃/日期错乱
+        private val dateFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+        private val dateTimeFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     }
 
     data class DialRecord(
@@ -439,7 +441,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
         if (cursor.moveToFirst()) {
             do {
                 val time = cursor.getLong(0)
-                val date = dateFormat.format(Date(time))
+                val date = dateFormat.get().format(Date(time))
                 countMap[date] = (countMap[date] ?: 0) + 1
             } while (cursor.moveToNext())
         }
@@ -449,7 +451,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             val cal = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_MONTH, -(days - 1 - i))
             }
-            val date = dateFormat.format(cal.time)
+            val date = dateFormat.get().format(cal.time)
             list.add(DayStats(date, countMap[date] ?: 0))
         }
         return list
@@ -485,7 +487,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
                     val cal = Calendar.getInstance().apply {
                         add(Calendar.DAY_OF_MONTH, -(days - 1 - i))
                     }
-                    val date = dateFormat.format(cal.time)
+                    val date = dateFormat.get().format(cal.time)
                     list.add(DayStats(date, 0, 0))
                 }
                 return list
@@ -506,7 +508,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
                 while (it.moveToNext()) {
                     val time = it.getLong(dateIdx)
                     val duration = it.getLong(durIdx)
-                    val date = dateFormat.format(Date(time))
+                    val date = dateFormat.get().format(Date(time))
                     countMap[date] = (countMap[date] ?: 0) + 1
                     durationMap[date] = (durationMap[date] ?: 0) + duration
                     if (duration > 0) connectedMap[date] = (connectedMap[date] ?: 0) + 1
@@ -520,7 +522,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             val cal = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_MONTH, -(days - 1 - i))
             }
-            val date = dateFormat.format(cal.time)
+            val date = dateFormat.get().format(cal.time)
             list.add(DayStats(date, countMap[date] ?: 0, durationMap[date] ?: 0,
                 connectedMap[date] ?: 0))
         }
@@ -622,9 +624,9 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
     }
 
     /** 格式化时间为日期时间字符串 */
-    fun formatDateTime(timeMs: Long): String = dateTimeFormat.format(Date(timeMs))
+    fun formatDateTime(timeMs: Long): String = dateTimeFormat.get().format(Date(timeMs))
 
-    fun formatDate(timeMs: Long): String = dateFormat.format(Date(timeMs))
+    fun formatDate(timeMs: Long): String = dateFormat.get().format(Date(timeMs))
 
     /**
      * v7: 从 sim_cache 查询号码使用的 SIM 卡槽

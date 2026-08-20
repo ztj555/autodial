@@ -341,7 +341,8 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 100) {
             startService(DialService.newIntent(this))
-            (fragments.getOrNull(1) as? CallLogFragment)?.refreshIfNeeded()
+            // A1修复: fragments 下标 0 才是 CallLogFragment（原 344 行误用 1，导致授权后通话列表不刷新）
+            (fragments.getOrNull(0) as? CallLogFragment)?.refreshIfNeeded()
         }
     }
 }

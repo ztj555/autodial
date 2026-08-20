@@ -1373,7 +1373,7 @@ function addLog(type, msg) {
   const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
   const el = document.createElement('div');
   el.className = 'log-entry ' + type;
-  el.innerHTML = '<span class="lt">' + t + '</span><span class="lm">' + msg + '</span>';
+  el.innerHTML = '<span class="lt">' + t + '</span><span class="lm">' + escapeHtml(msg) + '</span>';
   body.appendChild(el);
   body.scrollTop = body.scrollHeight;
   while (body.children.length > 80) body.removeChild(body.firstChild);
@@ -1825,7 +1825,7 @@ async function addCloudServer(){var a=prompt('输入云服务器地址（如 101
 function removeCloudServer(i){_cloudServers.splice(i,1);renderCloudServerList();updateCloudConfig();}
 async function testCloudServers(){if(!_cloudServers.length)return;var s=document.getElementById('cloudSummary');s.textContent='测试中...';try{var r=await window.go.main.App.TestCloudServers(_cloudServers);if(r&&r.length){var ok=r.filter(function(x){return x.ok}).length;s.textContent=ok+'/'+r.length+' 个可达';s.style.color=ok>0?'var(--green)':'var(--red)';}}catch(e){s.textContent='测试失败';}}
 async function fetchCloudServers(){try{var list=await window.go.main.App.FetchCloudServers();if(list&&list.length){_cloudServers=list.map(function(x){return x.replace(/^(https?|wss?):\/\//i,'');});renderCloudServerList();updateCloudConfig();document.getElementById('cloudSummary').textContent='获取到 '+list.length+' 个服务器';document.getElementById('cloudSummary').style.color='var(--green)';}}catch(e){document.getElementById('cloudSummary').textContent='获取失败';}}
-function renderCloudServerList(){var e=document.getElementById('cloudServerList');if(!_cloudServers.length){e.innerHTML='<div style="font-size:12px;color:var(--text-2);padding:4px 0;">点击 [+ 添加] 或 [获取列表]</div>';}else{e.innerHTML=_cloudServers.map(function(s,i){return '<div class="cloud-server-row"><span class="cs-addr">'+s+'</span><button class="cs-del" onclick="removeCloudServer('+i+')" title="删除">\u00d7</button></div>';}).join('');}}
+function renderCloudServerList(){var e=document.getElementById('cloudServerList');if(!_cloudServers.length){e.innerHTML='<div style="font-size:12px;color:var(--text-2);padding:4px 0;">点击 [+ 添加] 或 [获取列表]</div>';}else{e.innerHTML=_cloudServers.map(function(s,i){return '<div class="cloud-server-row"><span class="cs-addr">'+escapeHtml(s)+'</span><button class="cs-del" onclick="removeCloudServer('+i+')" title="删除">\u00d7</button></div>';}).join('');}}
 async function updateCloudConfig(){try{await window.go.main.App.UpdateCloudConfig(_cloudEnabled,_cloudServers);}catch(e){}}
 
 // ==================== 设置面板（v6.1 补齐） ====================

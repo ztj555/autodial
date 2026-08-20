@@ -26,6 +26,7 @@ RUN echo '#!/usr/bin/env python3' > /app/entrypoint.py && \
     echo 'import asyncio, sys, os' >> /app/entrypoint.py && \
     echo 'sys.path.insert(0, "/app")' >> /app/entrypoint.py && \
     echo 'os.environ["APPDATA"] = "/app/data"' >> /app/entrypoint.py && \
+    echo 'os.environ.setdefault("AUTODIAL_DB_PATH", "/app/data/visits.db")' >> /app/entrypoint.py && \
     echo '' >> /app/entrypoint.py && \
     echo 'from cloud_relay_v2 import run_server, log' >> /app/entrypoint.py && \
     echo '' >> /app/entrypoint.py && \

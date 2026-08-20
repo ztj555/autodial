@@ -15,6 +15,7 @@ import subprocess
 import time
 import sqlite3
 import uuid
+import hashlib
 from collections import defaultdict
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -75,7 +76,23 @@ def setup_logging():
 log = setup_logging()
 
 # ==================== SQLite 访问登记数据库 ====================
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'visits.db')
+# DB 路径：优先环境变量 AUTODIAL_DB_PATH（Docker 场景映射到挂载卷，容器重建不丢数据），
+# 否则与脚本同目录（Windows 桌面部署）
+DB_PATH = os.environ.get('AUTODIAL_DB_PATH') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'visits.db')
+
+def _connect_db():
+    """创建 SQLite 连接并统一设置连接级参数。
+
+    F5修复: busy_timeout 是连接级 PRAGMA，此前只在 init_db 的首个连接上设置，
+    其余 39 处 _connect_db() 在 Python 3.8-3.10 下默认立即报
+    'database is locked'。统一入口后每个连接都带 5s 锁等待。
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    try:
+        conn.execute('PRAGMA busy_timeout=5000')
+    except Exception:
+        pass  # 内存库/极端环境忽略
+    return conn
 
 def init_db():
     """初始化 visits 表及索引，失败时降级到内存数据库"""
@@ -155,7 +172,7 @@ def init_db():
         PRIMARY KEY (device_id, date)
     )'''
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect_db()
         c = conn.cursor()
         # Fix P0-1: WAL mode to prevent DB write locks from blocking reads
         c.execute('PRAGMA journal_mode=WAL')
@@ -194,7 +211,7 @@ def init_db():
     except Exception as e:
         log.error(f'Database initialization failed: {e}. Using in-memory fallback.')
         DB_PATH = ':memory:'
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect_db()
         c = conn.cursor()
         c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
@@ -223,16 +240,25 @@ def init_db():
 
 init_db()
 
+# S6修复: 管理员密码哈希（不再明文存储）与登录失败限频
+_ADMIN_SALT = 'autodial#v4'
+
+def _hash_pwd(pwd):
+    return hashlib.sha256((_ADMIN_SALT + pwd).encode('utf-8')).hexdigest()
+
+# 登录失败时间戳（60 秒窗口内最多 5 次失败，防爆破）
+_login_failures = []
+
 # 首次启动：创建默认管理员账号（如果没有任何账号）
 def _seed_default_admin():
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect_db()
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM admin_accounts')
         if c.fetchone()[0] == 0:
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             c.execute('INSERT INTO admin_accounts (username, password, created_at) VALUES (?, ?, ?)',
-                      ('18335162275', '123456', now_str))
+                      ('18335162275', _hash_pwd('123456'), now_str))
             conn.commit()
             log.info('ADMIN_SEED: 已创建默认管理员账号 (18335162275)')
     except Exception as e:
@@ -493,7 +519,9 @@ PC_TO_PHONE_TYPES = {
     # 上传协议（无状态透传）
     'file_chunk_ack', 'file_upload_error',
     # 访问登记推送
-    'visit_record'
+    'visit_record',
+    # F3修复: PC 端云端唤醒指令此前不在白名单，到达云中继即被丢弃，导致离线手机无法被唤醒
+    'reconnect_request'
 }
 
 async def forward_to_pcs(pin, message, exclude_ws=None):
@@ -523,7 +551,9 @@ async def forward_to_phones(pin, message, exclude_ws=None):
             # 如果指定了 targetDevice，只转发给匹配的设备
             if target_device:
                 phone_name = phone_meta.get('device_name', '')
-                if phone_name != target_device:
+                phone_pin = phone_meta.get('pin', '') or ''
+                # F3修复: 各端历史上 targetDevice 时而传设备名、时而传 PIN，这里两者都兼容
+                if phone_name != target_device and phone_pin != target_device:
                     continue
             try:
                 await phone.send(data)
@@ -671,7 +701,7 @@ async def handle_connection(ws, path=None):
                     try:
                         loop_ref = asyncio.get_running_loop()
                         def _query_owner_name():
-                            conn = sqlite3.connect(DB_PATH)
+                            conn = _connect_db()
                             try:
                                 c = conn.cursor()
                                 c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
@@ -703,7 +733,7 @@ async def handle_connection(ws, path=None):
                 try:
                     loop_ref = asyncio.get_running_loop()
                     def _query_owner_name2():
-                        conn = sqlite3.connect(DB_PATH)
+                        conn = _connect_db()
                         try:
                             c = conn.cursor()
                             c.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
@@ -837,6 +867,10 @@ async def handle_connection(ws, path=None):
 
             # ===== PC 端响应设备授权 =====
             if msg_type == 'auth_response':
+                # 安全修复: 仅允许 PC 端响应授权，防止等待授权的手机自批（此前 meta.pin 已设置即可通过）
+                if meta.get('role') != 'pc':
+                    await ws.send(json.dumps({'type': 'auth_response_ack', 'ok': False, 'reason': '仅 PC 端可响应授权'}))
+                    continue
                 req_id = msg.get('request_id', '')
                 allow = msg.get('allow', False)
                 auth_req = _pending_auths.pop(req_id, None)
@@ -1135,7 +1169,7 @@ def _get_device_default_pin(device_name):
     """查询设备的默认 PIN"""
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect_db()
         c = conn.cursor()
         c.execute('SELECT default_pin FROM phones WHERE device_id = ?', (device_name,))
         row = c.fetchone()
@@ -1150,7 +1184,7 @@ def _set_device_default_pin(device_name, pin):
     """设置/更新设备的默认 PIN"""
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect_db()
         c = conn.cursor()
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         c.execute('''INSERT INTO phones (device_id, default_pin, last_pin, first_seen, last_seen)
@@ -1226,7 +1260,7 @@ def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
             # 标记为已同步
             conn = None
             try:
-                conn = sqlite3.connect(DB_PATH)
+                conn = _connect_db()
                 c = conn.cursor()
                 c.execute('UPDATE visits SET crm_synced=1, updated_at=? WHERE id=?',
                           (datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), visit_id))
@@ -1302,12 +1336,15 @@ async def health_check_handler(path, request_headers):
     
     # API: 状态
     if path == '/api/status':
+        # S3修复: 敏感信息端点需管理员鉴权（此前裸奔泄露在线状态）
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         # 今日拨号数和登记数
         today_dials = 0
         today_visits = 0
         recent_active = []
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             today_str = datetime.now().strftime('%Y-%m-%d')
             c.execute("SELECT COUNT(*) FROM call_records_raw WHERE date(server_time)=?", (today_str,))
@@ -1341,7 +1378,7 @@ async def health_check_handler(path, request_headers):
         # 尝试从 advisor_names 补全姓名
         if active_list:
             try:
-                conn = sqlite3.connect(DB_PATH)
+                conn = _connect_db()
                 c = conn.cursor()
                 for a in active_list:
                     c.execute("SELECT name FROM advisor_names WHERE pin=?", (a['pin'],))
@@ -1372,6 +1409,8 @@ async def health_check_handler(path, request_headers):
     
     # API: 客户端列表
     if path == '/api/clients':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         body = json.dumps({
             'clients': get_clients_list()
         }, ensure_ascii=False).encode('utf-8')
@@ -1379,6 +1418,8 @@ async def health_check_handler(path, request_headers):
     
     # API: 统计数据
     if path == '/api/stats':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         body = json.dumps({
             'total_messages': total_messages,
             'total_bytes_sent': total_bytes_sent,
@@ -1391,6 +1432,8 @@ async def health_check_handler(path, request_headers):
     
     # API: 日志（支持 ?n=500&q=关键词）
     if path == '/api/logs':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         n = int(qs.get('n', ['100'])[0])
         q = qs.get('q', [''])[0]
@@ -1504,7 +1547,7 @@ async def health_check_handler(path, request_headers):
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute(
                 'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
@@ -1531,7 +1574,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_PIN', 'pin 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('SELECT name FROM advisor_names WHERE pin = ?', (pin,))
             row = c.fetchone()
@@ -1556,7 +1599,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_PARAM', 'pin 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             c.execute('''INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?)
@@ -1575,6 +1618,12 @@ async def health_check_handler(path, request_headers):
 
     # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
     if path == '/api/v1/login':
+        # S6修复: 登录失败限频（60 秒窗口最多 5 次），防口令爆破
+        now_ts = time.time()
+        while _login_failures and now_ts - _login_failures[0] > 60:
+            _login_failures.pop(0)
+        if len(_login_failures) >= 5:
+            return (429, JSON_HDR, _err_json('RATE_LIMITED', '尝试过于频繁，请60秒后再试'))
         qs = parse_qs(parsed.query)
         user = qs.get('user', [''])[0].strip()
         pwd = qs.get('pass', [''])[0].strip()
@@ -1582,15 +1631,23 @@ async def health_check_handler(path, request_headers):
             return (401, JSON_HDR, _err_json('LOGIN_FAILED', '请输入账号和密码'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
-            c.execute('SELECT id, username FROM admin_accounts WHERE username = ? AND password = ?', (user, pwd))
+            # S6修复: 密码哈希比对 + 兼容旧明文记录并自动迁移
+            c.execute('SELECT id, username, password FROM admin_accounts WHERE username = ?', (user,))
             row = c.fetchone()
-            if row:
+            if row and (row[2] == _hash_pwd(pwd) or row[2] == pwd):
+                if row[2] != _hash_pwd(pwd):
+                    try:
+                        c.execute('UPDATE admin_accounts SET password=? WHERE id=?', (_hash_pwd(pwd), row[0]))
+                        conn.commit()
+                    except Exception:
+                        pass
                 token = uuid.uuid4().hex
                 _admin_sessions[token] = time.time() + 86400  # 24小时有效
                 log.info(f'ADMIN_LOGIN user={user}')
                 return (200, JSON_HDR, json.dumps({'ok': True, 'token': token, 'username': user}).encode('utf-8'))
+            _login_failures.append(now_ts)
             return (401, JSON_HDR, _err_json('LOGIN_FAILED', '账号或密码错误'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
@@ -1613,7 +1670,7 @@ async def health_check_handler(path, request_headers):
             return _AUTH_ERR
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('SELECT id, username, created_at FROM admin_accounts ORDER BY id')
             rows = c.fetchall()
@@ -1640,11 +1697,11 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('INVALID_PARAM', '密码至少4位'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             c.execute('INSERT INTO admin_accounts (username, password, created_at) VALUES (?, ?, ?)',
-                      (username, password, now_str))
+                      (username, _hash_pwd(password), now_str))
             conn.commit()
             log.info(f'ADMIN_ADD user={username}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'username': username}).encode('utf-8'))
@@ -1666,7 +1723,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_PARAM', 'id 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             # 检查是否只剩一个账号，不允许删除最后一个
             c.execute('SELECT COUNT(*) FROM admin_accounts')
@@ -1696,9 +1753,9 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('INVALID_PARAM', '密码至少4位'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
-            c.execute('UPDATE admin_accounts SET password = ? WHERE id = ?', (newpass, aid))
+            c.execute('UPDATE admin_accounts SET password = ? WHERE id = ?', (_hash_pwd(newpass), aid))
             conn.commit()
             log.info(f'ADMIN_CHPWD id={aid}')
             return (200, JSON_HDR, json.dumps({'ok': True, 'id': aid}).encode('utf-8'))
@@ -1729,17 +1786,24 @@ async def health_check_handler(path, request_headers):
                 })
         return (200, JSON_HDR, json.dumps({'ok': True, 'pending': result}).encode('utf-8'))
 
-    # 响应授权请求: GET /api/v1/auth/respond?request_id=xxx&allow=1|0
+    # 响应授权请求: GET /api/v1/auth/respond?request_id=xxx&allow=1|0&pin=xxx
     if path == '/api/v1/auth/respond':
         qs = parse_qs(parsed.query)
         req_id = qs.get('request_id', [''])[0].strip()
         allow = qs.get('allow', ['0'])[0] == '1'
-        auth_req = _pending_auths.pop(req_id, None)
+        caller_pin = qs.get('pin', [''])[0].strip()
+        auth_req = _pending_auths.get(req_id)
         if not auth_req:
             return (200, JSON_HDR, _err_json('EXPIRED', '授权请求已过期或不存在'))
+        # 安全修复: 响应者必须携带与请求一致的 PIN，防止等待授权的手机自批/他人越权
+        if caller_pin != auth_req['pin']:
+            return (200, JSON_HDR, _err_json('UNAUTHORIZED', 'PIN 不匹配，无法响应此授权请求'))
+        _pending_auths.pop(req_id, None)
         phone_ws = auth_req['ws']
         device_name = auth_req['device_name']
         auth_pin = auth_req['pin']
+        # F1修复: REST 分支此前遗漏 default_pin 赋值，导致 NameError 使授权永远无法完成
+        default_pin = auth_req['default_pin']
         if allow:
             # 授权通过：加入分组发送 auth_ok（不改变 default_pin，仅本次会话有效）
             group = get_group(auth_pin)
@@ -1751,7 +1815,7 @@ async def health_check_handler(path, request_headers):
             # 查询手机主人姓名
             owner_name = ''
             try:
-                conn3 = sqlite3.connect(DB_PATH)
+                conn3 = _connect_db()
                 c3 = conn3.cursor()
                 c3.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
                 row3 = c3.fetchone()
@@ -1801,9 +1865,12 @@ async def health_check_handler(path, request_headers):
 
     # 所有已注册 PIN（含姓名、分组）
     if path == '/api/v1/pins':
+        # S3修复: PIN 即顾问手机号，敏感，需管理员鉴权
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute('''SELECT a.pin, a.name, a.group_id, a.updated_at
@@ -1827,7 +1894,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING', 'pin 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('UPDATE advisor_names SET group_id=? WHERE pin=?', (int(gid) if gid else None, pin))
             conn.commit()
@@ -1840,9 +1907,11 @@ async def health_check_handler(path, request_headers):
 
     # 分组列表: GET /api/v1/groups
     if path == '/api/v1/groups':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute('SELECT * FROM pin_groups ORDER BY id')
@@ -1864,7 +1933,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING', '分组名不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             c.execute('INSERT INTO pin_groups (name, created_at) VALUES (?, ?)', (name, now_str))
@@ -1887,7 +1956,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING', 'id 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('UPDATE advisor_names SET group_id=NULL WHERE group_id=?', (int(gid),))
             c.execute('DELETE FROM pin_groups WHERE id=?', (int(gid),))
@@ -1919,7 +1988,7 @@ async def health_check_handler(path, request_headers):
         conn = None
         try:
             records = json.loads(data_str)
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('''INSERT OR IGNORE INTO phones (device_id, last_pin, first_seen, last_seen)
                          VALUES (?, ?, ?, ?)''', (device_id, pin, now_str, now_str))
@@ -1960,12 +2029,14 @@ async def health_check_handler(path, request_headers):
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('INSERT INTO phone_events (device_id, event_type, event_time, pin, detail, server_time) VALUES (?,?,?,?,?,?)',
                       (device_id, event_type, now_str, event_pin, detail, now_str))
-            c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, first_seen, last_seen)
-                         VALUES (?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+            # F4修复: 原 INSERT OR REPLACE 会把 default_pin/label 重置为空，破坏设备绑定；改为仅更新上报字段
+            c.execute('''INSERT INTO phones (device_id, last_pin, first_seen, last_seen)
+                         VALUES (?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)
+                         ON CONFLICT(device_id) DO UPDATE SET last_pin=excluded.last_pin, last_seen=excluded.last_seen''',
                       (device_id, event_pin, device_id, now_str, now_str))
             conn.commit()
             return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
@@ -1992,10 +2063,11 @@ async def health_check_handler(path, request_headers):
         today_str = datetime.now().strftime('%Y-%m-%d')
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
-            c.execute('''INSERT OR REPLACE INTO phones (device_id, last_pin, device_model, app_version, first_seen, last_seen)
-                         VALUES (?, ?, ?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)''',
+            c.execute('''INSERT INTO phones (device_id, last_pin, device_model, app_version, first_seen, last_seen)
+                     VALUES (?, ?, ?, ?, COALESCE((SELECT first_seen FROM phones WHERE device_id=?), ?), ?)
+                     ON CONFLICT(device_id) DO UPDATE SET last_pin=excluded.last_pin, device_model=excluded.device_model, app_version=excluded.app_version, last_seen=excluded.last_seen''',
                       (device_id, pin, model, version, device_id, now_str, now_str))
             # 从原始记录重算服务器端值
             c.execute('SELECT COUNT(*), SUM(duration), COUNT(CASE WHEN duration>0 THEN 1 END) FROM call_records_raw WHERE device_id=? AND dial_time>=? AND dial_time<?',
@@ -2035,7 +2107,7 @@ async def health_check_handler(path, request_headers):
 
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             inserted = 0
@@ -2114,7 +2186,7 @@ async def health_check_handler(path, request_headers):
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             # 去重：优先用 CRM 来访时间 (mobile+visit_time)，否则回退到当日去重
             if visit_time:
@@ -2166,9 +2238,13 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0]
         group_id = qs.get('group', [''])[0]
+        # S3修复: 仅明确携带单 PIN（手机端同步）可不鉴权；无筛选/按分组均涉及客户数据，必须管理员
+        if not pin:
+            if not _check_admin(hdrs, parsed.query):
+                return _AUTH_ERR
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             if group_id:
@@ -2212,7 +2288,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_ID', '缺少记录 id'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute('DELETE FROM visits WHERE id=?', (int(rid),))
             conn.commit()
@@ -2249,7 +2325,7 @@ async def health_check_handler(path, request_headers):
         values.append(int(rid))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             c.execute(f'UPDATE visits SET {", ".join(fields)} WHERE id=?', values)
             conn.commit()
@@ -2267,9 +2343,11 @@ async def health_check_handler(path, request_headers):
 
     # API: 设备清单 GET /api/v1/devices
     if path == '/api/v1/devices':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
@@ -2314,13 +2392,15 @@ async def health_check_handler(path, request_headers):
 
     # API: 设备PIN历史 GET /api/v1/device-history?device_id=xxx
     if path == '/api/v1/device-history':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0].strip()
         if not device_id:
             return (200, JSON_HDR, _err_json('MISSING', 'device_id 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             c.execute(
@@ -2356,7 +2436,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('INVALID_PIN', '默认PIN须为4位或11位数字'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             if dpin == '-':
@@ -2386,7 +2466,7 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('MISSING_PARAM', 'device_id 不能为空'))
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             c = conn.cursor()
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             c.execute('''INSERT INTO phones (device_id, label, last_seen, first_seen)
@@ -2404,6 +2484,8 @@ async def health_check_handler(path, request_headers):
 
     # API: 通话记录查询 GET /api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=
     if path == '/api/v1/calls':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0]
         pin = qs.get('pin', [''])[0]
@@ -2415,7 +2497,7 @@ async def health_check_handler(path, request_headers):
 
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             where = []
@@ -2478,11 +2560,13 @@ async def health_check_handler(path, request_headers):
 
     # API: 每日对账 GET /api/v1/phone-stats?device_id=
     if path == '/api/v1/phone-stats':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0]
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             if device_id:
@@ -2499,13 +2583,15 @@ async def health_check_handler(path, request_headers):
 
     # API: 手机事件日志 GET /api/v1/events?device_id=&event_type=&limit=
     if path == '/api/v1/events':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0]
         event_type = qs.get('event_type', [''])[0]
         limit = min(int(qs.get('limit', ['100'])[0]), 500)
         conn = None
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             where = []; params = []
@@ -2525,6 +2611,8 @@ async def health_check_handler(path, request_headers):
 
     # API: 连接数历史 GET /api/history
     if path == '/api/history':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
         data = list(connection_history[-288:])  # 最近4小时（288×30s）
         return (200, JSON_HDR, json.dumps({'ok': True, 'history': data}, ensure_ascii=False).encode('utf-8'))
 

@@ -46,8 +46,30 @@ function createServer(deps) {
     ipcMain            // 可选
   } = deps;
 
+  // ==================== 本地端口访问安全校验（S2修复） ====================
+  // 端口仅绑定 127.0.0.1，要求回环 Host（防 DNS rebinding）+ 可信来源，
+  // 阻止任意网页静默拨号/发短信/挂断/打开窗口。可行来源：Chrome 扩展、
+  // Electron 自身页面(file://)、本机工具(无来源)。
+  function isTrustedHttpRequest(req) {
+    const host = String(req.headers.host || '').toLowerCase();
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
+    const trusted = (v) => {
+      const o = String(v || '').toLowerCase();
+      return o === '' || o === 'null' ||
+        o.startsWith('chrome-extension://') ||
+        o.startsWith('file://') ||
+        /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o);
+    };
+    return trusted(req.headers.origin) && trusted(req.headers.referer);
+  }
+
   // ==================== HTTP 服务器 ====================
   const server = http.createServer((req, res) => {
+    if (!isTrustedHttpRequest(req)) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, code: 'FORBIDDEN', message: 'forbidden' }));
+      return;
+    }
     let url;
     try {
       url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -223,7 +245,19 @@ function createServer(deps) {
   });
 
   // ==================== WebSocket 服务器 ====================
-  const wss = new WebSocket.Server({ server });
+  // S2修复: WS 同样校验来源（回环 Host + 可信 Origin），阻止页面 WebSocket 拨号
+  const wss = new WebSocket.Server({
+    server,
+    verifyClient: (info) => {
+      const host = String(info.req.headers.host || '').toLowerCase();
+      if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
+      const o = String(info.origin || '').toLowerCase();
+      return o === '' || o === 'null' ||
+        o.startsWith('chrome-extension://') ||
+        o.startsWith('file://') ||
+        /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o);
+    }
+  });
 
   wss.on('connection', (ws, req) => {
     const clientIP = req.socket.remoteAddress.replace('::ffff:', '');

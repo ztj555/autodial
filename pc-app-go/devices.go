@@ -16,30 +16,34 @@ import (
 )
 
 const (
-	Port               = 35432
-	DiscoveryPort      = 35433
-	HeartbeatTimeout   = 120 * time.Second
-	NeighborTTL        = 30 * time.Second
-	MaxConnections     = 10 // Fix D6: increased from 2 to support multi-phone scenarios
-	AckTimeout         = 3 * time.Second
-	DialQueueTimeout   = 30 * time.Second
-	CloudPingInterval  = 15 * time.Second
-	CloudPongTimeout   = 20 * time.Second
+	Port              = 35432
+	DiscoveryPort     = 35433
+	HeartbeatTimeout  = 120 * time.Second
+	NeighborTTL       = 30 * time.Second
+	MaxConnections    = 10 // Fix D6: increased from 2 to support multi-phone scenarios
+	AckTimeout        = 3 * time.Second
+	DialQueueTimeout  = 30 * time.Second
+	CloudPingInterval = 15 * time.Second
+	CloudPongTimeout  = 20 * time.Second
 )
 
 var (
-	pinCode      string
-	pinMu        sync.RWMutex // Fix B1: protect pinCode from concurrent read/write
-	upgrader     = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-	devices      = make(map[string]*PhoneDevice)
-	activePin    string
-	devicesMu    sync.RWMutex
-	onUpdate     func()
-	pendAcks     = make(map[string]*AckEntry)
-	ackMu        sync.Mutex
-	msgCounter   atomic.Uint64
-	dialQueue    = make(map[string]*DialQueueEntry)
-	dialQueueMu  sync.Mutex
+	pinCode  string
+	pinMu    sync.RWMutex // Fix B1: protect pinCode from concurrent read/write
+	upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+		// S1修复: WS 仅绑定回环端口(127.0.0.1:35432)，校验 Host 与来源，
+		// 阻止任意网页通过 WebSocket 拨号/发短信/挂断
+		return isLoopbackHost(r.Host) && isTrustedLocalOrigin(r.Header.Get("Origin"))
+	}}
+	devices     = make(map[string]*PhoneDevice)
+	activePin   string
+	devicesMu   sync.RWMutex
+	onUpdate    func()
+	pendAcks    = make(map[string]*AckEntry)
+	ackMu       sync.Mutex
+	msgCounter  atomic.Uint64
+	dialQueue   = make(map[string]*DialQueueEntry)
+	dialQueueMu sync.Mutex
 
 	// Cloud
 	cloudWs             *websocket.Conn
@@ -65,19 +69,19 @@ func writePin(newPin string) {
 }
 
 type PhoneDevice struct {
-	Pin          string `json:"pin"`
-	Name         string `json:"name"`
-	Note         string `json:"note"`
-	IP           string `json:"ip"`
-	Active       bool   `json:"active"`
-	IsCloud      bool   `json:"isCloud"`
-	Stale        bool   `json:"stale"`
-	ConnType     string `json:"connectionType"`
-	Status       string `json:"status"`
-	Ws           *websocket.Conn
-	CloudWs      *websocket.Conn
+	Pin           string `json:"pin"`
+	Name          string `json:"name"`
+	Note          string `json:"note"`
+	IP            string `json:"ip"`
+	Active        bool   `json:"active"`
+	IsCloud       bool   `json:"isCloud"`
+	Stale         bool   `json:"stale"`
+	ConnType      string `json:"connectionType"`
+	Status        string `json:"status"`
+	Ws            *websocket.Conn
+	CloudWs       *websocket.Conn
 	LastHeartbeat time.Time
-	ConnectedAt  time.Time
+	ConnectedAt   time.Time
 }
 
 type AckEntry struct {
@@ -137,9 +141,9 @@ func getLocalIP() string {
 
 	// Collect IPs with interface info
 	type ifaceIP struct {
-		ip       string
-		name     string
-		isLAN    bool
+		ip    string
+		name  string
+		isLAN bool
 	}
 	var ips []ifaceIP
 
@@ -285,13 +289,13 @@ func registerDevice(pin string, name, ip string, isCloud bool, ws *websocket.Con
 			return
 		}
 		d := &PhoneDevice{
-			Pin:          pin,
-			Name:         name,
-			IP:           ip,
-			IsCloud:      isCloud,
+			Pin:           pin,
+			Name:          name,
+			IP:            ip,
+			IsCloud:       isCloud,
 			LastHeartbeat: time.Now(),
-			ConnectedAt:  time.Now(),
-			Status:       "online",
+			ConnectedAt:   time.Now(),
+			Status:        "online",
 		}
 		if isCloud {
 			d.ConnType = "cloud"

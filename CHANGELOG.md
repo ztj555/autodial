@@ -1,5 +1,39 @@
 # AutoDial 更新日志
 
+## 2026-08-19
+
+### v4.14 全链路修复 + 安全加固
+
+**云中继 cloud_relay_v2.py**
+- 修复 `GET /api/v1/auth/respond` 引用未定义 `default_pin` 的 NameError（扩展端授权流程恢复可用）
+- 授权防越权：REST `auth/respond` 必须携带与请求一致的 `pin`（错误返回 `UNAUTHORIZED` 且不消耗请求）；WebSocket `auth_response` 仅允许 PC 端响应——封死等待授权的手机自批
+- `reconnect_request` 纳入 `PC_TO_PHONE_TYPES` 转发白名单（此前被静默丢弃，PC 云端唤醒离线手机完全失效）；`forward_to_phones` 的 `targetDevice` 兼容设备名与设备当前 PIN
+- `events/log`、`stats/report` 的 `INSERT OR REPLACE INTO phones` 改为 `ON CONFLICT DO UPDATE`，不再抹掉管理员预设的 `default_pin`/别名（设备绑定被手机上报静默破坏的问题）
+- 新增 `_connect_db()` 统一连接入口（39 处替换），每个连接显式 `timeout=5` + `PRAGMA busy_timeout=5000`，消除低版本 Python 下并发写 `database is locked`
+- 管理员安全：密码 SHA-256 加盐哈希存储（`_hash_pwd`，登录兼容旧明文并自动迁移）；登录限频（60s/5 次失败返回 `429 RATE_LIMITED`）
+- 鉴权收紧：`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events` 及 `/api/v1/visits`（无 pin 时）要求管理员令牌
+- `AUTODIAL_DB_PATH` 环境变量支持（Docker 数据库落持久卷）
+
+**dashboard.html**
+- 敏感查询统一携带会话令牌（`withToken`）；PIN 下拉框 `p.pin` 转义防 Stored XSS
+
+**PC 端（Go + Electron）**
+- 本地端口 35432 增加回环 Host + 可信来源校验（扩展/Electron 页面/本机工具放行；外部网页与 DNS rebinding 拒绝），HTTP 与 WebSocket 均覆盖
+- Go：`sendToPhone` ACK 定时器写入改为非阻塞 select（消除竞态 goroutine 泄漏）；`/sms` 补号码格式校验；`server.go`/`devices.go` 格式化
+- Electron：`set-pin` 错误通过 `pin-error` 通道回显（前端监听 + 校验对齐），消除"假保存成功"；`addLog`/短信模板 innerHTML 转义防 XSS
+
+**Chrome 扩展**
+- 授权弹窗 `respondAuth` 携带 PIN（配合云中继归属校验）
+
+**Android**
+- `MainActivity` 权限回调下标修复（通话列表刷新）；`CallLogDb` 日期格式改 ThreadLocal（消除跨线程竞争）；`ConnectionManager` 日志 PIN/手机号脱敏
+
+**测试**
+- `test_auth.py` 场景4 的 respond 请求补 `pin` 参数，与新版协议一致
+
+**文档**
+- 更新 `README.md`、`AutoDial-API.md`、`部署指南.md`、`待验证问题.md`（本文档）
+
 ## 2026-08-01
 
 ### 云中继并发 / DB 性能 P0 修复 + 测试脚本

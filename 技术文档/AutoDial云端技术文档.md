@@ -1,6 +1,6 @@
 # AutoDial 云端技术文档
 
-> 最后修改：2026-08-01 | Python | SQLite 8表 | 管理面板 5.0 | 管理员鉴权 | 41个API端点 | 纯增量去重 | 并发/DB性能优化
+> 最后修改：2026-08-19 | Python | SQLite 8表 | 管理面板 5.0 | 管理员鉴权（读写端点，v4.14） | 41个API端点 | 纯增量去重 | 并发/DB性能优化 | 全链路修复 v4.14
 
 ---
 
@@ -79,7 +79,7 @@ class PinGroup:
 
 ### 2.4 REST API
 
-REST 端点**默认带 CORS**（`Access-Control-Allow-Origin: *`），MV3 Chrome 扩展通过 `host_permissions` 绕过。管理接口（写操作）需管理员鉴权。
+REST 端点**默认带 CORS**（`Access-Control-Allow-Origin: *`），MV3 Chrome 扩展通过 `host_permissions` 绕过。管理接口（读写操作）需管理员鉴权（v4.14 起敏感读端点同样鉴权）。
 
 #### GET /api/v1/dial
 ```
@@ -127,29 +127,29 @@ Header: X-AutoDial-PIN: 13800138000
 | `RATE_LIMITED` | IP 频率限制（每分钟 5 次，仅 WS 握手返回 auth_fail） |
 | `INVALID_NUMBER` | 号码格式不合法 |
 
-### 2.6 管理 API（Dashboard 专用，写操作需管理员鉴权 🔐）
+### 2.6 管理 API（Dashboard 专用，读写操作需管理员鉴权 🔐；v4.14 起读端点同样鉴权）
 
 | 端点 | 说明 | 鉴权 |
 |------|------|------|
-| `GET /api/status` | 全局状态：连接数、分组数、消息统计、运行时间 | - |
-| `GET /api/clients` | 所有在线客户端详情 | - |
-| `GET /api/stats` | 消息转发统计 + by_type + by_pin + 按天流量 | - |
-| `GET /api/logs?n=100&q=关键词` | 系统日志 | - |
-| `GET /api/v1/devices` | 已注册设备清单 | - |
-| `GET /api/v1/calls` | 通话记录查询（分页） | - |
+| `GET /api/status` | 全局状态：连接数、分组数、消息统计、运行时间 | 🔐 |
+| `GET /api/clients` | 所有在线客户端详情 | 🔐 |
+| `GET /api/stats` | 消息转发统计 + by_type + by_pin + 按天流量 | 🔐 |
+| `GET /api/logs?n=100&q=关键词` | 系统日志 | 🔐 |
+| `GET /api/v1/devices` | 已注册设备清单 | 🔐 |
+| `GET /api/v1/calls` | 通话记录查询（分页） | 🔐 |
 | `GET /api/v1/kick?pin=&role=` | 踢出在线客户端 | 🔐 |
-| `GET /api/v1/phone-stats` | 每日对账数据 | - |
-| `GET /api/v1/events` | 手机行为事件日志 | - |
-| `GET /api/history` | 连接数历史数据（最近4小时） | - |
-| `GET /api/v1/login?user=&pass=` | 管理员登录，返回会话令牌 | - |
+| `GET /api/v1/phone-stats` | 每日对账数据 | 🔐 |
+| `GET /api/v1/events` | 手机行为事件日志 | 🔐 |
+| `GET /api/history` | 连接数历史数据（最近4小时） | 🔐 |
+| `GET /api/v1/login?user=&pass=` | 管理员登录，返回会话令牌（限频 60s/5 次失败，超限返回 `RATE_LIMITED`） | - |
 | `GET /api/v1/logout?token=` | 管理员登出 | - |
 | `GET /api/v1/admin/accounts` | 管理账号列表 | 🔐 |
 | `GET /api/v1/admin/add?user=&pass=` | 添加管理账号 | 🔐 |
 | `GET /api/v1/admin/del?id=` | 删除管理账号 | 🔐 |
 | `GET /api/v1/admin/chpwd?id=&newpass=` | 修改管理账号密码 | 🔐 |
-| `GET /api/v1/auth/pending?pin=` | 查询挂起的设备授权请求 | - |
-| `GET /api/v1/auth/respond?request_id=&allow=` | 响应设备授权请求 | - |
-| `GET /api/v1/device-history?device_id=` | 设备历史 PIN 记录 | - |
+| `GET /api/v1/auth/pending?pin=` | 查询挂起的设备授权请求（同时登记扩展在线） | - |
+| `GET /api/v1/auth/respond?request_id=&allow=&pin=` | 响应设备授权请求（pin 须与请求一致，防越权） | - |
+| `GET /api/v1/device-history?device_id=` | 设备历史 PIN 记录 | 🔐 |
 | `GET /api/v1/device-set-default-pin?device_id=&default_pin=` | 设置设备默认 PIN | 🔐 |
 | `GET /api/v1/device/update?device_id=&label=` | 更新设备别名 | 🔐 |
 
@@ -282,7 +282,7 @@ pip install websockets pystray Pillow
 python cloud_relay_v2.py
 ```
 
-> 管理员鉴权始终启用（管理账号存于 `admin_accounts` 表，首次启动自动创建默认账号）；无环境变量开关、无 v3 JWT 可选模块（已移除）。
+> 管理员鉴权始终启用（管理账号存于 `admin_accounts` 表，首次启动自动创建默认账号）；v4.14 起密码 SHA-256 加盐哈希存储（登录兼容旧明文并自动迁移）、登录接口限频（60s/5 次，返回 `RATE_LIMITED`）、敏感读端点同样鉴权；无环境变量开关、无 v3 JWT 可选模块（已移除）。
 
 ### 5.2 防火墙要求
 

@@ -1,6 +1,6 @@
 # AutoDial v4 API 文档
 
-> 最后修改：2026-08-01 | 云中继端口 35430 | 4/11 位 PIN 兼容 | 管理员鉴权 | 含顾问管理/分组/PIN管理/鉴权 API
+> 最后修改：2026-08-19 | 云中继端口 35430 | 4/11 位 PIN 兼容 | 管理员鉴权（读写端点） | 含顾问管理/分组/PIN管理/鉴权 API
 
 ## REST API（云中继 35430）
 
@@ -67,7 +67,7 @@ Query: ?name=张三&mobile=13900139000&kefu_tel=13800138000&visit_type=贷款咨
 
 #### GET /api/v1/visits?pin=xxx[&group=N] — 查询登记列表
 
-返回登记记录 JSON 数组（非 `{ok}` 包裹），按 `created_at` 降序。`pin` 查单个顾问，`group` 查整组；两者均缺省时返回最近 500 条。
+返回登记记录 JSON 数组（非 `{ok}` 包裹），按 `created_at` 降序。`pin` 查单个顾问（手机端同步使用，走 `X-AutoDial-PIN` 场景免管理员）；`group` 查整组；两者均缺省时返回最近 500 条——**无 `pin` 的查询（含按分组）需管理员鉴权 🔐**。
 
 #### GET /api/v1/visit/update?id=N&name=...&mobile=...&kefu_tel=...&visit_type=... — 更新记录（🔐 管理员）
 
@@ -96,17 +96,17 @@ Header: X-AutoDial-PIN: 13800138000
 
 ### 监控端点
 
-| 端点 | 说明 |
-|------|------|
-| GET `/health` | 健康检查（服务名/版本/端口/运行时间/连接数/分组数） |
-| GET `/api/status` | 仪表盘状态（服务/端口/消息数/流量/今日拨号/今日登记/最近活跃） |
-| GET `/api/clients` | 客户端列表（设备名/角色/PIN/IP/连接时间） |
-| GET `/api/stats` | 流量统计（总消息数/上下行流量/按天/按类型/按 PIN） |
-| GET `/api/logs` | 系统日志（默认最近 100 条，支持 `?n=500&q=关键词`） |
-| GET `/api/history` | 连接数历史（最近 4 小时） |
-| GET `/` | Web 管理面板 HTML |
+| 端点 | 说明 | 鉴权 |
+|------|------|:---:|
+| GET `/health` | 健康检查（服务名/版本/端口/运行时间/连接数/分组数） | — |
+| GET `/api/status` | 仪表盘状态（服务/端口/消息数/流量/今日拨号/今日登记/最近活跃） | 🔐 |
+| GET `/api/clients` | 客户端列表（设备名/角色/PIN/IP/连接时间） | 🔐 |
+| GET `/api/stats` | 流量统计（总消息数/上下行流量/按天/按类型/按 PIN） | 🔐 |
+| GET `/api/logs` | 系统日志（默认最近 100 条，支持 `?n=500&q=关键词`） | 🔐 |
+| GET `/api/history` | 连接数历史（最近 4 小时） | 🔐 |
+| GET `/` | Web 管理面板 HTML | — |
 
-> 所有 JSON 端点均返回 `Access-Control-Allow-Origin: *`（`JSON_HDR` 统一携带 CORS），供 popup 测试连接。
+> 所有 JSON 端点均返回 `Access-Control-Allow-Origin: *`（`JSON_HDR` 统一携带 CORS），供 popup 测试连接。带 🔐 的读端点返回客户隐私/设备信息，需与会话令牌（`?token=` 或 `Authorization: Bearer`）一起调用。
 
 ### 顾问姓名 / PIN / 分组
 
@@ -115,9 +115,9 @@ Header: X-AutoDial-PIN: 13800138000
 | GET `/api/v1/advisor/register?pin=&name=` | 注册/更新顾问姓名（扩展检测到姓名后调用） | — |
 | GET `/api/v1/advisor/name?pin=` | 按 PIN 查询顾问姓名 | — |
 | GET `/api/v1/advisor/update?pin=&name=` | 更新顾问姓名 | 🔐 |
-| GET `/api/v1/pins` | 所有已注册 PIN（含姓名/分组） | — |
+| GET `/api/v1/pins` | 所有已注册 PIN（含姓名/分组，即顾问手机号，隐私） | 🔐 |
 | GET `/api/v1/pin/set_group?pin=&group_id=` | 设置 PIN 分组 | 🔐 |
-| GET `/api/v1/groups` | 分组列表 | — |
+| GET `/api/v1/groups` | 分组列表 | 🔐 |
 | GET `/api/v1/group/add?name=` | 添加分组 | 🔐 |
 | GET `/api/v1/group/del?id=` | 删除分组 | 🔐 |
 
@@ -125,10 +125,10 @@ Header: X-AutoDial-PIN: 13800138000
 
 | 端点 | 说明 | 鉴权 |
 |------|------|:---:|
-| GET `/api/v1/auth/pending?pin=` | 查询挂起的授权请求（扩展每 5s 轮询） | — |
-| GET `/api/v1/auth/respond?request_id=&allow=1|0` | 响应授权请求 | — |
-| GET `/api/v1/devices` | 设备清单（含在线状态/IP/PIN/姓名） | — |
-| GET `/api/v1/device-history?device_id=` | 设备 PIN 历史 | — |
+| GET `/api/v1/auth/pending?pin=` | 查询挂起的授权请求（扩展每 5s 轮询，同时登记扩展在线） | — |
+| GET `/api/v1/auth/respond?request_id=&allow=1\|0&pin=` | 响应授权请求（`pin` 须与请求 PIN 一致，防越权；若不带或错误返回 `UNAUTHORIZED`） | — |
+| GET `/api/v1/devices` | 设备清单（含在线状态/IP/PIN/姓名） | 🔐 |
+| GET `/api/v1/device-history?device_id=` | 设备 PIN 历史 | 🔐 |
 | GET `/api/v1/device-set-default-pin?device_id=&default_pin=` | 设置设备默认 PIN | 🔐 |
 | GET `/api/v1/device/update?device_id=&label=` | 设置设备别名 | 🔐 |
 | GET `/api/v1/kick?pin=&role=` | 踢出在线客户端 | 🔐 |
@@ -140,10 +140,12 @@ Header: X-AutoDial-PIN: 13800138000
 | GET `/api/v1/calls/batch?device_id=&pin=&data=<json>` | 批量上传通话记录 |
 | GET `/api/v1/events/log?device_id=&event_type=&pin=&detail=` | 上报行为事件 |
 | GET `/api/v1/stats/report?device_id=&pin=&model=&version=&count=&duration=&connected=` | 上报每日统计快照 |
-| GET `/api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` | 通话记录查询 |
-| GET `/api/v1/phone-stats?device_id=` | 每日对账 |
-| GET `/api/v1/events?device_id=&event_type=&limit=` | 手机事件日志 |
+| GET `/api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` | 通话记录查询 | 🔐 |
+| GET `/api/v1/phone-stats?device_id=` | 每日对账 | 🔐 |
+| GET `/api/v1/events?device_id=&event_type=&limit=` | 手机事件日志 | 🔐 |
 | GET `/api/v1/visits/batch?data=<json数组>` | 批量导入登记记录 | 🔐 |
+
+> 手机端上报端点（`calls/batch`、`events/log`、`stats/report`）走设备自身上报，无需管理员鉴权。
 
 ### 错误码枚举
 
@@ -158,25 +160,26 @@ Header: X-AutoDial-PIN: 13800138000
 | `MISSING_FIELDS` | 缺少必填字段 | 补全后再试 |
 | `MISSING_PIN` | 缺少 PIN 参数 | 补 PIN 后再试 |
 | `DB_ERROR` | 数据库操作失败 | 联系管理员 |
+| `RATE_LIMITED` | 登录接口 60 秒内失败超 5 次（HTTP 429） | 稍后再试 |
 
-> 其它端点还会返回：`UNAUTHORIZED`（管理员鉴权失败）、`LOGIN_FAILED`（登录失败）、`EXPIRED`（授权请求过期）、`NOT_FOUND`、`MISSING`、`MISSING_PARAM`、`INVALID_PARAM`、`DUPLICATE`、`LAST_ACCOUNT`、`MISSING_ID`、`NO_FIELDS`、`INVALID_JSON`、`SERVER_ERROR` 等，详见各端点。频率限制仅在 WebSocket 握手时以 `auth_fail` 返回，无独立 REST 错误码。
+> 其它端点还会返回：`UNAUTHORIZED`（管理员鉴权失败，含 `auth/respond` 的 PIN 归属校验失败）、`LOGIN_FAILED`（登录失败）、`EXPIRED`（授权请求过期）、`NOT_FOUND`、`MISSING`、`MISSING_PARAM`、`INVALID_PARAM`、`DUPLICATE`、`LAST_ACCOUNT`、`MISSING_ID`、`NO_FIELDS`、`INVALID_JSON`、`SERVER_ERROR` 等，详见各端点。REST 登录接口独立限频（60s/5 次，返回 `RATE_LIMITED`）；WebSocket 握手的频率限制仍以 `auth_fail` 返回。
 
 ---
 
 ## PC 端 HTTP API（端口 35432）
 
-局域网直连，无需认证。
+局域网直连。**v4.14 起增加来源校验**：仅接受回环 Host（127.0.0.1/localhost）且来源为 Chrome 扩展（`chrome-extension://`）、Electron 页面（`file://`/`null`）或本机工具（无来源）；恶意网页（任意 Origin/Referer）与 DNS rebinding（非回环 Host）返回 403。扩展拨号流程不受影响（扩展请求自带合法来源）。WebSocket 同样按来源校验。
 
 | 端点 | 说明 |
 |------|------|
 | `GET /dial?number=xxx` | 拨号 |
 | `GET /hangup` | 挂断 |
-| `GET /sms?number=xxx&content=xxx` | 发短信（仅 PC 直连支持） |
+| `GET /sms?number=xxx&content=xxx` | 发短信（仅 PC 直连支持，号码格式校验同 `/dial`） |
 | `GET /open` | 打开 PC 端主窗口 |
 | `GET /toggle-floatbar` | 切换悬浮条 |
 | `GET /cloud-servers` | 云端服务器列表 |
 | `GET /` | 获取 PC 端状态（JSON） |
-| `POST /api/set-pin` | 设置 PIN（body: `{"pin":"13800138000"}`，4位或11位） |
+| `POST /api/set-pin` | 设置 PIN（body: `{"pin":"13800138000"}`，须 11 位手机号 `^1[3-9]\d{9}$`） |
 
 ---
 
@@ -202,6 +205,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `pc_online` / `pc_offline` | 云→手机 | PC 上线/离线通知 |
 | `phone_offline` | 云→PC | 手机离线通知 |
 | `visit_record` | 云→手机 | 访问登记记录推送 |
+| `reconnect_request` | PC→云→手机 | PC 端唤醒离线手机（云中继白名单转发，`targetDevice` 兼容设备名或 PIN） |
 
 ### 握手示例
 
@@ -232,9 +236,11 @@ Header: X-AutoDial-PIN: 13800138000
 
 ## 管理员鉴权 API 🔐
 
-管理接口（写操作）需管理员登录后方可调用。鉴权始终启用：通过 `Authorization: Bearer <token>` 或 `?token=<token>` 传递会话令牌（登录后 24h 有效，重启失效）。
+管理接口（读写操作）需管理员登录后方可调用。鉴权始终启用：通过 `Authorization: Bearer <token>` 或 `?token=<token>` 传递会话令牌（登录后 24h 有效，重启失效）。
 
-> 无 `AUTODIAL_ADMIN_PASS` 环境变量机制。管理员账号存于 SQLite `admin_accounts` 表，首次启动自动创建默认账号（用户名 `18335162275`，密码 `123456`），请登录后尽快修改。
+> v4.14 起：① 密码以 SHA-256（加盐）哈希存储，登录兼容旧明文记录并自动迁移；② 登录接口限频（60s 窗口失败超 5 次返回 `429 RATE_LIMITED`）；③ 敏感**读**端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`、`/api/v1/visits`（无 `pin` 时））同样要求管理员鉴权，防止客户隐私/设备信息泄露。
+>
+> 无 `AUTODIAL_ADMIN_PASS` 环境变量机制。管理员账号存于 SQLite `admin_accounts` 表，首次启动自动创建默认账号（用户名 `18335162275`，初始密码 `123456`），请登录后尽快修改。
 
 | 端点 | 说明 | 鉴权 |
 |------|------|------|

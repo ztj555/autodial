@@ -681,10 +681,16 @@ document.getElementById('btnCloseTest').addEventListener('click', () => {
 });
 
 // ==================== 配对码管理 ====================
+// E1修复: 监听主进程 set-pin 拒绝（此前 event.reply('pin-error') 无人接，前端会假报"已保存"）
+window.api.on('pin-error', function (msg) {
+  document.getElementById('pinMsg').textContent = '保存失败: ' + (msg || '无效的配对码，需为11位手机号');
+  document.getElementById('pinMsg').style.color = 'var(--red)';
+});
 document.getElementById('btnSavePin').addEventListener('click', async () => {
   const pin = document.getElementById('pinInput').value.trim();
-  if (!pin || pin.length !== 11 || !pin.startsWith('1') || !/^\d+$/.test(pin)) {
-    document.getElementById('pinMsg').textContent = '请输入正确的11位手机号（1开头）';
+  // E1修复: 校验与主进程对齐（^1[3-9]\d{9}$），避免"前端放行、主进程拒绝"的假成功
+  if (!/^1[3-9]\d{9}$/.test(pin)) {
+    document.getElementById('pinMsg').textContent = '请输入正确的11位手机号（1开头，第二位为3-9）';
     document.getElementById('pinMsg').style.color = 'var(--red)';
     return;
   }

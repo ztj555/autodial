@@ -1157,7 +1157,12 @@ function addLog(type, msg) {
   const t = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
   const el = document.createElement('div');
   el.className = 'log-entry ' + type;
-  el.innerHTML = '<span class="lt">' + t + '</span><span class="lm">' + msg + '</span>';
+  el.innerHTML = '<span class="lt">' + t + '</span>';
+  // E2修复: 日志内容可能含手机/服务器回传的不可信字符串，改用 textContent 防 XSS
+  const lm = document.createElement('span');
+  lm.className = 'lm';
+  lm.textContent = msg;
+  el.appendChild(lm);
   body.appendChild(el);
   body.scrollTop = body.scrollHeight;
   while (body.children.length > 80) body.removeChild(body.firstChild);

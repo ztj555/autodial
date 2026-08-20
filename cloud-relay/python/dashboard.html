@@ -1608,6 +1608,8 @@
             let url = VISIT_API_BASE + '/api/v1/visits?';
             if (groupFilter) url += 'group=' + encodeURIComponent(groupFilter);
             else if (pinFilter && pinFilter !== '__group__') url += 'pin=' + encodeURIComponent(pinFilter);
+            // S4修复: 按单 PIN 筛选是手机端同步用法（无需登录）；无筛选/按分组/占位符均需管理员 token
+            if (!pinFilter || groupFilter || pinFilter === '__group__') url = withToken(url);
             try {
                 const res = await fetch(url); const data = await res.json();
                 if (!Array.isArray(data)) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">查询失败</td></tr>'; return; }
@@ -1642,11 +1644,14 @@
             const selPin = document.getElementById('visit-filter-pin');
             const selGrp = document.getElementById('visit-filter-group');
             try {
-                const r = await fetch(VISIT_API_BASE + '/api/v1/pins'); const d = await r.json();
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/pins')); const d = await r.json();
                 if (!d.ok) return;
                 selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
-                d.pins.forEach(function(p) { selPin.innerHTML += '<option value="' + p.pin + '">' + esc(p.name||'') + ' (' + p.pin + ')</option>'; });
-                const gr = await fetch(VISIT_API_BASE + '/api/v1/groups'); const gd = await gr.json();
+                d.pins.forEach(function(p) {
+                    // S5修复: p.pin 可被未鉴权的 advisor/register 写入任意字符串，必须转义防 XSS
+                    selPin.innerHTML += '<option value="' + escA(p.pin) + '">' + esc(p.name||'') + ' (' + esc(p.pin) + ')</option>';
+                });
+                const gr = await fetch(withToken(VISIT_API_BASE + '/api/v1/groups')); const gd = await gr.json();
                 selGrp.innerHTML = '<option value="">不限分组</option>';
                 if (gd.groups) gd.groups.forEach(function(g) { selGrp.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
             } catch(e) {}
@@ -1709,7 +1714,7 @@
 
         async function renderVisitChart() {
             try {
-                const res = await fetch(VISIT_API_BASE + '/api/v1/visits?'); const data = await res.json();
+                const res = await fetch(withToken(VISIT_API_BASE + '/api/v1/visits?')); const data = await res.json();
                 if (!Array.isArray(data)) return;
                 const ctx = document.getElementById('visit-chart')?.getContext('2d');
                 if (!ctx || typeof Chart === 'undefined') return;

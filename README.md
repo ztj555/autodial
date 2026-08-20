@@ -1,10 +1,15 @@
-# AutoDial 一键拨号系统 v4.13
+# AutoDial 一键拨号系统 v4.14
 
-> 仓库：github.com/ztj555/autodial | 最后更新：2026-08-01
+> 仓库：github.com/ztj555/autodial | 最后更新：2026-08-19
 
 ## 项目概述
 
 AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页中点击手机号自动拨号；右键悬浮按钮即可完成客户登记，数据实时同步云端和手机端。
+
+**v4.14 更新（全链路修复 + 安全加固）**：
+- **全链路链路修复**：云端设备授权 REST 路径修复（`auth/respond` NameError）；授权响应增加归属校验（防手机自批/越权）；`reconnect_request` 纳入云中继转发白名单并兼容 name/PIN 两种 targetDevice，PC 云端唤醒离线手机恢复可用；`INSERT OR REPLACE` 不再抹掉设备默认 PIN/别名；SQLite 所有连接统一 `busy_timeout`；Go ACK 定时器竞态修复；Android 通话列表刷新、日期格式线程安全、日志脱敏；Electron PIN 错误反馈打通；扩展授权弹窗携带 PIN
+- **安全加固**：PC 端本地端口（35432）增加回环 Host + 可信来源校验（防任意网页静默拨号/DNS rebinding）；云中继敏感读端点全部纳入管理员鉴权；管理员密码哈希存储 + 登录限频；多处 innerHTML XSS 修复
+- **部署**：Docker 数据库落持久卷（`AUTODIAL_DB_PATH`）
 
 **v4.13 更新**：
 - **云中继并发/DB 性能 P0 修复**：SQLite WAL 模式、DB 操作移出事件循环（线程池 executor）、智能调度 `_schedule_async`，50 并发压力测试全指标通过（WS 100/100 连接、REST P50=16ms）
@@ -204,9 +209,9 @@ cd pc-app-Electron && npm install && npm start
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/v1/visit?name=...&mobile=...&kefu_tel=...&visit_type=...&visit_time=...` | 一键登记（支持visit_time去重） |
-| GET | `/api/v1/visits?pin=...` | 查询登记列表（支持 unsynced/group 筛选） |
-| GET | `/api/v1/visit/update?id=N&...` | 更新登记记录 |
-| GET | `/api/v1/visit/delete?id=N` | 删除登记记录 |
+| GET | `/api/v1/visits?pin=...` | 查询登记列表（支持 unsynced/group 筛选；无 pin 时需管理员令牌） |
+| GET | `/api/v1/visit/update?id=N&...` | 更新登记记录（🔐 管理员） |
+| GET | `/api/v1/visit/delete?id=N` | 删除登记记录（🔐 管理员） |
 
 ### 顾问管理
 
@@ -230,12 +235,14 @@ cd pc-app-Electron && npm install && npm start
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| GET | `/api/v1/login?user=...&pass=...` | 管理员登录（返回令牌） |
+| GET | `/api/v1/login?user=...&pass=...` | 管理员登录（返回令牌；限频 60s/5 次失败） |
 | GET | `/api/v1/logout?token=...` | 登出 |
-| GET | `/api/v1/admin/accounts` | 管理账号列表 |
-| GET | `/api/v1/admin/add?user=...&pass=...` | 添加管理账号 |
-| GET | `/api/v1/admin/del?id=N` | 删除管理账号 |
-| GET | `/api/v1/admin/chpwd?id=N&newpass=...` | 修改密码 |
+| GET | `/api/v1/admin/accounts` | 管理账号列表（🔐） |
+| GET | `/api/v1/admin/add?user=...&pass=...` | 添加管理账号（🔐） |
+| GET | `/api/v1/admin/del?id=N` | 删除管理账号（🔐） |
+| GET | `/api/v1/admin/chpwd?id=N&newpass=...` | 修改密码（🔐） |
+
+> v4.14 起管理员密码以 SHA-256 加盐哈希存储（登录兼容旧明文并自动迁移）；敏感读端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`）同样需要管理员令牌。
 
 ### 设备与数据同步（v4.10+ 新增）
 
@@ -254,7 +261,7 @@ cd pc-app-Electron && npm install && npm start
 | GET | `/api/v1/kick?pin=...&role=...` | 踢出在线客户端 |
 | GET | `/api/v1/visits/batch?data=<JSON>&token=...` | 批量导入登记 |
 | GET | `/api/v1/auth/pending?pin=...` | 查询挂起授权请求 |
-| GET | `/api/v1/auth/respond?request_id=...&allow=1\|0` | 响应授权请求 |
+| GET | `/api/v1/auth/respond?request_id=...&allow=1\|0&pin=...` | 响应授权请求（pin 须与请求一致，防越权） |
 
 ### 运维
 
@@ -296,6 +303,7 @@ cd pc-app-Electron && npm install && npm start
 | `NO_FIELDS` | 没有要更新的字段（v4.10） |
 | `DELETED` | 删除成功（v4.10） |
 | `UPDATED` | 更新成功（v4.10） |
+| `RATE_LIMITED` | 登录失败过于频繁，60 秒后再试（v4.14，HTTP 429） |
 
 ## 双模路由
 
@@ -339,3 +347,5 @@ cd pc-app-Electron && npm install && npm start
 3. MIUI/HyperOS 需加入电池白名单
 4. Xiaomi 设备在"设置→无障碍"中开启 AutoDial 服务
 5. PC 端和云中继可同时运行，扩展自动优先 PC 直连
+6. 管理员默认账号 `18335162275 / 123456`（哈希存储），首次登录后请立即修改
+7. PC 端本地端口 35432 仅接受回环 Host + 可信来源（Chrome 扩展/本机程序），外部网页无法直接拨号

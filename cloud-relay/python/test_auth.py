@@ -89,8 +89,8 @@ async def test_all():
                 print(f'  Pending: {len(d.get("pending",[]))}条')
                 assert len(d.get('pending',[])) > 0
 
-            # 扩展响应授权
-            async with s.get(f'http://127.0.0.1:35430/api/v1/auth/respond?request_id={rid}&allow=1') as resp:
+            # 扩展响应授权（v4 协议要求携带征询方 PIN，配合云中继归属校验）
+            async with s.get(f'http://127.0.0.1:35430/api/v1/auth/respond?request_id={rid}&allow=1&pin=13800000004') as resp:
                 d = await resp.json()
                 assert d.get('ok')
 

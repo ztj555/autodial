@@ -674,12 +674,19 @@ function closeTplModal() {
   renderTemplateTags();
 }
 
+// E3修复: 完整 HTML 转义（原 title 仅转义双引号，content 完全未转义 → XSS）
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function addTplEditItem(tpl) {
   const item = document.createElement('div');
   item.className = 'tpl-edit-item';
   item.innerHTML =
-    '<input type="text" class="tpl-edit-title" placeholder="模板名称" maxlength="20" value="' + (tpl ? tpl.title.replace(/"/g, '&quot;') : '') + '">' +
-    '<textarea class="tpl-edit-content" placeholder="模板内容" rows="2" maxlength="500">' + (tpl ? tpl.content : '') + '</textarea>' +
+    '<input type="text" class="tpl-edit-title" placeholder="模板名称" maxlength="20" value="' + (tpl ? escHtml(tpl.title) : '') + '">' +
+    '<textarea class="tpl-edit-content" placeholder="模板内容" rows="2" maxlength="500">' + (tpl ? escHtml(tpl.content) : '') + '</textarea>' +
     '<div class="tpl-edit-row">' +
       '<button class="tpl-edit-del">' + (tpl ? '删除' : '取消') + '</button>' +
       '<button class="tpl-edit-save">保存</button>' +

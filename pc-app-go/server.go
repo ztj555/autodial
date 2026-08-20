@@ -25,9 +25,12 @@ var (
 func startHTTPServer() *http.Server {
 	mux := http.NewServeMux()
 
-	// CORS middleware
+	// CORS middleware (S1修复: 前置本地端口访问校验，拒绝非回环 Host / 非可信来源)
 	corsHandler := func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			if rejectUntrustedRequest(w, r) {
+				return
+			}
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -69,7 +72,7 @@ func startHTTPServer() *http.Server {
 					dialQueueMu.Lock()
 					dialQueue[targetPin] = &DialQueueEntry{
 						Number: number,
-						Timer:  time.AfterFunc(DialQueueTimeout, func() {
+						Timer: time.AfterFunc(DialQueueTimeout, func() {
 							dialQueueMu.Lock()
 							delete(dialQueue, targetPin)
 							dialQueueMu.Unlock()
@@ -135,8 +138,9 @@ func startHTTPServer() *http.Server {
 	mux.HandleFunc("/sms", corsHandler(func(w http.ResponseWriter, r *http.Request) {
 		number := r.URL.Query().Get("number")
 		content := r.URL.Query().Get("content")
-		if number == "" {
-			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "number required"})
+		// G2修复: 与 /dial 一致，校验号码格式（原实现仅判非空，任意内容可注入）
+		if number == "" || !isValidDialNumber(number) {
+			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "无效的号码格式"})
 			return
 		}
 		ok := sendToPhone("sms", map[string]interface{}{"type": "sms", "number": number, "content": content})
@@ -221,6 +225,9 @@ func startHTTPServer() *http.Server {
 			return
 		}
 		// Status JSON
+		if rejectUntrustedRequest(w, r) {
+			return
+		}
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		devicesMu.RLock()
 		connected := len(devices) > 0
@@ -310,13 +317,13 @@ func handleLocalWS(conn *websocket.Conn) {
 
 		var msg map[string]interface{}
 		if err := json.Unmarshal(raw, &msg); err != nil {
-			fileLog("W", "WS", devicePin, fmt.Sprintf("bad json: %s (raw=%s)", err.Error(), string(raw[:min(len(raw),200)])))
+			fileLog("W", "WS", devicePin, fmt.Sprintf("bad json: %s (raw=%s)", err.Error(), string(raw[:min(len(raw), 200)])))
 			continue
 		}
 
 		msgType, _ := msg["type"].(string)
 		if msgType == "" && !isPlugin {
-			fileLog("W", "WS", devicePin, fmt.Sprintf("unknown message: %s", string(raw[:min(len(raw),200)])))
+			fileLog("W", "WS", devicePin, fmt.Sprintf("unknown message: %s", string(raw[:min(len(raw), 200)])))
 			continue
 		}
 
@@ -529,11 +536,18 @@ func sendToPhone(msgType string, msg map[string]interface{}) bool {
 					cloudWsMu.Unlock()
 				}
 				time.Sleep(AckTimeout)
-				resultCh <- false
+				// G1修复: ACK 先行到达时 resultCh 已满，直接写入会永久阻塞泄漏 goroutine
+				select {
+				case resultCh <- false:
+				default:
+				}
 				return
 			}
 			ackMu.Unlock()
-			resultCh <- false
+			select {
+			case resultCh <- false:
+			default:
+			}
 		})
 
 		ackMu.Lock()

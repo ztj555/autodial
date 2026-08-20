@@ -1204,12 +1204,29 @@ class ConnectionManager(private val context: Context) {
 
     // ==================== Logger ====================
 
-    private fun v6LogI(module: String, pin: String, msg: String) { FileLogger.i(module, "[$pin] $msg") }
-    private fun v6LogW(module: String, pin: String, msg: String) { FileLogger.w(module, "[$pin] $msg") }
-    private fun v6LogE(module: String, pin: String, msg: String) { FileLogger.e(module, "[$pin] $msg") }
+    // A3修复: 日志脱敏——PIN(登录凭据)打码、消息内手机号打码，防止第三方 App 从公共日志目录窃取凭据
+    private fun maskPin(pin: String): String {
+        return when {
+            pin.length >= 7 -> pin.substring(0, 3) + "****" + pin.substring(pin.length - 4)
+            pin.isNotEmpty() -> "****"
+            else -> ""
+        }
+    }
+
+    private fun maskPhoneInText(text: String): String {
+        // 11 位手机号打码为 138****8000（保留首3尾4）
+        return text.replace(Regex("1[3-9]\\d{9}"), { m ->
+            val s = m.value
+            s.substring(0, 3) + "****" + s.substring(7)
+        })
+    }
+
+    private fun v6LogI(module: String, pin: String, msg: String) { FileLogger.i(module, "[${maskPin(pin)}] ${maskPhoneInText(msg)}") }
+    private fun v6LogW(module: String, pin: String, msg: String) { FileLogger.w(module, "[${maskPin(pin)}] ${maskPhoneInText(msg)}") }
+    private fun v6LogE(module: String, pin: String, msg: String) { FileLogger.e(module, "[${maskPin(pin)}] ${maskPhoneInText(msg)}") }
     private fun v6LogMsg(direction: String, type: String, content: String, pin: String) {
         val truncated = if (content.length > 500) content.substring(0, 500) + "...(truncated)" else content
-        FileLogger.i(direction, "[$pin] [$type] $truncated")
+        FileLogger.i(direction, "[${maskPin(pin)}] [$type] ${maskPhoneInText(truncated)}")
     }
 
     // ==================== v4.57: PC 真探活 ====================

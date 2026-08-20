@@ -731,8 +731,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     (async () => {
       try {
         const api = msg.api || await getCloudApi();
+        // X1修复: 携带征询方 PIN，配合云中继 auth/respond 的归属校验（防越权批准/拒绝）
         const url = api + '/api/v1/auth/respond?request_id=' + encodeURIComponent(msg.request_id) +
-                    '&allow=' + (msg.allow ? '1' : '0');
+                    '&allow=' + (msg.allow ? '1' : '0') +
+                    '&pin=' + encodeURIComponent(msg.pin || '');
         const r = await fetch(url);
         const d = await r.json();
         sendResponse({ ok: d.ok, allow: msg.allow });
