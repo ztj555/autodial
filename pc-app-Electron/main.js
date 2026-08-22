@@ -699,11 +699,6 @@ ipcMain.on('set-active-phone', (event, pin) => {
   _notifyPhonesUpdate();
 });
 
-// 一键获取云端服务器
-ipcMain.on('fetch-cloud-servers', () => {
-  settings.fetchCloudServers(appSettings, app);
-});
-
 // 强制重连设备
 ipcMain.on('force-reconnect', (event, targetPin) => {
   if (!targetPin) return;
@@ -854,15 +849,15 @@ app.whenReady().then(() => {
       getPin: () => network.PIN_CODE
     });
 
-    // 创建系统托盘
-    tray = trayModule.createTray(app, mainWindow, floatBarWindow);
-
     // 创建窗口（事件绑定在创建后）
     const preloadPath = path.join(__dirname, 'preload.js');
     const rendererDir = path.join(__dirname, 'renderer');
 
     mainWindow = windows.createMainWindow(preloadPath, rendererDir);
     floatBarWindow = windows.createFloatBarWindow(preloadPath, rendererDir);
+
+    // 创建系统托盘（D2修复: 必须在窗口创建之后，否则托盘菜单拿到的 mainWindow/floatBarWindow 为 null，点击永久无效）
+    tray = trayModule.createTray(app, mainWindow, floatBarWindow);
 
     // 主窗口事件
     mainWindow.on('close', (e) => {

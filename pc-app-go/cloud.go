@@ -173,15 +173,33 @@ func connectCloudServer(serverURL string) {
 				if deviceID == "" {
 					deviceID = deviceName
 				}
+				// S4修复: 云端 phone_hello 同样校验 PIN（与本地 WS 路径 server.go 对齐）。
+				// 云中继按 PIN 分组转发，正常到达本 PC 的 phone_hello 其 pin 必然等于
+				// 本机配对码；此处校验防止云中继被攻破/配置错误时将任意 PIN 设备注入
+				// 本机设备列表。不匹配则不注册（连接保持，仅记录日志）。
+				if readPin() == "" {
+					fileLog("W", "Cloud", "", "reject cloud phone_hello: PIN not set yet")
+					continue
+				}
+				if !isValidPhonePIN(pin) {
+					fileLog("W", "Cloud", pin, fmt.Sprintf("reject cloud phone_hello: invalid pin format (device=%s)", deviceID))
+					continue
+				}
+				if pin != readPin() {
+					fileLog("W", "Cloud", pin, fmt.Sprintf("reject cloud phone_hello: pin mismatch (device=%s)", deviceID))
+					continue
+				}
 				registerDevice(pin, deviceName, "cloud", true, conn)
 				fileLog("I", "Cloud", pin, fmt.Sprintf("phone online via cloud: %s", deviceID))
 				// v4.57: 若 phone_hello 带 messageId，回 ACK 证明 PC 在线
 				if msgID, ok := msg["messageId"].(string); ok && msgID != "" {
+					cloudWsMu.Lock()
 					conn.WriteJSON(map[string]string{
 						"type":         "ack",
 						"messageId":    msgID,
 						"originalType": "phone_hello",
 					})
+					cloudWsMu.Unlock()
 				}
 
 			case "pong":
@@ -196,7 +214,13 @@ func connectCloudServer(serverURL string) {
 				if deviceName != "" {
 					updateHeartbeatByName(deviceName)
 				}
+				cloudWsMu.Lock()
 				conn.WriteJSON(map[string]string{"type": "pong"})
+				cloudWsMu.Unlock()
+
+			case "ack":
+				// C3修复: 云通道回的手机 ACK 此前被丢弃，导致 sendToPhone 等满超时误报失败
+				handleAck(msg)
 
 			case "dial_result", "sms_result":
 				pushToRenderer("dial-result", msg)
@@ -245,7 +269,7 @@ func scheduleCloudReconnect() {
 	if cloudReconnectTimer != nil {
 		cloudReconnectTimer.Stop()
 	}
-	if len(appSettings.CloudServers) == 0 {
+	if len(getSettings().CloudServers) == 0 {
 		return
 	}
 	// Don't reconnect if already connected — prevents reconnect storms
@@ -258,7 +282,8 @@ func scheduleCloudReconnect() {
 	cloudWsMu.Unlock()
 	// B23修复: 每个重连周期只递增一次计数（而非每个服务器都递增）
 	cloudReconnectCount++
-	servers := appSettings.CloudServers
+	// R3修复: 取快照副本，重连闭包内安全使用，避免与设置更新并发读写
+	servers := getSettings().CloudServers
 	delay := ladderDelay()
 	fileLog("I", "Cloud", "", fmt.Sprintf("scheduling reconnect in %v (attempt=%d)", delay, cloudReconnectCount))
 	cloudReconnectTimer = time.AfterFunc(delay, func() {

@@ -34,7 +34,7 @@ func (a *App) startup(ctx context.Context) {
 		fileLog("W", "Settings", "", "load error: "+err.Error())
 	}
 	// 从持久化 settings 恢复用户设置的 PIN（无存储时为空，需手动设11位手机号）
-	writePin(appSettings.PinCode)
+	writePin(getSettings().PinCode)
 	fileLog("I", "AutoDial", "", "=== AutoDial PC Go v1.0 ===")
 	fileLog("I", "AutoDial", "", "PIN: "+readPin())
 
@@ -56,8 +56,9 @@ func (a *App) startup(ctx context.Context) {
 	go startUDPDiscovery()
 
 	// Connect cloud if enabled
-	if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
-		go connectCloudServer(appSettings.CloudServers[0])
+	s0 := getSettings()
+	if s0.CloudEnabled && len(s0.CloudServers) > 0 {
+		go connectCloudServer(s0.CloudServers[0])
 	}
 
 	// Periodic heartbeat check
@@ -70,8 +71,9 @@ func (a *App) startup(ctx context.Context) {
 	}()
 
 	// Check and restore phone notes from settings
+	notes := getSettings().PhoneNotes
 	devicesMu.RLock()
-	for pin, note := range appSettings.PhoneNotes {
+	for pin, note := range notes {
 		if d, ok := devices[pin]; ok && d.Note == "" {
 			d.Note = note
 		}
@@ -83,7 +85,7 @@ func (a *App) startup(ctx context.Context) {
 		time.Sleep(2 * time.Second)
 		initTray()
 		// Silent start: hide window if configured
-		if appSettings.SilentStart {
+		if getSettings().SilentStart {
 			wailsRuntime.WindowHide(a.ctx)
 			setMainWindowVisible(false)
 		}
@@ -116,15 +118,16 @@ func (a *App) GetInfo() map[string]interface{} {
 }
 
 func (a *App) GetSettings() map[string]interface{} {
+	s := getSettings()
 	return map[string]interface{}{
-		"closeAction":  appSettings.CloseAction,
-		"trayExit":     appSettings.TrayExit,
-		"autoStart":    appSettings.AutoStart,
-		"silentStart":  appSettings.SilentStart,
-		"theme":        appSettings.Theme,
-		"mode":         appSettings.Mode,
-		"cloudEnabled": appSettings.CloudEnabled,
-		"cloudServers": appSettings.CloudServers,
+		"closeAction":  s.CloseAction,
+		"trayExit":     s.TrayExit,
+		"autoStart":    s.AutoStart,
+		"silentStart":  s.SilentStart,
+		"theme":        s.Theme,
+		"mode":         s.Mode,
+		"cloudEnabled": s.CloudEnabled,
+		"cloudServers": s.CloudServers,
 	}
 }
 
@@ -132,6 +135,8 @@ func (a *App) UpdateSettings(settings map[string]interface{}) {
 	cloudChanged := false
 	cloudUpdateNeeded := false
 
+	// R3修复: 单次写锁内完成全部字段读-改-写，避免多次取锁读到不一致状态
+	settingsMu.Lock()
 	if v, ok := settings["theme"].(string); ok {
 		appSettings.Theme = v
 	}
@@ -166,16 +171,21 @@ func (a *App) UpdateSettings(settings map[string]interface{}) {
 		appSettings.CloudServers = list
 		cloudUpdateNeeded = true
 	}
+	// 在锁内捕获快照，解锁后用于重连判断，避免解锁后读到被并发修改的值
+	curEnabled := appSettings.CloudEnabled
+	curServers := appSettings.CloudServers
+	settingsMu.Unlock()
+
 	if cloudChanged {
-		if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
-			go connectCloudServer(appSettings.CloudServers[0])
-		} else if !appSettings.CloudEnabled {
+		if curEnabled && len(curServers) > 0 {
+			go connectCloudServer(curServers[0])
+		} else if !curEnabled {
 			disconnectCloud()
 		}
-	} else if cloudUpdateNeeded && appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
+	} else if cloudUpdateNeeded && curEnabled && len(curServers) > 0 {
 		// Servers changed while cloud was already enabled — restart connection
 		disconnectCloud()
-		go connectCloudServer(appSettings.CloudServers[0])
+		go connectCloudServer(curServers[0])
 	}
 	saveSettings()
 }
@@ -183,15 +193,19 @@ func (a *App) UpdateSettings(settings map[string]interface{}) {
 // ── New backend bindings for expanded settings ──
 
 func (a *App) ChangeTheme(id string, mode string) {
+	settingsMu.Lock()
 	appSettings.Theme = id
 	if mode != "" {
 		appSettings.Mode = mode
 	}
+	settingsMu.Unlock()
 	saveSettings()
 }
 
 func (a *App) SetAutoStart(enabled bool) {
+	settingsMu.Lock()
 	appSettings.AutoStart = enabled
+	settingsMu.Unlock()
 	saveSettings()
 
 	exePath, err := os.Executable()
@@ -233,12 +247,13 @@ func (a *App) ToggleFloatbar() string {
 }
 
 func (a *App) GetCloudStatus() map[string]interface{} {
+	servers := getSettings().CloudServers
 	cloudWsMu.Lock()
 	status := map[string]interface{}{
 		"connected":  cloudConnected,
 		"connecting": cloudConnecting,
-		"server":     appSettings.CloudServers,
-		"servers":    appSettings.CloudServers,
+		"server":     servers,
+		"servers":    servers,
 	}
 	cloudWsMu.Unlock()
 	return status
@@ -359,8 +374,10 @@ func (a *App) ConnectCloudServer(server string) {
 }
 
 func (a *App) UpdateCloudConfig(enabled bool, servers []string) {
+	settingsMu.Lock()
 	appSettings.CloudEnabled = enabled
 	appSettings.CloudServers = servers
+	settingsMu.Unlock()
 	saveSettings()
 	if enabled && len(servers) > 0 {
 		// B21+B23: 启用云时重置断开标志和计数
@@ -382,7 +399,9 @@ func (a *App) SetPin(pin string) {
 		return
 	}
 	writePin(pin)
+	settingsMu.Lock()
 	appSettings.PinCode = pin
+	settingsMu.Unlock()
 	saveSettings()
 	fileLog("I", "App", "", "PIN updated: "+pin)
 	// 通知前端更新 PIN 显示
@@ -401,7 +420,8 @@ func (a *App) SendDial(number string) string {
 	}
 
 	// No phone connected — try cloud wake + queue
-	if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
+	s := getSettings()
+	if s.CloudEnabled && len(s.CloudServers) > 0 {
 		// 锁定当前 activePin 为局部变量，避免定时器回调读取到切换后的新值
 		targetPin := activePin
 		if targetPin == "" {
@@ -412,6 +432,11 @@ func (a *App) SendDial(number string) string {
 		}
 		// Queue the dial for when phone reconnects
 		dialQueueMu.Lock()
+		// F4修复: 覆盖同 PIN 旧排队条目前先停止旧 Timer，否则旧定时器到期会误删新条目
+		// （连续快速拨号时第二次排队号码被误删）。参照 server.go 排空路径的写法。
+		if oldEntry, ok := dialQueue[targetPin]; ok && oldEntry.Timer != nil {
+			oldEntry.Timer.Stop()
+		}
 		dialQueue[targetPin] = &DialQueueEntry{
 			Number: number,
 			Timer: time.AfterFunc(DialQueueTimeout, func() {
@@ -483,10 +508,12 @@ func (a *App) RenamePhone(pin string, note string) {
 		d.Note = note
 	}
 	devicesMu.Unlock()
+	settingsMu.Lock()
 	if appSettings.PhoneNotes == nil {
 		appSettings.PhoneNotes = make(map[string]string)
 	}
 	appSettings.PhoneNotes[pin] = note
+	settingsMu.Unlock()
 	saveSettings()
 	notifyUpdate()
 }
@@ -495,7 +522,8 @@ func (a *App) ForceReconnect(pin string) string {
 	pushToRenderer("dial-waking", map[string]interface{}{
 		"pin": pin,
 	})
-	if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
+	s := getSettings()
+	if s.CloudEnabled && len(s.CloudServers) > 0 {
 		cloudWsMu.Lock()
 		if cloudWs != nil {
 			cloudWs.WriteJSON(map[string]interface{}{
@@ -533,9 +561,10 @@ func (a *App) MinimizeWindow() {
 }
 
 func (a *App) CloseWindow() {
-	fileLog("I", "App", "", "CloseWindow called: trayAdded="+fmt.Sprintf("%v", trayAdded)+" closeAction="+appSettings.CloseAction)
+	closeAction := getSettings().CloseAction
+	fileLog("I", "App", "", "CloseWindow called: trayAdded="+fmt.Sprintf("%v", trayAdded)+" closeAction="+closeAction)
 	// If tray is active and closeAction is "minimize", hide to tray
-	if trayAdded && appSettings.CloseAction == "minimize" {
+	if trayAdded && closeAction == "minimize" {
 		wailsRuntime.WindowHide(a.ctx)
 		setMainWindowVisible(false)
 		fileLog("I", "App", "", "window hidden to tray")
@@ -566,8 +595,10 @@ func (a *App) QuitApp() {
 func (a *App) RestartCloud() {
 	cloudReconnectCount = 0 // Reset backoff
 	disconnectCloud()
-	if len(appSettings.CloudServers) > 0 {
-		connectCloudServer(appSettings.CloudServers[0])
+	servers := getSettings().CloudServers
+	if len(servers) > 0 {
+		// C4修复: 异步连接，避免 HandshakeTimeout(最长45s) 同步阻塞前端调用
+		go connectCloudServer(servers[0])
 	}
 }
 

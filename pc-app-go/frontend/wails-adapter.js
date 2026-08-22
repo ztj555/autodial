@@ -130,6 +130,8 @@
           if (statusCallback) {
             try { statusCallback({ connected: connected, phoneIP: (phones && phones.length > 0 && phones[0].ip) || null }); } catch(e) { console.error('[WailsAdapter] statusCallback error:', e); }
           }
+          // C5修复: 悬浮条状态此前无调用点，按钮永久禁用；随连接状态变化同步启用/禁用
+          try { if (window.updateFloatbarStatus) window.updateFloatbarStatus(connected); } catch(e) { console.error('[WailsAdapter] updateFloatbarStatus error:', e); }
         }
       }
     } catch(e) {

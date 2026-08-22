@@ -174,43 +174,53 @@ class CloudCtrl(private val context: Context) {
                 server.startsWith("ws://") || server.startsWith("wss://") -> server
                 else -> "ws://$server"
             }
-            kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(3, TimeUnit.SECONDS)
-                    .readTimeout(3, TimeUnit.SECONDS)
-                    .build()
-                val request = Request.Builder().url(wsUrl).build()
-                var resolved = false
-                client.newWebSocket(request, object : WebSocketListener() {
-                    override fun onOpen(ws: WebSocket, response: Response) {
-                        ws.send(JSONObject().apply {
-                            put("type", "auth")
-                            put("pin", "0000")   // 假PIN触发auth_fail，但证明链路通
-                            put("role", "phone")
-                            put("deviceName", "CloudTest")
-                        }.toString())
-                    }
-                    override fun onMessage(ws: WebSocket, text: String) {
-                        if (resolved) return
-                        val msg = JSONObject(text)
-                        val type = msg.optString("type", "")
-                        // auth_ok 或 auth_fail 都说明服务器功能正常
-                        if (type == "auth_ok" || type == "auth_fail") {
-                            resolved = true
-                            cont.resume(true) {}
-                            ws.close(1000, null)
+            var client: OkHttpClient? = null
+            try {
+                kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                    val c = OkHttpClient.Builder()
+                        .connectTimeout(3, TimeUnit.SECONDS)
+                        .readTimeout(3, TimeUnit.SECONDS)
+                        .build()
+                    client = c
+                    val request = Request.Builder().url(wsUrl).build()
+                    var resolved = false
+                    c.newWebSocket(request, object : WebSocketListener() {
+                        override fun onOpen(ws: WebSocket, response: Response) {
+                            ws.send(JSONObject().apply {
+                                put("type", "auth")
+                                put("pin", "0000")   // 假PIN触发auth_fail，但证明链路通
+                                put("role", "phone")
+                                put("deviceName", "CloudTest")
+                            }.toString())
                         }
+                        override fun onMessage(ws: WebSocket, text: String) {
+                            if (resolved) return
+                            val msg = JSONObject(text)
+                            val type = msg.optString("type", "")
+                            // auth_ok 或 auth_fail 都说明服务器功能正常
+                            if (type == "auth_ok" || type == "auth_fail") {
+                                resolved = true
+                                cont.resume(true) {}
+                                ws.close(1000, null)
+                            }
+                        }
+                        override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
+                            if (!resolved) { resolved = true; cont.resume(false) {} }
+                        }
+                        override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                            if (!resolved) { resolved = true; cont.resume(false) {} }
+                        }
+                    })
+                    cont.invokeOnCancellation {
+                        if (!resolved) { resolved = true; client?.dispatcher?.executorService?.shutdown() }
                     }
-                    override fun onFailure(ws: WebSocket, t: Throwable, r: Response?) {
-                        if (!resolved) { resolved = true; cont.resume(false) {} }
-                    }
-                    override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                        if (!resolved) { resolved = true; cont.resume(false) {} }
-                    }
-                })
-                cont.invokeOnCancellation {
-                    if (!resolved) { resolved = true; client.dispatcher.executorService.shutdown() }
                 }
+            } finally {
+                // R5修复: 所有结束路径（成功/失败/取消）统一释放 OkHttpClient 的
+                // 连接池与 dispatcher 线程，避免每次连通测试都泄漏线程与连接。
+                // 取消路径在 invokeOnCancellation 已 shutdown，此处重复调用幂等安全。
+                client?.connectionPool?.evictAll()
+                client?.dispatcher?.executorService?.shutdown()
             }
         } catch (_: Exception) { false }
     }

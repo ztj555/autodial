@@ -1019,6 +1019,59 @@
             if (m) m.classList.remove('open');
         });
 
+        // ==================== S3修复: 动态行内事件委托 ====================
+        // 用户可控数据（device_id/name/pin 等）一律放入 data-* 属性（escA 转义），
+        // 不再拼接进 onclick/onchange 的 JS 字符串字面量，杜绝 HTML 属性解码后的注入面。
+        document.addEventListener('click', function(e) {
+            var t = e.target;
+            if (!t || !t.closest) return;
+            var detailBtn = t.closest('[data-action="show-phone-detail"]');
+            if (detailBtn) {
+                e.stopPropagation();
+                showPhoneDetail(detailBtn.getAttribute('data-device'), detailBtn.getAttribute('data-name'));
+                return;
+            }
+            var editBtn = t.closest('[data-action="open-edit-modal"]');
+            if (editBtn) {
+                openEditModal(
+                    editBtn.getAttribute('data-id'),
+                    editBtn.getAttribute('data-name'),
+                    editBtn.getAttribute('data-mobile'),
+                    editBtn.getAttribute('data-kefu-tel'),
+                    editBtn.getAttribute('data-type')
+                );
+                return;
+            }
+            var delBtn = t.closest('[data-action="delete-visit"]');
+            if (delBtn) {
+                deleteVisit(delBtn.getAttribute('data-id'));
+                return;
+            }
+            var adminDelBtn = t.closest('[data-action="delete-admin"]');
+            if (adminDelBtn) {
+                e.stopPropagation();
+                delAdminAccount(adminDelBtn.getAttribute('data-id'));
+                return;
+            }
+            var row = t.closest('[data-action="toggle-phone-history"]');
+            if (row) {
+                // 点击输入框/下拉/按钮时不触发行展开
+                var tag = t.tagName ? t.tagName.toUpperCase() : '';
+                if (tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;
+                togglePhoneHistory(row.getAttribute('data-row'), row.getAttribute('data-detail'), row.getAttribute('data-device'));
+            }
+        });
+        document.addEventListener('change', function(e) {
+            var t = e.target;
+            if (!t || !t.getAttribute) return;
+            var act = t.getAttribute('data-action');
+            if (!act) return;
+            if (act === 'set-device-label') setDeviceLabel(t.getAttribute('data-device'), t.value);
+            else if (act === 'set-device-default-pin') setDeviceDefaultPin(t.getAttribute('data-device'), t.value);
+            else if (act === 'set-advisor-name') setAdvisorName(t.getAttribute('data-pin'), t.value);
+            else if (act === 'set-pin-group') setPinGroup(t.getAttribute('data-pin'), t.value);
+        });
+
         // ==================== Toast 通知（替代 alert） ====================
         function toast(msg, type) {
             const t = document.createElement('div');
@@ -1116,7 +1169,7 @@
                 tbody.innerHTML = d.accounts.map(function(a) {
                     return '<tr><td>' + a.id + '</td><td><strong>' + esc(a.username||'') + '</strong></td>' +
                         '<td class="td-muted">' + (a.created_at ? new Date(a.created_at).toLocaleString('zh-CN') : '-') + '</td>' +
-                        '<td><button class="btn btn-danger btn-sm" onclick="delAdminAccount(' + a.id + ')">' + ic('trash', 12) + ' 删除</button></td></tr>';
+                        '<td><button class="btn btn-danger btn-sm" data-action="delete-admin" data-id="' + escA(a.id) + '">' + ic('trash', 12) + ' 删除</button></td></tr>';
                 }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
         }
@@ -1218,7 +1271,7 @@
         }
 
         function esc(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-        function escA(s) { if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+        function escA(s) { if(!s) return ''; return String(s).replace(/\\/g,'&#92;').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
         function timeAgo(iso) {
             if (!iso) return '-';
@@ -1356,25 +1409,23 @@
                 const rowId = 'phone-row-' + idx;
                 const detailId = 'phone-detail-' + idx;
                 const dpin = dev.default_pin || '';
-                return '<tr class="expandable" id="' + rowId + '" onclick="togglePhoneHistory(\'' + rowId + '\',\'' + detailId + '\',\'' + escA(dev.device_id||'') + '\')">' +
+                return '<tr class="expandable" id="' + rowId + '" data-action="toggle-phone-history" data-row="' + escA(rowId) + '" data-detail="' + escA(detailId) + '" data-device="' + escA(dev.device_id||'') + '">' +
                     '<td><span class="expand-arrow" id="' + rowId + '-arrow">' + ic('chevron', 12) + '</span></td>' +
                     '<td title="' + esc(dev.device_id||'') + '" class="td-ellipsis" style="max-width:120px;"><strong>' + esc((dev.device_id||'').slice(0,20)) + '</strong></td>' +
                     '<td><input type="text" class="cell-input" value="' + esc(dev.label||'') + '" placeholder="备注" ' +
-                        'onclick="event.stopPropagation()" ' +
-                        'onchange="setDeviceLabel(\'' + escA(dev.device_id||'') + '\',this.value)" ' +
+                        'data-action="set-device-label" data-device="' + escA(dev.device_id||'') + '" ' +
                         'style="width:90px;" ' +
                         'title="设备别名（如：杨蕊的手机）"></td>' +
                     '<td>' + esc(dev.device_model||'未知') + '</td>' +
                     '<td><input type="text" class="cell-input" value="' + esc(dpin) + '" placeholder="未设置" ' +
-                        'onclick="event.stopPropagation()" ' +
-                        'onchange="setDeviceDefaultPin(\'' + escA(dev.device_id||'') + '\',this.value)" ' +
+                        'data-action="set-device-default-pin" data-device="' + escA(dev.device_id||'') + '" ' +
                         'style="width:100px;" ' +
                         'title="设置设备默认PIN（4位或11位数字，输入-可清除）"></td>' +
                     '<td><span class="online-dot ' + dotCls + '"></span>' + dotLabel + '</td>' +
                     '<td><strong>' + esc(dev.current_name||'-') + '</strong></td>' +
                     '<td>' + esc(dev.current_pin||dev.last_pin||'-') + '</td>' +
                     '<td class="td-muted">' + (dev.last_seen ? timeAgo(dev.last_seen) : '-') + '</td>' +
-                    '<td><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();showPhoneDetail(\'' + escA(dev.device_id||'') + '\',\'' + escA(dev.current_name||'') + '\')">详情</button></td>' +
+                    '<td><button class="btn btn-primary btn-sm" data-action="show-phone-detail" data-device="' + escA(dev.device_id||'') + '" data-name="' + escA(dev.current_name||'') + '">详情</button></td>' +
                 '</tr>' +
                 '<tr class="expand-detail" id="' + detailId + '"><td colspan="10"><div class="text-muted" style="text-align:center;">点击展开查看历史记录...</div></td></tr>';
             }).join('');
@@ -1633,8 +1684,8 @@
                     '<td>' + crmBadge + '</td>' +
                     '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
                     '<td>' + (r.visit_time||'-') + '</td>' +
-                    '<td><button class="btn btn-primary btn-sm" onclick="openEditModal(' + r.id + ',\'' + escA(r.name||'') + '\',\'' + escA(r.mobile||'') + '\',\'' + escA(r.kefu_tel||'') + '\',\'' + escA(r.visit_type||'') + '\')">编辑</button> ' +
-                    '<button class="btn btn-danger btn-sm" onclick="deleteVisit(' + r.id + ')">' + ic('trash', 12) + ' 删除</button></td>' +
+                    '<td><button class="btn btn-primary btn-sm" data-action="open-edit-modal" data-id="' + escA(r.id) + '" data-name="' + escA(r.name||'') + '" data-mobile="' + escA(r.mobile||'') + '" data-kefu-tel="' + escA(r.kefu_tel||'') + '" data-type="' + escA(r.visit_type||'') + '">编辑</button> ' +
+                    '<button class="btn btn-danger btn-sm" data-action="delete-visit" data-id="' + escA(r.id) + '">' + ic('trash', 12) + ' 删除</button></td>' +
                 '</tr>';
                 }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:var(--red);">请求失败</td></tr>'; }
@@ -1930,8 +1981,8 @@
             const tbody = document.getElementById('pins-list');
             try {
                 const [pr, gr] = await Promise.all([
-                    fetch(VISIT_API_BASE+'/api/v1/pins').then(function(r){return r.json()}),
-                    fetch(VISIT_API_BASE+'/api/v1/groups').then(function(r){return r.json()})
+                    fetch(withToken(VISIT_API_BASE+'/api/v1/pins')).then(function(r){return r.json()}),
+                    fetch(withToken(VISIT_API_BASE+'/api/v1/groups')).then(function(r){return r.json()})
                 ]);
                 if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">无数据</td></tr>'; return; }
                 const sel = document.getElementById('pin-group-filter');
@@ -1946,10 +1997,10 @@
                     const g = groups.find(function(g) { return g.id == p.group_id; });
                     return '<tr><td>' + (p.pin||'') + '</td>' +
                         '<td><input type="text" class="cell-input" value="' + esc(p.name||'') + '" placeholder="手动填写姓名" ' +
-                        'onchange="setAdvisorName(\'' + escA(p.pin||'') + '\',this.value)" ' +
+                        'data-action="set-advisor-name" data-pin="' + escA(p.pin||'') + '" ' +
                         'style="width:110px;" ' +
                         'title="手动填写顾问姓名（试岗人员等）"></td>' +
-                        '<td><select class="cell-input" onchange="setPinGroup(\'' + escA(p.pin||'') + '\',this.value)" style="padding:5px 8px;">' +
+                        '<td><select class="cell-input" data-action="set-pin-group" data-pin="' + escA(p.pin||'') + '" style="padding:5px 8px;">' +
                             '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
                         '</select></td>' +
                         '<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td><td></td></tr>';

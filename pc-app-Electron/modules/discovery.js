@@ -66,13 +66,6 @@ function createDiscoveryService(opts) {
 function startBroadcast(udpSocket, opts) {
   const { PIN_CODE, LOCAL_IP, PORT, DISCOVERY_PORT, getLocalIPs, fileLog } = opts;
 
-  const msg = JSON.stringify({
-    type: 'announce',
-    pin: PIN_CODE,
-    ip: LOCAL_IP,
-    port: PORT
-  });
-
   // 延迟读取：支持外部修改 PIN_CODE
   const buildAnnounceMsg = () => JSON.stringify({
     type: 'announce',

@@ -46,21 +46,45 @@ function createServer(deps) {
     ipcMain            // 可选
   } = deps;
 
-  // ==================== 本地端口访问安全校验（S2修复） ====================
+  // ==================== 本地端口访问安全校验（S2修复 + S1加固） ====================
   // 端口仅绑定 127.0.0.1，要求回环 Host（防 DNS rebinding）+ 可信来源，
-  // 阻止任意网页静默拨号/发短信/挂断/打开窗口。可行来源：Chrome 扩展、
-  // Electron 自身页面(file://)、本机工具(无来源)。
+  // 阻止任意网页静默拨号/发短信/挂断/打开窗口。可行来源：Chrome 扩展
+  // (chrome-extension://)、Electron 自身页面(file://)、回环 http(s)://。
+  // S1加固: 空/缺失 Origin 与 "null" 不再视为可信；回环来源用 URL 解析后精确比对
+  // host，杜绝 localhost.evil.com 前缀绕过。
+  function isTrustedLocalSource(v) {
+    const o = String(v || '').trim().toLowerCase();
+    if (o === '' || o === 'null') return false;
+    if (o.startsWith('chrome-extension://') || o.startsWith('file://')) return true;
+    try {
+      const u = new URL(o);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+      let host = u.hostname.toLowerCase();
+      if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+      return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _sourceHeaderPresent(v) {
+    if (v === undefined || v === null) return false;
+    const s = String(v).trim().toLowerCase();
+    return s !== '' && s !== 'null';
+  }
+
   function isTrustedHttpRequest(req) {
     const host = String(req.headers.host || '').toLowerCase();
     if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
-    const trusted = (v) => {
-      const o = String(v || '').toLowerCase();
-      return o === '' || o === 'null' ||
-        o.startsWith('chrome-extension://') ||
-        o.startsWith('file://') ||
-        /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o);
-    };
-    return trusted(req.headers.origin) && trusted(req.headers.referer);
+    // 平衡方案（S1）: 每个非空来源头都必须可信，且 Origin/Referer 至少一个存在且可信。
+    // 两空/两 null（<img referrerpolicy="no-referrer">）与任何不可信非空来源均拒绝；
+    // Chrome 扩展（fetch 必带 chrome-extension:// Origin，Referer 视浏览器策略可能省略）
+    // 与 Electron 页面不受影响。
+    const originPresent = _sourceHeaderPresent(req.headers.origin);
+    const refererPresent = _sourceHeaderPresent(req.headers.referer);
+    if (originPresent && !isTrustedLocalSource(req.headers.origin)) return false;
+    if (refererPresent && !isTrustedLocalSource(req.headers.referer)) return false;
+    return originPresent || refererPresent;
   }
 
   // ==================== HTTP 服务器 ====================
@@ -245,17 +269,14 @@ function createServer(deps) {
   });
 
   // ==================== WebSocket 服务器 ====================
-  // S2修复: WS 同样校验来源（回环 Host + 可信 Origin），阻止页面 WebSocket 拨号
+  // S2修复 + S1加固: WS 同样校验来源（回环 Host + 可信 Origin），阻止页面 WebSocket 拨号；
+  // 空/缺失 Origin 与 "null" 一律拒绝，回环来源精确比对 host。
   const wss = new WebSocket.Server({
     server,
     verifyClient: (info) => {
       const host = String(info.req.headers.host || '').toLowerCase();
       if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
-      const o = String(info.origin || '').toLowerCase();
-      return o === '' || o === 'null' ||
-        o.startsWith('chrome-extension://') ||
-        o.startsWith('file://') ||
-        /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(o);
+      return isTrustedLocalSource(info.origin);
     }
   });
 

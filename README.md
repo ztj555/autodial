@@ -1,6 +1,8 @@
 # AutoDial 一键拨号系统 v4.14
 
-> 仓库：github.com/ztj555/autodial | 最后更新：2026-08-19
+> 仓库：github.com/ztj555/autodial | 最后更新：2026-08-22 11:10
+>
+> **版本号现状**：本仓库各端独立演进，版本号不统一——云中继 API 报 `4.10`（dashboard 面板标 v6.0）、Chrome 扩展 manifest `5.0.0`、Android `versionName 4.53`、Electron `package.json 3.0.0`（页面内标 v6.x）。本文的 v4.x 叙事指系统整体迭代批次，与单端版本号不一一对应。
 
 ## 项目概述
 
@@ -87,11 +89,12 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
-│   ├── manifest.json                # MV3 配置（v4.2.0）
+│   ├── manifest.json                # MV3 配置（v5.0.0）
 │   ├── background.js                # Service Worker：PIN/路由/登记
 │   ├── content-script.js            # 全帧注入：扫号/按钮/主题/菜单
 │   ├── popup.html + popup.js        # 弹窗：配置 PIN + 服务器
-│   ├── auth.html                    # 管理后台登录页
+│   ├── auth.html                    # 设备授权弹窗（手机换 PIN 登录时扩展侧批准/拒绝）
+│   ├── themes.js                    # 扩展主题变量（9 套主题统一定义）
 │   ├── AutoDial-API.md + README.md  # API文档 + 使用说明
 │   └── icons/                       # 扩展图标 (16/48/128)
 ├── pc-app-Electron/                 # Electron PC 端
@@ -165,9 +168,11 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 
 ```bash
 cd cloud-relay/python
-pip install websockets pystray Pillow
+pip install "websockets>=12,<14" pystray Pillow
 python cloud_relay_v2.py
 ```
+
+> ⚠️ **依赖版本提示**：代码使用 `websockets.legacy.server`（14.0 起弃用但**从未移除**，最新版仍可导入，不会 `ImportError`）。建议安装时钉死 `websockets<14` 以锁定仍受支持的版本（防御性）。云中继 `Dockerfile` 中 `pip install ... websockets>=12.0 ...` 未加引号，`>` 会被 shell 解析为重定向、版本约束实际不生效（详见《Bug检查报告-2026-08-21.md》PY-P0-2，已降级为 P2）。
 
 启动后 WebSocket + REST API + Web 面板均监听 35430 端口。生产部署建议使用 Docker 或 Supervisor（详见部署指南）。
 
@@ -194,7 +199,8 @@ cd pc-app-Electron && npm install && npm start
 
 ## REST API（云中继 35430）
 
-所有响应格式：`{"ok": bool, "code": "xxx", "message": "xxx"}`
+- 业务端点（dial/hangup/status/visit 等）的 PIN 通过 **`X-AutoDial-PIN` 请求头**传递（服务端按大小写不敏感方式匹配，发送大写/小写均可）；其余参数走 URL query。
+- 响应格式：多数业务端点返回 `{"ok": bool, "code": "xxx", "message": "xxx"}`；`/api/v1/visits` 成功时返回裸 JSON 数组，`/health`、`/api/status`、`/api/stats`、`/api/clients`、`/api/history` 等运维端点返回各自的状态对象。
 
 ### 核心拨号
 
@@ -209,7 +215,7 @@ cd pc-app-Electron && npm install && npm start
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/v1/visit?name=...&mobile=...&kefu_tel=...&visit_type=...&visit_time=...` | 一键登记（支持visit_time去重） |
-| GET | `/api/v1/visits?pin=...` | 查询登记列表（支持 unsynced/group 筛选；无 pin 时需管理员令牌） |
+| GET | `/api/v1/visits?pin=...` | 查询登记列表（API 仅支持 `pin`/`group` 参数；`unsynced`、日期筛选是 dashboard 前端过滤，直接调 API 无效；无 pin 时需管理员令牌） |
 | GET | `/api/v1/visit/update?id=N&...` | 更新登记记录（🔐 管理员） |
 | GET | `/api/v1/visit/delete?id=N` | 删除登记记录（🔐 管理员） |
 
@@ -272,7 +278,7 @@ cd pc-app-Electron && npm install && npm start
 | GET | `/api/clients` | 在线客户端列表 |
 | GET | `/api/stats` | 流量统计（含 by_type/by_pin） |
 | GET | `/api/logs?n=N&q=关键词` | 最近日志（可搜索） |
-| GET | `/api/history` | 连接数历史（24h趋势图数据） |
+| GET | `/api/history` | 连接数历史（服务端保留 24h 快照，API 返回最近约 2.4 小时/288 点） |
 | GET | `/` | Web 管理面板 (dashboard.html) |
 
 ### 错误码
@@ -287,6 +293,7 @@ cd pc-app-Electron && npm install && npm start
 | `DUPLICATE_DIAL` | 5 秒内同号码重复拨号 |
 | `MISSING_FIELDS` | 缺少必填字段 |
 | `MISSING_PIN` | 缺少 PIN 参数 |
+| `MISSING` | 缺少必要参数（与 MISSING_PARAM 并存的旧写法） |
 | `MISSING_PARAM` | 缺少必要参数（v4.12） |
 | `INVALID_PARAM` | 参数格式不合法（v4.12） |
 | `MISSING_ID` | 缺少记录 ID（v4.10） |
@@ -309,12 +316,14 @@ cd pc-app-Electron && npm install && npm start
 
 ```
 扩展拨号:
-1. 尝试 HTTP 127.0.0.1:35432 (PC 直连, 500ms 超时)
+1. 尝试 HTTP 127.0.0.1:35432 (PC 直连，可达性探测 500ms 超时)
 2. PC 不可达 → 云中继 /api/v1/dial (Header PIN)
    ├─ PC_CONNECTED → 提示切回本地
    ├─ PHONE_OFFLINE → 提示手机离线
    └─ ACCEPTED → 拨号成功
 ```
+
+> ⚠️ 注意：500ms 超时仅覆盖 PC 可达性探测（ping）；实际的拨号/挂断/登记 fetch 请求当前未设置超时，PC 端 TCP 建连成功但不回包时请求可能长时间挂起。
 
 ## 连接策略（Android）
 
@@ -330,6 +339,7 @@ cd pc-app-Electron && npm install && npm start
 |------|------|------|
 | 扩展设置 PIN | `/^\d{4}$|^\d{11}$/` | popup.js |
 | 扩展请求云端 | `X-AutoDial-PIN` Header | background.js |
+| 扩展请求 PC 端 | 同 Header（Go/Electron 端校验） | background.js |
 | 云中继 REST | `validate_pin()` → 4/11 位纯数字 | cloud_relay_v2.py |
 | Go PC 端 | `isValidPhonePIN()` → 4/11 位纯数字 | devices.go |
 
@@ -349,3 +359,4 @@ cd pc-app-Electron && npm install && npm start
 5. PC 端和云中继可同时运行，扩展自动优先 PC 直连
 6. 管理员默认账号 `18335162275 / 123456`（哈希存储），首次登录后请立即修改
 7. PC 端本地端口 35432 仅接受回环 Host + 可信来源（Chrome 扩展/本机程序），外部网页无法直接拨号
+8. 2026-08-22 已依据《Bug检查报告-2026-08-21.md》完成四批 49 点修复（P0 有效 9 项全部处理 + 精选 P1 + 中危清理），详见 CHANGELOG.md；剩余建议单独立项项（REST 线程池化、HTTPS 迁移、PIN 误检测设计取舍）见 CHANGELOG 与报告

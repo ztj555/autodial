@@ -1,7 +1,9 @@
 package main
 
 import (
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -25,22 +27,28 @@ func isLoopbackHost(host string) bool {
 }
 
 // isTrustedLocalOrigin 校验 HTTP Origin 是否来自可信本地来源。
-// 允许：无来源（命令行/本机工具）、null（file:// 页面）、
-// Chrome 扩展 chrome-extension://、Electron file://、回环 http://。
+// 允许：Chrome 扩展 chrome-extension://、Electron file://、回环 http(s)://。
+// C1修复: 空/无来源（curl 等命令行工具）与 file:// 的 "null" 来源一律拒绝；
+// 回环来源改为精确 host 校验（localhost/127.0.0.1/::1），杜绝
+// http://localhost.evil.com 之类前缀绕过。
 func isTrustedLocalOrigin(origin string) bool {
 	o := strings.ToLower(strings.TrimSpace(origin))
 	if o == "" || o == "null" {
-		return true
+		return false
 	}
 	if strings.HasPrefix(o, "chrome-extension://") || strings.HasPrefix(o, "file://") {
 		return true
 	}
-	if strings.HasPrefix(o, "http://localhost") ||
-		strings.HasPrefix(o, "http://127.0.0.1") ||
-		strings.HasPrefix(o, "http://[::1]") {
-		return true
+	u, err := url.Parse(o)
+	if err != nil {
+		return false
 	}
-	return false
+	host := u.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(strings.ToLower(host), "[]")
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 // rejectUntrustedRequest 校验 HTTP 请求，不合规时写入 403 并返回 true。

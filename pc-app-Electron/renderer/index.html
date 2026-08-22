@@ -884,18 +884,6 @@ async function init() {
     const lvl = data.level === 'error' ? 'error' : data.level === 'warn' ? 'error' : 'info';
     addLog(lvl, '&#x1F5A5; ' + data.text);
   }));
-  _ipcCleanupFns.push(window.api.on('error', (data) => {
-    showToast(data.message, 'error');
-    addLog('error', data.message);
-  }));
-
-  // 悬浮条右键菜单 → 主窗口切Tab（后端通过 webContents.send 发送）
-  _ipcCleanupFns.push(window.api.on('open-settings-tab', () => {
-    window.api.send('open-settings');
-  }));
-  _ipcCleanupFns.push(window.api.on('open-sms-tab', () => {
-    window.api.send('open-sms', '');
-  }));
 
   // 拨号唤醒失败通知
   _ipcCleanupFns.push(window.api.on('dial-wake-failed', (data) => {
@@ -1266,13 +1254,7 @@ init();
     pinError.style.display = 'none';
     document.getElementById('pinCode').textContent = pin;
     pinModal.style.display = 'none';
-    // 调用 HTTP API 保存 PIN
-    fetch('http://localhost:35432/api/set-pin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: pin })
-    }).catch(function(e) { console.warn('set-pin HTTP fallback:', e); });
-    // 也通过 IPC 通知主进程（Electron）
+    // 通过 IPC 通知主进程保存 PIN（Electron）
     try { window.api.send('set-pin', pin); } catch(e) {}
   });
 

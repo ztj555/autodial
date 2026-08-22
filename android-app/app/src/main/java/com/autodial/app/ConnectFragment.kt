@@ -632,107 +632,6 @@ class ConnectFragment : Fragment() {
         discoveryJob = null
     }
 
-    // ==================== 连接控制 ====================
-
-    private fun rebuildV3ConnectionHeader(root: View) {
-        val dp = resources.displayMetrics.density
-        val topBar = root.findViewById<LinearLayout>(R.id.settingsTopBar)
-        val legacyPin = root.findViewById<View>(R.id.legacyPinContainer)
-
-        // Keep the hero visible even when this method is called again after a theme refresh.
-        statusDashboard.visibility = View.VISIBLE
-        statusDashboard.layoutParams = statusDashboard.layoutParams.apply {
-            height = ViewGroup.LayoutParams.WRAP_CONTENT
-        }
-
-        (disconnectBtn.parent as? ViewGroup)?.removeView(disconnectBtn)
-        (serverAliasText.parent as? ViewGroup)?.removeView(serverAliasText)
-        serverAliasText.apply {
-            textSize = 12f
-            setTextColor(Color.parseColor(ThemeManager.getColors(requireContext()).text2))
-            gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
-            setPadding(0, 0, (8 * dp).toInt(), 0)
-        }
-        topBar.addView(serverAliasText)
-        // 当前云服务器别名（连上断开都显示）
-        val alias = prefCtrl.getCurrentServerAlias()
-        serverAliasText.text = alias
-        serverAliasText.visibility = if (alias.isNotEmpty()) View.VISIBLE else View.GONE
-        disconnectBtn.layoutParams = LinearLayout.LayoutParams(
-            (64 * dp).toInt(), (34 * dp).toInt()
-        )
-        disconnectBtn.visibility = View.VISIBLE
-        topBar.addView(disconnectBtn)
-        topBar.tag = null
-        topBar.background = null
-
-        (pinInput.parent as? ViewGroup)?.removeView(pinInput)
-        (connectBtnText.parent as? ViewGroup)?.removeView(connectBtnText)
-        (statusDot.parent?.parent as? ViewGroup)?.let { icon ->
-            (icon.parent as? ViewGroup)?.removeView(icon)
-        }
-        (statusText.parent as? ViewGroup)?.let { textGroup ->
-            (textGroup.parent as? ViewGroup)?.removeView(textGroup)
-        }
-
-        statusDashboard.removeAllViews()
-        statusDashboard.orientation = LinearLayout.VERTICAL
-        statusDashboard.gravity = android.view.Gravity.CENTER_VERTICAL
-        statusDashboard.minimumHeight = (150 * dp).toInt()
-        statusDashboard.setPadding((16*dp).toInt(),(14*dp).toInt(),(16*dp).toInt(),(12*dp).toInt())
-        statusDashboard.tag = "heroCard"
-
-        val statusRow = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        val iconBox = android.widget.FrameLayout(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams((44*dp).toInt(), (44*dp).toInt())
-        }
-        (pulseRing.parent as? ViewGroup)?.removeView(pulseRing)
-        (statusDot.parent as? ViewGroup)?.removeView(statusDot)
-        iconBox.addView(pulseRing, android.widget.FrameLayout.LayoutParams((44*dp).toInt(),(44*dp).toInt(), android.view.Gravity.CENTER))
-        iconBox.addView(statusDot, android.widget.FrameLayout.LayoutParams((28*dp).toInt(),(28*dp).toInt(), android.view.Gravity.CENTER))
-        statusRow.addView(iconBox)
-
-        val statusCopy = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart=(12*dp).toInt() }
-        }
-        (statusText.parent as? ViewGroup)?.removeView(statusText)
-        (connectionMode.parent as? ViewGroup)?.removeView(connectionMode)
-        statusCopy.addView(statusText)
-        statusCopy.addView(connectionMode)
-        statusRow.addView(statusCopy)
-        statusDashboard.addView(statusRow, LinearLayout.LayoutParams(-1,-2))
-
-        val inputRow = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(-1,(44*dp).toInt()).apply { topMargin=(12*dp).toInt() }
-        }
-        pinInput.layoutParams = LinearLayout.LayoutParams(0,(44*dp).toInt(),1f)
-        pinInput.gravity = android.view.Gravity.CENTER_VERTICAL
-        pinInput.textSize = 15f
-        pinInput.letterSpacing = 0f
-        pinInput.hint = "请输入系统手机号"
-        pinInput.tag = "inputField"
-        inputRow.addView(pinInput)
-        connectBtnText.layoutParams = LinearLayout.LayoutParams((78*dp).toInt(),(44*dp).toInt()).apply { marginStart=(8*dp).toInt() }
-        inputRow.addView(connectBtnText)
-        statusDashboard.addView(inputRow)
-
-        (discoveryHint.parent as? ViewGroup)?.removeView(discoveryHint)
-        discoveryHint.text = "你的系统手机号 · 与电脑端保持一致"
-        discoveryHint.textSize = 10f
-        discoveryHint.visibility = View.VISIBLE
-        statusDashboard.addView(discoveryHint, LinearLayout.LayoutParams(-2,-2).apply { topMargin=(8*dp).toInt() })
-
-        legacyPin.visibility = View.GONE
-        connectionBanner.visibility = View.GONE
-        root.findViewById<View>(R.id.foundPCInfo).visibility = View.GONE
-        statusDashboard.visibility = View.VISIBLE
-    }
-
     // ==================== v6: 按钮三态逻辑 ====================
 
     private var connecting = false
@@ -1927,31 +1826,6 @@ class ConnectFragment : Fragment() {
                 otherContent.addView(batteryRow, if (insertIdx >= 0) insertIdx + 1 else 0)
             }
         } catch (_: Exception) {}
-    }
-
-    /** v7: 拨号模式选择对话框 */
-    private fun showDialModeDialog() {
-        if (!isAdded) return
-        val currentKey = prefCtrl.getDialModeKey()
-        val modes = DialMode.entries
-        val labels = modes.map { "${it.label}  —  ${it.desc}" }.toTypedArray()
-        val currentIndex = modes.indexOfFirst { it.key == currentKey }
-
-        AlertDialog.Builder(requireActivity())
-            .setTitle("拨号模式")
-            .setSingleChoiceItems(labels, currentIndex) { dialog, which ->
-                val selected = modes[which]
-                prefCtrl.setDialModeKey(selected.key)
-                dialModeCurrent.text = selected.label
-                updateOtherSectionSubtitle()
-                // 同步到CallLogFragment顶栏
-                try {
-                    (requireActivity() as? MainActivity)?.syncDialModeUI()
-                } catch (_: Exception) {}
-                dialog.dismiss()
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
     // ==================== 每日励志语 ====================

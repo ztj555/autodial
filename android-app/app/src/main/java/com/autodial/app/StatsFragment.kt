@@ -472,9 +472,11 @@ class StatsFragment : Fragment() {
         if (!isAdded) return
         visitSyncBtn.text = "同步中..."
         visitSyncBtn.isEnabled = false
+        // C1修复: 主线程预取 context，后台线程不再调用 requireContext()
+        val appCtx = requireContext().applicationContext
 
         executor.execute {
-            val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val prefs = appCtx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
             val serverUrl = prefs.getString("cloud_server", "") ?: ""
             val pin = prefs.getString("pin", "") ?: ""
 

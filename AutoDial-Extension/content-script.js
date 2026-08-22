@@ -16,10 +16,6 @@
   // ========== v3: 检测坐席手机号（TreeWalker扫描body前部，<1ms）==========
   // 融鑫汇CRM手机号是裸StaticText节点，在页面顶部，无class/id
   // TreeWalker从body顶部向下扫，第一个命中的手机号就是坐席的
-  function getMyPhoneFromCRM() {
-    const result = getMyPhoneAndNameFromCRM();
-    return result ? result.phone : null;
-  }
 
   /**
    * 从 CRM 页面同时检测坐席手机号和姓名。
@@ -63,53 +59,6 @@
   // 主题数据（v5 起统一取自 themes.js 的 AD_THEMES，唯一权威源）
   // ═══════════════════════════════════════════════════════════════
   const EXT_THEMES = AD_THEMES;
-
-  // ── v5 统一组件样式（设计 token，与 popup/auth 同源） ──
-  function adStyles(t) {
-    return {
-      card: {
-        background: t.bg2,
-        borderRadius: '14px',
-        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
-        backdropFilter: 'blur(16px)',
-        fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      },
-      input: {
-        background: t.bg3,
-        border: `1px solid ${t.accent}33`,
-        borderRadius: '10px',
-        color: t.text,
-        outline: 'none',
-      },
-      btnPrimary: {
-        background: t.gradAccent,
-        color: '#FFFFFF',
-        border: 'none',
-        borderRadius: '10px',
-        fontWeight: '700',
-        cursor: 'pointer',
-      },
-      btnGhost: {
-        background: 'transparent',
-        color: t.text2,
-        border: `1px solid ${t.accent}44`,
-        borderRadius: '10px',
-        fontWeight: '600',
-        cursor: 'pointer',
-      },
-      menuItem: {
-        padding: '8px 10px',
-        margin: '0 2px',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        whiteSpace: 'nowrap',
-        transition: 'background .15s',
-      },
-    };
-  }
 
   // ── v5 矢量图标（Phosphor 风格 24 viewBox / stroke 1.8，替代功能 emoji） ──
   const AD_ICON = {
@@ -260,16 +209,24 @@
         var visits = extractVisits(document);
 
         // 收集后续分页链接（去重、按页码排序）
+        // F3修复: 此前遍历全页所有 <a>，parseInt(text)>1 即视为页码，手机号链接
+        // （11 位数字）被当"第 15212345678 页"→ totalPages 虚高、垃圾 fetch + toast 刷屏。
+        // 现在：优先扫描分页容器；文本须为纯数字且 ≤4 位（页码现实上不会超过 9999）；
+        // href 解析后必须是 http/https 协议（排除 tel:/mailto:/javascript: 等）。
         var pageUrls = {};
         var seenPages = {};
-        var paginationLinks = document.querySelectorAll('a');
+        var paginationContainer = document.querySelector('.pagination, .pager, [class*="pagination"]');
+        var paginationLinks = paginationContainer ? paginationContainer.querySelectorAll('a') : document.querySelectorAll('a');
         for (var pi = 0; pi < paginationLinks.length; pi++) {
           var a = paginationLinks[pi];
-          var pageNum = parseInt(a.textContent.trim(), 10);
-          if (pageNum > 1 && a.href && !seenPages[pageNum]) {
-            seenPages[pageNum] = true;
-            pageUrls[pageNum] = a.href;
-          }
+          var txt = (a.textContent || '').trim();
+          if (!/^\d{1,4}$/.test(txt)) continue;
+          var pageNum = parseInt(txt, 10);
+          if (pageNum <= 1 || !a.href || seenPages[pageNum]) continue;
+          var proto = (a.href.split(':')[0] || '').toLowerCase();
+          if (proto !== 'http' && proto !== 'https') continue;
+          seenPages[pageNum] = true;
+          pageUrls[pageNum] = a.href;
         }
 
         var pageNums = Object.keys(pageUrls).sort(function(a, b) { return a - b; });
@@ -348,6 +305,39 @@
 
         fetchNextPage();
     });
+  }
+
+  // ─── Toast 提示（R6修复: 从 if(isTopFrame) 块内上提到 IIFE 顶层，使块外的
+  // handleSyncVisitList 可通过 typeof 检测到，避免顶层路径回退 alert 连环弹窗） ───
+  function showToast(text) {
+    var old = document.getElementById('__ad_toast');
+    if (old) old.remove();
+    var t = T();
+    var toast = document.createElement('div');
+    toast.id = '__ad_toast';
+    toast.textContent = text;
+    Object.assign(toast.style, {
+      position: 'fixed',
+      bottom: '40px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '2147483647',
+      background: t.bg2,
+      color: t.text,
+      padding: '10px 22px',
+      borderRadius: '12px',
+      fontSize: '14px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
+      border: '1px solid ' + t.accent + '33',
+      backdropFilter: 'blur(12px)',
+      transition: 'opacity .3s',
+    });
+    document.body.appendChild(toast);
+    setTimeout(function() {
+      toast.style.opacity = '0';
+      setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
+    }, 2500);
   }
 
   if (isTopFrame) {
@@ -963,103 +953,6 @@
       contextMenu = null;
     }
 
-    // ─── 获取当前位置（右键菜单"获取当前位置"） ───
-    function showPosition() {
-      const t = T();
-      const tip = document.createElement('div');
-      tip.id = '__ad_position_tip';
-      Object.assign(tip.style, {
-        position: 'fixed',
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        zIndex: '2147483647',
-        background: t.bg2,
-        color: t.text,
-        borderRadius: '14px',
-        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
-        padding: '18px 20px',
-        fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-        fontSize: '13px',
-        lineHeight: '1.8',
-        letterSpacing: '.02em',
-        minWidth: '280px',
-        backdropFilter: 'blur(16px)',
-      });
-
-      const title = document.createElement('div');
-      title.innerHTML = adIcon('mapPin', 15) + '<span style="vertical-align:2px">当前按钮位置</span>';
-      Object.assign(title.style, {
-        fontWeight: '700', marginBottom: '10px', fontSize: '14px', color: t.accent,
-        display: 'flex', alignItems: 'center', gap: '6px',
-      });
-      tip.appendChild(title);
-
-      const lines = [];
-      if (floatEl) {
-        const r = floatEl.getBoundingClientRect();
-        const l = floatEl.style.left || (r.left + 'px');
-        const t2 = floatEl.style.top || (r.top + 'px');
-        lines.push(`拨号按钮: left=${l}, top=${t2}`);
-      }
-      if (hangupEl) {
-        const r = hangupEl.getBoundingClientRect();
-        const l = hangupEl.style.left || (r.left + 'px');
-        const t2 = hangupEl.style.top || (r.top + 'px');
-        lines.push(`挂断按钮: left=${l}, top=${t2}`);
-      }
-
-      lines.forEach(text => {
-        const div = document.createElement('div');
-        div.textContent = text;
-        tip.appendChild(div);
-      });
-
-      const copyBtn = document.createElement('button');
-      copyBtn.innerHTML = adIcon('clipboard', 14) + '<span>复制位置</span>';
-      Object.assign(copyBtn.style, {
-        marginTop: '14px',
-        height: '34px',
-        padding: '0 16px',
-        background: t.gradAccent,
-        color: '#FFFFFF',
-        border: 'none',
-        borderRadius: '10px',
-        cursor: 'pointer',
-        fontWeight: '600',
-        fontSize: '12px',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-      });
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(lines.join('\n')).then(() => {
-          copyBtn.textContent = '✓ 已复制';
-          setTimeout(() => { tip.remove(); }, 800);
-        });
-      };
-      tip.appendChild(copyBtn);
-
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = '关闭';
-      Object.assign(closeBtn.style, {
-        marginTop: '14px',
-        marginLeft: '8px',
-        height: '34px',
-        padding: '0 16px',
-        background: 'transparent',
-        color: t.text2,
-        border: `1px solid ${t.accent}44`,
-        borderRadius: '10px',
-        cursor: 'pointer',
-        fontSize: '12px',
-      });
-      closeBtn.onclick = () => tip.remove();
-      tip.appendChild(closeBtn);
-
-      document.body.appendChild(tip);
-    }
-
     // ─── 主题选择子菜单 ──────────────────────────────
     function showThemeMenu() {
       const t = T();
@@ -1537,38 +1430,6 @@
       }, ok ? 2500 : 1000);
     }
 
-    // ─── Toast 提示 ──────────────────────────────────
-    function showToast(text) {
-      var old = document.getElementById('__ad_toast');
-      if (old) old.remove();
-      var t = T();
-      var toast = document.createElement('div');
-      toast.id = '__ad_toast';
-      toast.textContent = text;
-      Object.assign(toast.style, {
-        position: 'fixed',
-        bottom: '40px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: '2147483647',
-        background: t.bg2,
-        color: t.text,
-        padding: '10px 22px',
-        borderRadius: '12px',
-        fontSize: '14px',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
-        border: '1px solid ' + t.accent + '33',
-        backdropFilter: 'blur(12px)',
-        transition: 'opacity .3s',
-      });
-      document.body.appendChild(toast);
-      setTimeout(function() {
-        toast.style.opacity = '0';
-        setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
-      }, 2500);
-    }
-
     // ─── HTML 转义 ──────────────────────────────────
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1729,6 +1590,10 @@
       }
       // 同步登记列表（主管功能）
       if (msg.type === 'syncVisitList') {
+        // F2修复: 顶层页面若不是列表页，不调用 sendResponse（不抢答），
+        // 把响应权留给列表页 iframe 的监听器——此前顶层监听器抢先回 ok:false，
+        // 导致 iframe 布局下同步登记列表的正确响应被丢弃。
+        if (!window.location.href.includes('list_user_visit.html')) return false;
         handleSyncVisitList(sendResponse);
         return true;
       }

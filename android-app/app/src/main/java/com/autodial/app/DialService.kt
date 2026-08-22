@@ -545,7 +545,8 @@ class DialService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
-        registerReceiver(screenOnReceiver, filter)
+        // E2修复: Android 14+ (targetSdk 34) 两参 registerReceiver 必抛 SecurityException，须指定导出标志
+        ContextCompat.registerReceiver(this, screenOnReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         Log.d(TAG, "\u5df2\u6ce8\u518c\u4eae\u5c4f\u5e7f\u64ad")
     }
 
@@ -649,9 +650,8 @@ class DialService : Service() {
                 val mins = (stats[0].totalDurationSec + 30) / 60
                 val connected = callLogDb.getTodayConnectedCount(this)
                 val rate = if (today > 0) connected * 100 / today else 0
-                val pin = getSharedPreferences("autodial", MODE_PRIVATE).getString("pin", "") ?: ""
                 titleLine = "Auto融鑫汇         今日财运：+$today"
-                bodyLine = "$text $pin           接通$connected · $rate%"
+                bodyLine = "$text           接通$connected · $rate%"
             }
         } catch (_: Exception) {}
         return NotificationCompat.Builder(this, CHANNEL_ID)

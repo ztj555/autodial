@@ -18,7 +18,6 @@ import uuid
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, urlencode
 from concurrent.futures import ThreadPoolExecutor
 
@@ -220,6 +219,10 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
         c.execute(create_admin_accounts)
+        c.execute(create_phones)
+        c.execute(create_call_records)
+        c.execute(create_phone_events)
+        c.execute(create_phone_daily)
         conn.commit()
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
         except: pass  # column already exists
@@ -246,11 +249,33 @@ _ADMIN_SALT = 'autodial#v4'
 def _hash_pwd(pwd):
     return hashlib.sha256((_ADMIN_SALT + pwd).encode('utf-8')).hexdigest()
 
-# 登录失败时间戳（60 秒窗口内最多 5 次失败，防爆破）
-_login_failures = []
+# 登录失败时间戳（60 秒窗口内每 (username, client_ip) 最多 5 次失败，防爆破）
+# S5修复: 由全局列表改为按 (username, client_ip) 维度计数，防止任何人失败 5 次
+# 即锁死管理员登录（管理端 DoS）。仅单线程事件循环内访问，无需加锁。
+_login_failures = {}  # (username, client_ip) -> [失败时间戳]
+
+def _login_client_ip(hdrs):
+    """从请求头提取客户端 IP（兼容反向代理部署），无则返回 unknown"""
+    for h in ('x-forwarded-for', 'x-real-ip'):
+        v = (hdrs.get(h) or '').strip()
+        if v:
+            return v.split(',')[0].strip()
+    return 'unknown'
+
+def _prune_login_failures(now_ts):
+    """移除全部过期条目（防 dict 无界增长）"""
+    expired = [k for k, lst in _login_failures.items() if not lst or now_ts - lst[-1] > 60]
+    for k in expired:
+        del _login_failures[k]
+    if len(_login_failures) > 2000:
+        for k, lst in list(_login_failures.items()):
+            _login_failures[k] = [t for t in lst if now_ts - t <= 60]
+            if not _login_failures[k]:
+                del _login_failures[k]
 
 # 首次启动：创建默认管理员账号（如果没有任何账号）
 def _seed_default_admin():
+    conn = None
     try:
         conn = _connect_db()
         c = conn.cursor()
@@ -311,7 +336,7 @@ def cleanup_memory():
     if stale_pins:
         log.info(f'MEM_CLEANUP: removed {len(stale_pins)} stale ext_activity entries')
 
-    # 3. _pin_attempts: 清理超过 5 分钟未尝试的 IP
+    # 3. _pin_attempts: 清理超过 1 分钟未尝试的 IP
     for ip in list(_pin_attempts.keys()):
         _pin_attempts[ip] = [t for t in _pin_attempts[ip] if now - t < timedelta(minutes=1)]
         if not _pin_attempts[ip]:
@@ -467,28 +492,6 @@ def remove_from_group(ws):
 HEARTBEAT_TIMEOUT = 90  # 90秒没收到消息就断开
 MAX_TOTAL_CONNECTIONS = 500  # 全局连接上限（腾讯云中等配置安全值）
 
-async def check_heartbeats():
-    """定期检查心跳超时，关闭超时的连接"""
-    while True:
-        await asyncio.sleep(30)  # 每30秒检查一次
-        now = datetime.now()
-        to_close = []
-        
-        for ws, meta in list(ws_meta.items()):
-            last_time = meta.get('last_message_time')
-            if last_time:
-                elapsed = (now - last_time).total_seconds()
-                if elapsed > HEARTBEAT_TIMEOUT:
-                    to_close.append((ws, meta, elapsed))
-        
-        for ws, meta, elapsed in to_close:
-            try:
-                await ws.close(1000, f'Heartbeat timeout ({HEARTBEAT_TIMEOUT}s)')
-                log.warning(f'HEARTBEAT_TIMEOUT {meta.get("role", "unknown")} pin={meta.get("pin", "none")} ip={meta.get("ip", "?")} elapsed={elapsed:.0f}s')
-            except Exception:
-                pass
-            ws_meta.pop(ws, None)  # C2修复: 确保 ws_meta 清理，防止僵尸连接积累
-
 # ==================== PIN 尝试频率限制 ====================
 MAX_PIN_ATTEMPTS_PER_MINUTE = 5
 _pin_attempts: dict[str, list] = defaultdict(list)
@@ -638,6 +641,8 @@ async def handle_connection(ws, path=None):
                 meta['pin'] = pin
                 meta['role'] = 'phone'
                 meta['device_name'] = msg.get('deviceName', f'Phone-{client_ip[-3:]}')
+                # S2修复: 每次重新握手先清除授权标记，防止旧会话授权状态被带到新 PIN
+                meta['authorized'] = False
                 group = get_group(pin)
                 # Fix B4: 同 PIN 只允许一台手机在线，踢掉旧连接
                 for old_phone in list(group.phones):
@@ -726,6 +731,8 @@ async def handle_connection(ws, path=None):
                 if needs_auth:
                     continue  # 跳过后续处理，等待 PC 授权
 
+                # S2修复: 授权通过（default_pin 匹配），标记连接为已授权，此后消息才允许转发给 PC
+                meta['authorized'] = True
                 group.phones.add(ws)
                 pc_online = len(group.pcs) > 0
                 # Round3: 卸载同步 DB 查询到线程池，避免阻塞事件循环
@@ -892,6 +899,10 @@ async def handle_connection(ws, path=None):
                             pass
                         group.phones.discard(old_phone)
                     group.phones.add(phone_ws)
+                    # S2修复: 授权通过后标记手机连接为已授权，此后其消息才允许转发给 PC
+                    phone_meta = ws_meta.get(phone_ws)
+                    if phone_meta is not None:
+                        phone_meta['authorized'] = True
                     pc_online = len(group.pcs) > 0
                     try:
                         await phone_ws.send(json.dumps({
@@ -934,6 +945,13 @@ async def handle_connection(ws, path=None):
                 # ping 消息附加设备名称，便于 PC 端识别心跳来源
                 if msg_type == 'ping':
                     msg['deviceName'] = meta.get('device_name', '')
+                # S2修复: 未授权手机（等待授权中/被拒绝但仍保持连接）的消息不得转发给 PC；
+                # 仅保留心跳 pong，避免被拒连接继续向 PC 注入 dial_result/file_chunk 等白名单消息。
+                if meta.get('role') == 'phone' and not meta.get('authorized'):
+                    if msg_type == 'ping':
+                        await ws.send(json.dumps({'type': 'pong'}))
+                        record_message(pin, msg_type, len(raw))
+                    continue
                 # ack 消息记录路由信息
                 if msg_type == 'ack':
                     log.info(f'RELAY ack phone→pc pin={pin} messageId={msg.get("messageId","?")} originalType={msg.get("originalType","?")} deviceName={msg.get("deviceName","?")}')
@@ -1049,7 +1067,7 @@ def configure_firewall():
 
 # ==================== HTTP 健康检查 + Web 管理界面 ====================
 def load_dashboard_html():
-    """从外部文件读取 dashboard.html（支持热更新，无需重启服务）"""
+    """从外部文件读取 dashboard.html（启动时读取一次，不热更新）"""
     # PyInstaller 打包后资源在 sys._MEIPASS 中；开发模式下在脚本同目录
     if getattr(sys, 'frozen', False):
         script_dir = sys._MEIPASS
@@ -1100,13 +1118,38 @@ def get_daily_stats():
     return result
 
 def get_logs(n=100):
-    """读取最近 n 条日志"""
+    """读取最近 n 条日志（从文件尾部倒读，避免全量读入大日志文件）"""
     if not log_file_path or not os.path.exists(log_file_path):
         return []
     try:
-        with open(log_file_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-            return [line.strip() for line in lines[-n:]]
+        lines = []
+        block_size = 8192
+        with open(log_file_path, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            file_size = f.tell()
+            pos = file_size
+            tail = b''
+            while pos > 0 and len(lines) < n:
+                read_size = min(block_size, pos)
+                pos -= read_size
+                f.seek(pos)
+                chunk = f.read(read_size)
+                data = chunk + tail
+                # 按 '\n' 切分；'\n' 不会出现在多字节 UTF-8 字符内部，块边界安全。
+                # 若当前块是文件末尾且以 '\n' 结尾，split 会多出一个空段（对应 readlines 不产生的空行），丢弃。
+                parts = data.split(b'\n')
+                if pos + read_size == file_size and data.endswith(b'\n'):
+                    parts = parts[:-1]
+                tail = parts[0]  # 行首残段，与更早的块拼接
+                for p in reversed(parts[1:]):
+                    if len(lines) >= n:
+                        break
+                    lines.append(p)
+            if tail and len(lines) < n:
+                lines.append(tail)
+        # lines 目前为倒序（文件尾部在前），反转回文件顺序并取最后 n 条
+        lines.reverse()
+        return [line.decode('utf-8', errors='replace').strip() for line in lines[-n:]]
     except Exception:
         return []
 
@@ -1201,79 +1244,6 @@ def _set_device_default_pin(device_name, pin):
             conn.close()
 
 # ==================== 访问登记辅助函数 ====================
-
-def _lookup_kid(manager_name, brand='1833'):
-    """通过 /bserve/search 接口将顾问姓名转换为 CRM 内部 ID (kid)。
-    返回 kid 字符串，失败返回 None。"""
-    try:
-        import urllib.request as urlreq
-        search_data = urlencode({'keyword': manager_name, 'brand': brand}).encode('utf-8')
-        req = urlreq.Request(
-            'https://guwen.zhudaicms.com/bserve/search',
-            data=search_data,
-            headers={
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'AutoDial/4.1',
-                'Origin': 'https://guwen.zhudaicms.com',
-                'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=%s' % brand
-            }
-        )
-        resp = urlreq.urlopen(req, timeout=8)
-        body = json.loads(resp.read())
-        if body.get('code') == 1 and body.get('data'):
-            # 优先精确匹配，其次取第一个结果
-            for item in body['data']:
-                if item.get('name') == manager_name:
-                    return str(item['id'])
-            return str(body['data'][0]['id'])
-    except Exception as e:
-        log.warning(f'Lookup kid for "{manager_name}" failed: {e}')
-    return None
-
-def _sync_to_crm(visit_id, name, mobile, kefu_tel, visit_type):
-    """后台同步到 CRM 系统。新版 CRM 要求 kid 参数（顾问内部ID）而非 kefu_tel。
-    成功后将 crm_synced 置 1。"""
-    try:
-        import urllib.request as urlreq
-        kid = _lookup_kid(kefu_tel)
-        if not kid:
-            log.warning(f'CRM sync SKIP id={visit_id}: 未找到顾问 "{kefu_tel}" 的 kid')
-            return
-        crm_data = urlencode({
-            'brand': '1833', 'name': name, 'mobile': mobile,
-            'kid': kid, 'visit_type': visit_type
-        }).encode('utf-8')
-        req = urlreq.Request(
-            'https://guwen.zhudaicms.com/bserve/saoma_indb.html',
-            data=crm_data,
-            headers={
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'AutoDial/4.1',
-                'Origin': 'https://guwen.zhudaicms.com',
-                'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
-            }
-        )
-        resp = urlreq.urlopen(req, timeout=10)
-        body = json.loads(resp.read())
-        if body.get('code') == 1:
-            log.info(f'CRM sync OK visit_id={visit_id} kid={kid}')
-            # 标记为已同步
-            conn = None
-            try:
-                conn = _connect_db()
-                c = conn.cursor()
-                c.execute('UPDATE visits SET crm_synced=1, updated_at=? WHERE id=?',
-                          (datetime.now().strftime('%Y-%m-%dT%H:%M:%S'), visit_id))
-                conn.commit()
-            except Exception as e:
-                log.warning(f'CRM sync flag update failed visit_id={visit_id}: {e}')
-            finally:
-                if conn:
-                    conn.close()
-        else:
-            log.warning(f'CRM sync FAIL visit_id={visit_id} kid={kid} msg={body.get("msg")}')
-    except Exception as e:
-        log.warning(f'CRM sync error: {e}')
 
 def _push_visit_to_phone(pin, visit_record):
     """推送 visit_record 给对应 pin 的手机，离线则堆积"""
@@ -1618,15 +1588,20 @@ async def health_check_handler(path, request_headers):
 
     # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
     if path == '/api/v1/login':
-        # S6修复: 登录失败限频（60 秒窗口最多 5 次），防口令爆破
+        # S6修复 + S5加固: 登录失败限频（60 秒窗口内每 (username, client_ip) 最多 5 次），
+        # 防口令爆破且不再因他人失败而锁死管理员登录
         now_ts = time.time()
-        while _login_failures and now_ts - _login_failures[0] > 60:
-            _login_failures.pop(0)
-        if len(_login_failures) >= 5:
-            return (429, JSON_HDR, _err_json('RATE_LIMITED', '尝试过于频繁，请60秒后再试'))
         qs = parse_qs(parsed.query)
         user = qs.get('user', [''])[0].strip()
         pwd = qs.get('pass', [''])[0].strip()
+        client_ip = _login_client_ip(hdrs)
+        fail_key = (user, client_ip)
+        if len(_login_failures) > 2000:
+            _prune_login_failures(now_ts)
+        cur_failures = [t for t in _login_failures.get(fail_key, []) if now_ts - t <= 60]
+        if len(cur_failures) >= 5:
+            _login_failures[fail_key] = cur_failures
+            return (429, JSON_HDR, _err_json('RATE_LIMITED', '尝试过于频繁，请60秒后再试'))
         if not user or not pwd:
             return (401, JSON_HDR, _err_json('LOGIN_FAILED', '请输入账号和密码'))
         conn = None
@@ -1643,11 +1618,14 @@ async def health_check_handler(path, request_headers):
                         conn.commit()
                     except Exception:
                         pass
+                # Q2修复: 登录成功后清空该 (user, client_ip) 的失败计数，防止 60s 窗口内失败次数跨成功保留
+                _login_failures.pop(fail_key, None)
                 token = uuid.uuid4().hex
                 _admin_sessions[token] = time.time() + 86400  # 24小时有效
                 log.info(f'ADMIN_LOGIN user={user}')
                 return (200, JSON_HDR, json.dumps({'ok': True, 'token': token, 'username': user}).encode('utf-8'))
-            _login_failures.append(now_ts)
+            cur_failures.append(now_ts)
+            _login_failures[fail_key] = cur_failures
             return (401, JSON_HDR, _err_json('LOGIN_FAILED', '账号或密码错误'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
@@ -1809,8 +1787,16 @@ async def health_check_handler(path, request_headers):
             group = get_group(auth_pin)
             # 踢掉相同 PIN 的旧手机（通过 phone_ws 同组清除）
             for old_phone in list(group.phones):
+                try:
+                    await old_phone.close(1001, 'duplicate_reconnect')
+                except Exception:
+                    pass
                 group.phones.discard(old_phone)
             group.phones.add(phone_ws)
+            # S2修复: REST 授权通过后同样标记手机连接为已授权（与 WS 版 auth_response 对齐）
+            phone_meta = ws_meta.get(phone_ws)
+            if phone_meta is not None:
+                phone_meta['authorized'] = True
             pc_online = len(group.pcs) > 0
             # 查询手机主人姓名
             owner_name = ''
@@ -2639,10 +2625,6 @@ async def run_server():
     # C4修复: 取消旧心跳任务再创建新的
     # 注意：已禁用应用层心跳检测，改用WebSocket内置的ping/pong机制
     # 避免因只有WebSocket心跳而没有应用层消息导致误判超时
-    # if _heartbeat_task and not _heartbeat_task.done():
-    #     _heartbeat_task.cancel()
-    # _heartbeat_task = asyncio.create_task(check_heartbeats())
-    # log.info(f'Heartbeat checker started (timeout={HEARTBEAT_TIMEOUT}s)')
     log.info('Using WebSocket built-in ping/pong mechanism (application-layer heartbeat disabled)')
 
     async with serve(handle_connection, '0.0.0.0', PORT,

@@ -89,53 +89,10 @@ function normalizeCloudUrl(addr) {
   return 'ws://' + clean;
 }
 
-/**
- * 一键获取云服务器列表（从 Gist/Gitee）
- */
-function fetchCloudServers(appSettings, app) {
-  const https = require('https');
-  const sources = [
-    'https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt',
-    'https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt'
-  ];
-  for (const url of sources) {
-    try {
-      https.get(url, { timeout: 10000 }, (res) => {
-        if (res.statusCode !== 200) return;
-        let body = '';
-        res.on('data', (chunk) => body += chunk);
-        res.on('end', () => {
-          const servers = [];
-          for (let line of body.split('\n')) {
-            line = line.trim();
-            if (!line || line.startsWith('#')) continue;
-            if (/^\[.+\]$/.test(line)) continue;
-            line = line.replace(/新云端|老云端/g, '').trim();
-            if (!line) continue;
-            // 去掉行末别名（格式: "IP:PORT 别名"）
-            line = line.split(' ')[0];
-            line = line.replace(/^(https?|wss?):\/\//i, '');
-            if (!line.includes(':')) line += ':35430';
-            servers.push(line);
-          }
-          if (servers.length > 0) {
-            appSettings.cloudServers = servers;
-            appSettings.cloudServer = servers[0];
-            saveSettings(appSettings, app);
-            console.log('[云端] 一键获取到 ' + servers.length + ' 个服务器: ' + servers.join(', '));
-          }
-        });
-      }).on('error', () => {});
-      return;
-    } catch (e) {}
-  }
-}
-
 module.exports = {
   DEFAULT_SETTINGS,
   init,
   loadSettings,
   saveSettings,
-  normalizeCloudUrl,
-  fetchCloudServers
+  normalizeCloudUrl
 };

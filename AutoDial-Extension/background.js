@@ -31,7 +31,6 @@ refreshPcStatus(); // 启动时立刻探测一次
 
 // ==================== 设备授权轮询 ====================
 let _authPollTimer = null;
-let _lastAuthPollTime = 0;
 let _crmPageActive = false;
 
 // 检测是否有 CRM 页面在打开状态
@@ -55,7 +54,6 @@ async function pollAuthRequests() {
     const r = await fetch(url);
     const d = await r.json();
     if (!d.ok || !d.pending || d.pending.length === 0) {
-      _lastAuthPollTime = Date.now();
       return;
     }
     // 取出第一个待授权请求（通常只有一个）
@@ -68,7 +66,6 @@ async function pollAuthRequests() {
     // 弹出授权窗口
     showAuthDialog(req, api);
   } catch(e) { /* 静默失败，下次轮询重试 */ }
-  _lastAuthPollTime = Date.now();
 }
 
 function startAuthPolling() {
@@ -159,7 +156,6 @@ fetchCloudList().catch(() => {});
 // ==================== 状态 ====================
 let pcAvailable = null;
 let pcLastCheck = 0;
-const tabPhones = {};
 
 // ==================== PIN 管理（替代原 JWT） ====================
 
@@ -439,18 +435,6 @@ function notifyTab(tabId, msg) {
   }
 }
 
-async function reDetectPhone(tabId) {
-  if (!tabId) return null;
-  try {
-    const resp = await new Promise((resolve) => {
-      chrome.tabs.sendMessage(tabId, { type: 'reDetect' }, { frameId: 0 }, resolve);
-    });
-    return resp?.phone || null;
-  } catch {
-    return null;
-  }
-}
-
 // ==================== 消息路由（与 v3.1 一致） ====================
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -459,7 +443,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 客户手机号检测（子iframe -> 顶层页面转发）
   if (msg.type === 'phoneDetected') {
     if (tabId) {
-      tabPhones[tabId] = msg.phone;
       chrome.tabs.sendMessage(tabId, { type: 'updatePhone', phone: msg.phone }, { frameId: 0 }).catch(() => {});
     }
     return;
@@ -564,8 +547,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-chrome.tabs.onRemoved.addListener(tabId => { delete tabPhones[tabId]; });
-
 // ==================== 右键菜单：同步登记列表 ====================
 
 chrome.contextMenus.removeAll(() => {
@@ -624,20 +605,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 // 管理员检查 + 同步处理
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // 检查是否为管理员
-  if (msg.type === 'checkIsAdmin') {
-    const pin = msg.pin;
-    if (!pin) { sendResponse({ ok: false }); return true; }
-    getCloudApi().then(apiUrl => {
-      return fetch(`${apiUrl}/api/v1/advisor/is_admin?pin=${encodeURIComponent(pin)}`);
-    }).then(r => r.json()).then(d => {
-      sendResponse({ ok: d.ok, is_admin: d.is_admin });
-    }).catch(() => {
-      sendResponse({ ok: false });
-    });
-    return true;
-  }
-
   // 批量同步登记记录到云端
   if (msg.type === 'batchSyncVisits') {
     const pin = msg.pin;

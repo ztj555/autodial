@@ -38,7 +38,6 @@ var (
 	devices     = make(map[string]*PhoneDevice)
 	activePin   string
 	devicesMu   sync.RWMutex
-	onUpdate    func()
 	pendAcks    = make(map[string]*AckEntry)
 	ackMu       sync.Mutex
 	msgCounter  atomic.Uint64
@@ -80,8 +79,20 @@ type PhoneDevice struct {
 	Status        string `json:"status"`
 	Ws            *websocket.Conn
 	CloudWs       *websocket.Conn
+	wsMu          sync.Mutex // C2修复: 串行化 LAN Ws 的写入（读循环与 sendToPhone 共享同一连接）
 	LastHeartbeat time.Time
 	ConnectedAt   time.Time
+}
+
+// writeWs 串行化对 LAN WebSocket 的写入（gorilla/websocket 禁止并发写）。
+// 云端连接是全局共享的单一连接，统一由全局 cloudWsMu 保护，不走本方法。
+func (d *PhoneDevice) writeWs(msg interface{}) error {
+	d.wsMu.Lock()
+	defer d.wsMu.Unlock()
+	if d.Ws == nil {
+		return fmt.Errorf("ws closed")
+	}
+	return d.Ws.WriteJSON(msg)
 }
 
 type AckEntry struct {
@@ -96,14 +107,6 @@ type DialQueueEntry struct {
 	Number  string
 	Timer   *time.Timer
 	Resolve func(bool)
-}
-
-func generatePinCode() string {
-	// B15修复: v4 架构要求 11 位手机号作为 PIN，不再生成 4 位短码。
-	// 首次启动时 pinCode 为空，所有手机连接被拒绝，
-	// 用户必须通过 /api/set-pin 或前端设置 11 位手机号。
-	// 重启后由 B24 修复从 appSettings.PinCode 恢复。
-	return ""
 }
 
 func getMacAddress() string {
@@ -346,6 +349,14 @@ func removeDevice(pin string, transport string) {
 			d.Status = "offline"
 		}
 	} else {
+		// R2修复+收敛: 心跳超时全量移除时关闭 LAN 连接（每连接独立读 goroutine，
+		// 必须 Close 防阻塞泄漏）；共享 CloudWs 的生死由 cloud.go 的 pong 看门狗
+		// 与读循环退出机制负责，此处不 Close，避免单台云设备超时关闭共享连接
+		// 导致全体云设备闪断重连。gorilla/websocket Close 可与其他方法并发调用，
+		// 与 writeWs(wsMu) 不冲突（C2 兼容）。
+		if d.Ws != nil {
+			d.Ws.Close()
+		}
 		delete(devices, pin)
 		if activePin == pin {
 			activePin = ""
@@ -357,14 +368,16 @@ func removeDevice(pin string, transport string) {
 func DeviceList() []map[string]interface{} {
 	devicesMu.RLock()
 	defer devicesMu.RUnlock()
+	// R3修复: 锁内一次性取备注快照（深拷贝），避免直接读共享 map 的竞态
+	notes := getSettings().PhoneNotes
 	list := make([]map[string]interface{}, 0)
 	for pin, d := range devices {
 		note := d.Note
 		if note == "" {
-			note = appSettings.PhoneNotes[pin]
+			note = notes[pin]
 		}
 		if note == "" {
-			note = appSettings.PhoneNotes[d.Name]
+			note = notes[d.Name]
 		}
 		displayName := note
 		if displayName == "" {
@@ -396,10 +409,6 @@ func setActiveDevice(pin string) {
 }
 
 func notifyUpdate() {
-	// Legacy callback (unused but kept for compatibility)
-	if onUpdate != nil {
-		onUpdate()
-	}
 	// During shutdown, skip — the Wails runtime is shutting down
 	// and EventsEmit would stall or fail.
 	if shuttingDown {
@@ -521,17 +530,27 @@ func broadcastWakeUp() {
 
 func checkHeartbeats() {
 	devicesMu.Lock()
-	var toRemove []string
+	type timedOutDevice struct {
+		pin     string
+		isCloud bool
+	}
+	var toRemove []timedOutDevice
 	now := time.Now()
 	for pin, d := range devices {
 		if !d.LastHeartbeat.IsZero() && now.Sub(d.LastHeartbeat) > HeartbeatTimeout {
 			fileLog("W", "DevMgr", pin, fmt.Sprintf("heartbeat timeout (%.0fs)", now.Sub(d.LastHeartbeat).Seconds()))
-			toRemove = append(toRemove, pin)
+			// R2收敛: 云设备共享同一 CloudWs，超时只清引用、不关闭共享连接，
+			// 避免单台云手机超时触发全体云设备闪断重连
+			toRemove = append(toRemove, timedOutDevice{pin: pin, isCloud: d.IsCloud || d.CloudWs != nil})
 		}
 	}
 	devicesMu.Unlock()
 
-	for _, pin := range toRemove {
-		removeDevice(pin, "all")
+	for _, item := range toRemove {
+		if item.isCloud {
+			removeDevice(item.pin, "cloud")
+		} else {
+			removeDevice(item.pin, "all")
+		}
 	}
 }

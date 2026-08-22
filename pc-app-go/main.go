@@ -43,7 +43,7 @@ func main() {
 				return true
 			}
 			// If tray is active and closeAction is minimize, hide to tray instead of quitting
-			if trayAdded && appSettings.CloseAction == "minimize" {
+			if trayAdded && getSettings().CloseAction == "minimize" {
 				wailsRuntime.WindowHide(ctx)
 				setMainWindowVisible(false)
 				return false // prevent quit

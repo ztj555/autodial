@@ -1,5 +1,147 @@
 # AutoDial 更新日志
 
+## 2026-08-22
+
+### 第四批 P2/P3 清理修复（QA 独立回归 13/13 PASS）— 完成于 2026-08-22 11:00
+
+死代码清理 / QA 遗留观察项 / 轻量优化，每处删除均先 grep 全量确认无调用者。
+
+**云中继**
+- [Q1] `dashboard.html` `delAdminAccount` 迁移为 data-action 事件委托（与第二批 S3 统一，消除最后一处拼接式 onclick）
+- [Q2] `cloud_relay_v2.py` 登录成功清空该 (user,ip) 失败计数（限频不再跨成功保留）
+- [Q3] `get_logs` 改为文件尾部倒读（PY-P1-2 轻量缓解，不再全量读入 10MB 日志；8 例边界实测通过）
+- [Q4] 死代码删除：`check_heartbeats` / `_sync_to_crm` / `_lookup_kid` / http.server import；注释对齐（热更新、5 分钟→1 分钟）
+
+**Chrome 扩展**
+- [Q5] 死代码删除：`tabPhones` / `reDetectPhone` / `_lastAuthPollTime` / `checkIsAdmin` 分支 / `getMyPhoneFromCRM` / `adStyles` / `showPosition`
+
+**Go PC 端**
+- [Q6] 死代码删除：`generatePinCode` / `onUpdate` 回调；go.mod 清理 EDY 残留注释
+
+**Electron PC 端**
+- [Q7] 删除无调用方的 `fetchCloudServers` 函数与 `fetch-cloud-servers` IPC 注册
+- [Q8] 删除无发送方的监听：floatbar `menu-dial`/`menu-hangup`、index.html `error`/`open-settings-tab`/`open-sms-tab`
+- [Q9] 删除 `index.html` 死代码 fetch `/api/set-pin`（实际走 IPC）；`discovery.js` 未使用变量
+- [Q10] `pack.js` 硬编码 EDY 缓存路径 → `os.homedir()` 动态路径
+
+**Android**
+- [Q11] `DialService.kt` 删除未使用 pin 变量
+- [Q12] `CallLogDb.kt` 异常文案指向真实存在的 `getInstance(context)`
+- [Q13] 删除死代码 `rebuildV3ConnectionHeader` / `showDialModeDialog`；`autoTestServersOnStart` 经 grep 确认有调用者、正确保留
+
+**QA 独立回归**：13/13 PASS / 0 FAIL；前序修复（dashboard 委托 9 action、authorized 授权标记、登录限频、Electron IPC 通道）兼容性抽查通过。
+**遗留观察项**（非阻塞，后续顺手可清）：floatbar.html:412 `error` 监听无发送方；main.js 7 个无调用方 ipcMain 处理器；get_logs 全空行文件边界（实际无影响）；discovery.js 未使用解构。
+
+**四批累计修复 49 点**（18 + 12 + 6 + 13）。剩余建议单独立项：PY-P1-2（REST 线程池化）、AN-P1-3（HTTPS 迁移）；EX-P1-2（PIN 误检测，设计取舍）。
+
+### 第三批修复：资源泄漏 / data race / 体验（QA 独立回归 R1-R6 全 PASS）— 完成于 2026-08-22 10:30
+
+**Go PC 端**
+- [R1] `server.go` ACK 定时器超时路径补 `delete(pendAcks, msgID)`（GO-P1-1，消除每次拨号超时的 AckEntry 泄漏；与 handleAck 幂等共存）
+- [R2] `devices.go` removeDevice 补关连接（GO-P1-6），并经 QA 发现后**收敛**：仅关闭 LAN Ws（独立读 goroutine 防泄漏）；共享 CloudWs 生死归 cloud.go pong 看门狗，单台云手机超时不再引发全体云设备闪断重连
+- [R3] `settings.go` 全局 appSettings 加读写锁 + tmp/rename 原子写（GO-P1-8；23 处引用全量覆盖，锁序无嵌套、无重入）
+
+**Electron PC 端**
+- [R4] `cloud.js` 替换旧连接时清理旧 `_pingTimer`（EL-P1-3，消除重连定时器泄漏）
+
+**Android**
+- [R5] `CloudCtrl.kt` testServer 用 try/finally 统一释放 OkHttpClient（AN-P1-8，覆盖成功/失败/取消全出口）
+
+**Chrome 扩展**
+- [R6] `content-script.js` showToast 上提到 IIFE 顶层（EX-P1-3，顶层同步进度不再回退阻塞式 alert）
+
+**QA 独立回归**：R1-R6 全部 PASS / 0 FAIL；前两批兼容性抽查 3 项 PASS。gofmt/vet/build 与 node --check 通过（frontend/dist embed 缺失为既有环境问题）。
+
+**至此三批累计修复 36 点**（第一批 18 + 第二批 12 + 第三批 6）。剩余未修：PY-P1-2（REST 线程池化，大改建议单独立项）、AN-P1-3（HTTPS 迁移，单独立项）、EX-P1-2（PIN 误检测，依赖 CRM 页面，需用户决策）及 P2/P3 低危项。
+
+### 审计报告 P0/P1 最小改动修复（软件开发团队协作，QA 回归通过）— 完成于 2026-08-22 08:35
+
+依据《Bug检查报告-2026-08-21.md》修复 18 点（工程师寇豆码执行、QA 严过关独立回归：17 PASS / 1 风险 / 0 FAIL）。所有改动遵循最小 diff，未引入新依赖。
+
+**云中继**
+- [A1] `cloud_relay_v2.py` init_db `:memory:` 降级分支补建 phones/call_records_raw/phone_events/phone_daily_stats 4 张表（修复 PY-P0-1 漏建表）
+- [A2] `_seed_default_admin()` try 前预置 `conn = None`，杜绝 finally NameError（PY-P1-5）
+- [A3] `dashboard.html` loadPins 两个 fetch 补管理 token（PY-P1-3，"人员管理"页恢复可用）
+- [A4] `escA()` 补反斜杠转义（PY-P1-4；残余风险见下）
+- [A5] REST `/api/v1/auth/respond` 踢旧手机补 `close`（PY-P1-6，消除幽灵连接）
+
+**Chrome 扩展**
+- [B1] `auth.html` 内联脚本与 onclick 抽到外部 `auth.js`（EX-P0-1，规避 MV3 CSP，设备授权弹窗恢复可用）
+
+**Go PC 端**
+- [C1] `security.go` Origin 校验：空/`null` 拒绝 + 精确 host 校验（GO-P0-1，堵前缀绕过与空 Origin 放行）
+- [C2] WebSocket 并发写锁：设备级 `wsMu` + 全局 `cloudWsMu` 统一串行化所有写路径（GO-P0-2；QA 死锁专项审查通过）
+- [C3] `cloud.go` 读循环补 `case "ack"`，与本地共用 handleAck（GO-P0-3，云通道拨号不再误超时/重复拨号）
+- [C4] `RestartCloud` 异步化（GO-P1-4）
+- [C5] 悬浮条状态接通 `updateFloatbarStatus`（GO-P1-5，拨号/挂断按钮恢复可用）
+
+**Electron PC 端**
+- [D1] `cloud.js` failover generation 单次递增（EL-P0-1，多服务器遍历恢复）
+- [D2] `main.js` 托盘创建移到窗口创建之后（EL-P1-1，托盘菜单恢复可用）
+
+**Android**
+- [E1] `build.gradle` 移除硬编码签名密码，改 env/keystore.properties 必填（AN-P0-1）
+- [E2] `DialService` 亮屏 receiver 补 RECEIVER_NOT_EXPORTED（AN-P0-2，Android 14+ 不再崩溃）
+- [E3] 通知栏移除 PIN 明文（AN-P1-2）
+- [E4] `MainActivity` 三个广播改 RECEIVER_NOT_EXPORTED（AN-P1-4）
+- [E5] `RegisterFragment` flushPendingSyncs 线程池 finally shutdown（AN-P1-5）
+
+**已知残余**：
+- A4 未完全覆盖 onclick 单引号属性注入（`&#39;` 被属性解析器解码还原），建议后续将 dashboard 内联 onclick 迁移到 addEventListener + data-* 属性；本次已按报告要求堵住反斜杠向量
+- EL-P0-2（Electron 仅监听回环导致 LAN 直连失效）属 v4.14 有意安全收窄，未改
+- 其余报告 P1/P2/P3 项未在本次范围，见报告
+
+### 第二批修复：安全 5 + 功能 4 + 崩溃 2 + 构建 1（QA 独立回归 12/12 PASS）— 完成于 2026-08-22 09:40
+
+**安全**
+- [S1] `server.js` Electron 端来源校验与 Go 对齐：空/`null` 来源拒绝 + URL 精确 host（EL-P1-4，堵 `<img>` 静默拨号）；HTTP 与 WS verifyClient 同步收紧；renderer 依赖核查无本地端口真实依赖
+- [S2] `cloud_relay_v2.py` 授权绕过封堵（PY-P1-1）：新增 `meta['authorized']` 标记，未授权手机的消息不再转发给 PC（心跳 ping/pong 不受影响；等待授权链路保持可收 auth_ok）
+- [S3] `dashboard.html` 8 处含用户数据的动态 onclick 全部委托化为 data-action + 事件委托（A4 残余加固，彻底消除 onclick 单引号注入）
+- [S4] `cloud.go` 云端 phone_hello 增加 PIN 校验（GO-P1-7）：readPin() 空/格式/与配对码不符均拒绝注册；QA 评估不会误伤合法多手机
+- [S5] `cloud_relay_v2.py` 登录限频改按 (username, client_ip) 维度（PY-P1-7，消除全局 DoS）
+
+**功能**
+- [F1] `cloud.js` 自动重连恢复（EL-P1-2）：error 分支与"从未认证成功"路径均调度重连，与 D1 generation 兼容
+- [F2] `content-script.js` syncVisitList 顶层监听器不抢答（EX-P1-4，iframe 布局下同步恢复）
+- [F3] `content-script.js` 分页识别限定容器 + 纯数字≤4 位 + http(s) 协议（EX-P1-5，不再把手机号链接当页码）
+- [F4] `app.go` + `server.go` dialQueue 覆盖时 Stop 旧 Timer（GO-P1-3，消除连续拨号号码被误删）
+
+**崩溃 / 构建**
+- [C1] `RegisterFragment.kt` / `StatsFragment.kt` 后台线程 requireContext 改主线程预取 appCtx（AN-P1-1）
+- [C2] `MainActivity.kt` postDelayed 弹窗加 isFinishing/isDestroyed 守卫（AN-P1-7）
+- [B1] `package.json` build.files 补 `themes/**/*`（EL-P1-5，修复 electron-builder 打包缺主题）
+
+**QA 独立回归**：12/12 PASS / 0 FAIL；与第一批兼容性抽查 3 项（D1+F1、A1/A2/A5+S2/S5、S1+扩展 fetch）全部 PASS。非阻塞观察：dashboard L1166 `delAdminAccount(a.id)` 拼接式 onclick 仅含 DB 自增整数、风险低，可后续统一。
+
+## 2026-08-21（深夜）
+
+### 报告全量复核修订（只改文档，未动代码）
+
+对《Bug检查报告-2026-08-21.md》全部约 183 条论断逐条复查（5 复核代理 + 关键点人工实测 + 官方 changelog 核证，另经第三方 AI 独立验证 8 项核心修正全部确认）：
+
+- **PY-P0-2 降级 P0→P2**：websockets.legacy 实测（12.0/16.0/16.1.1）与官方 changelog 确认**从未移除**（14.0 弃用、15/16/17 均保留），"新环境部署必崩 ImportError"不成立；Dockerfile `>` 重定向机制属实但后果为"依赖未锁定 + 弃用 API"
+- **PY-P2-b 误报移除**：REST header 大小写敏感不成立（websockets Headers 内部键全小写，实测命中）；README 对应警示已撤销
+- **数字修正**：PY-P0-1 漏建 4 张表（非 5 张）；MISSING 计数 6 处（非 7）；`/api/history` 返回约 2.4 小时（非 4 小时）
+- **措辞修正**：AN-P1-1（L626/660 有 try-catch，真无保护在 L690）、AN-P0-2 子项、AN-P2-e 30 次上限、EX-P1-3/4、EL-P2-a
+- **严重性补充**：GO-P0-1 空 Origin 直接放行（`<img>` no-cors 即可触发，比原判定更严重）
+- P0 有效清单 10→**9** 项；P2 合计 60→61；复核统计 ✅161 / ❌3 / ⚠️19
+- 同步修订：`README.md`（撤销 header 大小写警示、history 2.4h）、`部署指南.md`（websockets 坑措辞："未锁定"非"必崩"）
+
+## 2026-08-21
+
+### 全量代码复审（只读）+ 文档规整
+
+**审计**（未修改任何代码）
+- 五端（云中继 Python / Chrome 扩展 / Go PC 端 / Electron PC 端 / Android 端）全量静态审查
+- 新增《Bug检查报告-2026-08-21.md》：P0×10（均已二次核验）、P1×33、P2×60、P3×82
+- 重点结论：扩展 auth.html 被 MV3 CSP 阻断（授权流程死亡）；Go 端 Origin 前缀匹配可绕过；Electron 云 failover 永不切换；Android 签名密码硬编码 + Android 14 必崩；websockets 依赖未锁定
+- 核验 v4.14 声称修复项：Android 三项属实；授权链路/来源校验/ACK 竞态修复均不完整或被绕过
+
+**文档规整**（依据实际代码修订）
+- `README.md`：修正错误码表（补 `MISSING`）、响应格式说明、`/api/v1/visits` 筛选参数、`/api/history` 保留时长、双模路由超时描述（仅探测 500ms）、扩展版本号（5.0.0）、目录结构（补 themes.js、auth.html 定位）、PIN header 传递方式；新增版本号现状说明与依赖坑警示
+- `部署指南.md`：新增"已知部署坑"（websockets<14 上界 + Dockerfile shell 重定向缺陷）
+- `待验证问题.md`：新增 2026-08-21 复审待验证项（B1-B5）
+
 ## 2026-08-19
 
 ### v4.14 全链路修复 + 安全加固

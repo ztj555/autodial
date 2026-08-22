@@ -102,7 +102,11 @@ function createCloudRelayManager(deps) {
   }
 
   // ==================== 主要连接逻辑 ====================
-  function connect(serverUrl, onResult) {
+  // D1修复: 增加可选 generation 参数——connectFromList 遍历时传入已递增的
+  // thisGeneration，connect 不再自增，避免"遍历代"被双重递增导致回调比较恒不等、
+  // tryNext 永不执行（多服务器只试第一台）。直接调用 connect(serverUrl) 时
+  // generation 为空，保持原有"每次连接自增一代"的行为。
+  function connect(serverUrl, onResult, generation) {
     let url = serverUrl || appSettings.cloudServer;
     if (!url || !appSettings.cloudEnabled) {
       fileLog('I', 'Cloud', null, '云中转未启用或未配置服务器地址');
@@ -116,17 +120,22 @@ function createCloudRelayManager(deps) {
 
     try {
       const newWs = new WebSocket(url);
-      _cloudTraversalGeneration++;
-      newWs._generation = _cloudTraversalGeneration;
+      if (generation === undefined) generation = ++_cloudTraversalGeneration;
+      newWs._generation = generation;
 
       // TCP keepalive
       if (newWs._socket) {
         newWs._socket.setKeepAlive(true, 10000);
       }
 
-      // 关闭旧连接
+      // 关闭旧连接（R4修复: 先清旧连接的 _pingTimer，否则旧连接 close 事件会因
+      // generation 不匹配提前 return（见下方 close 处理器）而跳过 clearInterval，
+      // setInterval 永久泄漏）
       if (cloudWs) {
-        try { cloudWs.close(); } catch (e) {}
+        try {
+          if (cloudWs._pingTimer) { clearInterval(cloudWs._pingTimer); cloudWs._pingTimer = null; }
+          cloudWs.close();
+        } catch (e) {}
       }
       cloudWs = newWs;
 
@@ -274,7 +283,14 @@ function createCloudRelayManager(deps) {
         _removeCloudPhones();
         _notifyCloud();
         if (onPhonesUpdate) onPhonesUpdate();
-        if (typeof onResult === 'function') onResult(false, url);
+        if (newWs._established) {
+          // F1修复: 已认证连接 error 后同样调度重连——error+close 连发时 close 分支会因
+          // _cleanedUp 被跳过，此前重连只挂在 close 分支导致最常见断线路径永不重连。
+          // _scheduleCloudReconnect 内部会清除旧定时器，不会双重启动。
+          _scheduleCloudReconnect();
+        } else if (typeof onResult === 'function') {
+          onResult(false, url);
+        }
       });
 
       // 定期心跳
@@ -311,6 +327,8 @@ function createCloudRelayManager(deps) {
       }
       if (index >= servers.length) {
         console.log('[云端] 所有云服务器连接失败');
+        // F1修复: 从未认证成功的连接全部失败后也安排延迟重试（阶梯退避），不再直接放弃
+        _scheduleCloudReconnect();
         return;
       }
 
@@ -325,7 +343,7 @@ function createCloudRelayManager(deps) {
           console.log('[云端] 服务器连接失败: ' + url + '，尝试下一个');
           tryNext(index + 1);
         }
-      });
+      }, thisGeneration);
     }
 
     tryNext(startIndex || 0);

@@ -66,10 +66,16 @@ func startHTTPServer() *http.Server {
 			}
 		} else {
 			// 手机不在线 → 尝试排队 + 云端唤醒
-			if appSettings.CloudEnabled && len(appSettings.CloudServers) > 0 {
+			s := getSettings()
+			if s.CloudEnabled && len(s.CloudServers) > 0 {
 				targetPin := activePin
 				if targetPin != "" {
 					dialQueueMu.Lock()
+					// F4修复: 覆盖同 PIN 旧排队条目前先停止旧 Timer（与 app.go 对齐），
+					// 防止旧定时器到期误删新条目
+					if oldEntry, ok := dialQueue[targetPin]; ok && oldEntry.Timer != nil {
+						oldEntry.Timer.Stop()
+					}
 					dialQueue[targetPin] = &DialQueueEntry{
 						Number: number,
 						Timer: time.AfterFunc(DialQueueTimeout, func() {
@@ -95,7 +101,7 @@ func startHTTPServer() *http.Server {
 				if !queuedCloud {
 					// 触发云端重连（云端断开时）
 					if !cloudConnected {
-						go connectCloudServer(appSettings.CloudServers[0])
+						go connectCloudServer(s.CloudServers[0])
 					}
 					// 发送 UDP 广播唤醒局域网内所有手机
 					broadcastWakeUp()
@@ -194,7 +200,9 @@ func startHTTPServer() *http.Server {
 		}
 
 		writePin(pin)
+		settingsMu.Lock()
 		appSettings.PinCode = pin
+		settingsMu.Unlock()
 		saveSettings()
 		fileLog("I", "API", "", "PIN set via /api/set-pin")
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
@@ -210,7 +218,7 @@ func startHTTPServer() *http.Server {
 
 	// /cloud-servers
 	mux.HandleFunc("/cloud-servers", corsHandler(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{"servers": appSettings.CloudServers})
+		json.NewEncoder(w).Encode(map[string]interface{}{"servers": getSettings().CloudServers})
 	}))
 
 	// WebSocket upgrade handler
@@ -278,6 +286,20 @@ func handleLocalWS(conn *websocket.Conn) {
 	var devicePin string
 	var isPlugin bool
 
+	// C2修复: 写 LAN 连接前加设备写锁，防止与 sendToPhone 并发写同一连接导致 panic。
+	// 未注册设备/插件连接仅有本读循环一个写者，无需加锁。
+	writeConnJSON := func(v interface{}) error {
+		if devicePin != "" {
+			devicesMu.RLock()
+			d, ok := devices[devicePin]
+			devicesMu.RUnlock()
+			if ok && d.Ws == conn {
+				return d.writeWs(v)
+			}
+		}
+		return conn.WriteJSON(v)
+	}
+
 	defer func() {
 		conn.Close()
 		if isPlugin {
@@ -335,9 +357,8 @@ func handleLocalWS(conn *websocket.Conn) {
 			pluginConnsMu.Lock()
 			pluginConns = append(pluginConns, conn)
 			pluginConnsMu.Unlock()
-			conn.WriteJSON(map[string]string{"type": "plugin_ok"})
+			writeConnJSON(map[string]string{"type": "plugin_ok"})
 			fileLog("I", "WS", "", "plugin authenticated from "+clientIP)
-
 		case "dial":
 			// Fix D7: clarify — this handles dial requests from non-plugin WS connections
 			// (legacy Electron extension or direct WS clients). The v4 Chrome extension
@@ -345,13 +366,13 @@ func handleLocalWS(conn *websocket.Conn) {
 			if !isPlugin {
 				number, _ := msg["number"].(string)
 				if number == "" {
-					conn.WriteJSON(map[string]string{"type": "dial_fail", "reason": "no number"})
+					writeConnJSON(map[string]string{"type": "dial_fail", "reason": "no number"})
 					continue
 				}
 				if sendToPhone("dial", map[string]interface{}{"type": "dial", "number": number}) {
-					conn.WriteJSON(map[string]interface{}{"type": "dial_sent", "number": number})
+					writeConnJSON(map[string]interface{}{"type": "dial_sent", "number": number})
 				} else {
-					conn.WriteJSON(map[string]interface{}{"type": "dial_waking", "number": number})
+					writeConnJSON(map[string]interface{}{"type": "dial_waking", "number": number})
 				}
 			}
 
@@ -363,18 +384,18 @@ func handleLocalWS(conn *websocket.Conn) {
 
 			// 空 PIN 守卫：PIN 未设置时拒绝所有连接
 			if readPin() == "" {
-				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码尚未设置"})
+				writeConnJSON(map[string]string{"type": "auth_fail", "reason": "配对码尚未设置"})
 				fileLog("W", "WS", "", "reject: PIN not set yet from "+clientIP)
 				continue
 			}
 			// B11修复: 与 Chrome 扩展统一校验格式 (^1[3-9]\d{9}$)
 			if !isValidPhonePIN(pin) {
-				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码必须为11位手机号(1开头)"})
+				writeConnJSON(map[string]string{"type": "auth_fail", "reason": "配对码必须为11位手机号(1开头)"})
 				fileLog("W", "WS", "", fmt.Sprintf("auth fail: invalid pin format from %s", clientIP))
 				continue
 			}
 			if pin != readPin() {
-				conn.WriteJSON(map[string]string{"type": "auth_fail", "reason": "配对码错误"})
+				writeConnJSON(map[string]string{"type": "auth_fail", "reason": "配对码错误"})
 				fileLog("W", "WS", "", fmt.Sprintf("auth fail: pin mismatch from %s", clientIP))
 				continue
 			}
@@ -385,7 +406,7 @@ func handleLocalWS(conn *websocket.Conn) {
 			registerDevice(pin, name, clientIP, false, conn)
 
 			pcConnected := cloudConnected
-			conn.WriteJSON(map[string]interface{}{
+			writeConnJSON(map[string]interface{}{
 				"type":       "auth_ok",
 				"pin":        pin,
 				"pcCount":    getPCCount(),
@@ -420,7 +441,7 @@ func handleLocalWS(conn *websocket.Conn) {
 			}
 
 		case "ping":
-			conn.WriteJSON(map[string]string{"type": "pong"})
+			writeConnJSON(map[string]string{"type": "pong"})
 			if devicePin != "" {
 				devicesMu.Lock()
 				if d, ok := devices[devicePin]; ok {
@@ -468,16 +489,22 @@ func handleLocalWS(conn *websocket.Conn) {
 			pluginConnsMu.Unlock()
 
 		case "ack":
-			ackMu.Lock()
-			msgID, _ := msg["messageId"].(string)
-			if entry, ok := pendAcks[msgID]; ok {
-				entry.Timer.Stop()
-				delete(pendAcks, msgID)
-				entry.Resolve(true)
-			}
-			ackMu.Unlock()
+			handleAck(msg)
 		}
 	}
+}
+
+// handleAck 处理手机/云通道返回的 ACK，解析对应 pendAcks 等待者。
+// 本地 WS 与云通道共用同一 pendAcks/ackMu，因此必须使用同一把锁。
+func handleAck(msg map[string]interface{}) {
+	ackMu.Lock()
+	msgID, _ := msg["messageId"].(string)
+	if entry, ok := pendAcks[msgID]; ok {
+		entry.Timer.Stop()
+		delete(pendAcks, msgID)
+		entry.Resolve(true)
+	}
+	ackMu.Unlock()
 }
 
 func sendToPhone(msgType string, msg map[string]interface{}) bool {
@@ -536,6 +563,11 @@ func sendToPhone(msgType string, msg map[string]interface{}) bool {
 					cloudWsMu.Unlock()
 				}
 				time.Sleep(AckTimeout)
+				// R1修复: 超时最终路径清理 pendAcks，防止每个超时泄漏一个 AckEntry。
+				// 若 ACK 在重试期间先行到达，handleAck 已删除条目，此处 delete 为幂等空操作。
+				ackMu.Lock()
+				delete(pendAcks, msgID)
+				ackMu.Unlock()
 				// G1修复: ACK 先行到达时 resultCh 已满，直接写入会永久阻塞泄漏 goroutine
 				select {
 				case resultCh <- false:
@@ -543,6 +575,8 @@ func sendToPhone(msgType string, msg map[string]interface{}) bool {
 				}
 				return
 			}
+			// R1修复: 其它最终路径（条目已重试/已被 ACK 删除）同样清理 pendAcks
+			delete(pendAcks, msgID)
 			ackMu.Unlock()
 			select {
 			case resultCh <- false:
@@ -559,14 +593,31 @@ func sendToPhone(msgType string, msg map[string]interface{}) bool {
 		}
 		ackMu.Unlock()
 
-		if err := targetWs.WriteJSON(msg); err != nil {
+		var writeErr error
+		if channel == "lan" {
+			// C2修复: LAN 写走设备级写锁，与 handleLocalWS 读循环串行化
+			devicesMu.RLock()
+			d, ok := devices[s.pin]
+			devicesMu.RUnlock()
+			if ok {
+				writeErr = d.writeWs(msg)
+			} else {
+				writeErr = targetWs.WriteJSON(msg)
+			}
+		} else {
+			// C2修复: 云通道写统一用全局 cloudWsMu（所有设备共享同一云连接）
+			cloudWsMu.Lock()
+			writeErr = targetWs.WriteJSON(msg)
+			cloudWsMu.Unlock()
+		}
+		if writeErr != nil {
 			ackMu.Lock()
 			if entry, ok := pendAcks[msgID]; ok {
 				entry.Timer.Stop()
 				delete(pendAcks, msgID)
 			}
 			ackMu.Unlock()
-			fileLog("E", "Send", s.pin, "write failed: "+err.Error())
+			fileLog("E", "Send", s.pin, "write failed: "+writeErr.Error())
 			continue
 		}
 

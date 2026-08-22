@@ -112,17 +112,18 @@ class MainActivity : AppCompatActivity() {
         tabStats.setOnClickListener { switchTab(2) }
         tabConnect.setOnClickListener { switchTab(3) }
 
+        // E4修复: 三个接收器均为 app 内部广播，不应导出给第三方 App 伪造触发
         ContextCompat.registerReceiver(this, connectionReceiver,
             IntentFilter("com.autodial.CONNECTION_CHANGE"),
-            ContextCompat.RECEIVER_EXPORTED
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
         ContextCompat.registerReceiver(this, simSelectReceiver,
             IntentFilter(DialService.ACTION_SHOW_SIM_SELECT),
-            ContextCompat.RECEIVER_EXPORTED
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
         ContextCompat.registerReceiver(this, smsConfirmReceiver,
             IntentFilter(DialService.ACTION_SHOW_SMS_CONFIRM),
-            ContextCompat.RECEIVER_EXPORTED
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
         startService(DialService.newIntent(this))
@@ -318,6 +319,8 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {}
             // 弹窗说明：防止华为直接吞掉跳转
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                // C2修复: 延迟回调期间 Activity 可能已销毁，show() 前先检查避免 BadTokenException 崩溃
+                if (isFinishing || isDestroyed) return@postDelayed
                 if (!Settings.canDrawOverlays(this)) {
                     androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("需要悬浮窗权限")

@@ -34,6 +34,7 @@
       "preload.js",
       "modules/**/*",
       "renderer/**/*",
+      "themes/**/*",
       "node_modules/**/*"
     ],
     "electronDownload": {

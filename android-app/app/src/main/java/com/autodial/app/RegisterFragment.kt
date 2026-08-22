@@ -126,31 +126,36 @@ class RegisterFragment : Fragment() {
             val remaining = org.json.JSONArray()
 
             val baseUrl = toHttpBase(serverUrl)
+            // E5修复: 每次云重连新建的单线程池此前从不 shutdown，线程泄漏；任务结束后关闭
             val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
             executor.execute {
-                for (i in 0 until arr.length()) {
-                    val item = arr.getJSONObject(i)
-                    try {
-                        val params = "name=${URLEncoder.encode(item.optString("name"), "UTF-8")}" +
-                                "&mobile=${URLEncoder.encode(item.optString("mobile"), "UTF-8")}" +
-                                "&kefu_tel=${URLEncoder.encode(item.optString("kefu_tel"), "UTF-8")}" +
-                                "&visit_type=${URLEncoder.encode(item.optString("visit_type"), "UTF-8")}" +
-                                "&source=${URLEncoder.encode(item.optString("source"), "UTF-8")}"
-                        val url = java.net.URL("$baseUrl/api/v1/visit?$params")
-                        val conn = url.openConnection() as java.net.HttpURLConnection
-                        conn.requestMethod = "GET"
-                        conn.connectTimeout = 8000
-                        conn.readTimeout = 8000
-                        conn.setRequestProperty("X-AutoDial-PIN", item.optString("pin"))
-                        if (conn.responseCode in 200..299) continue // 成功，不加入 remaining
-                        conn.disconnect()
-                    } catch (_: Exception) {}
-                    remaining.put(item) // 失败，保留
-                }
-                if (remaining.length() > 0) {
-                    prefs.edit().putString(PENDING_SYNCS_KEY, remaining.toString()).apply()
-                } else {
-                    prefs.edit().remove(PENDING_SYNCS_KEY).apply()
+                try {
+                    for (i in 0 until arr.length()) {
+                        val item = arr.getJSONObject(i)
+                        try {
+                            val params = "name=${URLEncoder.encode(item.optString("name"), "UTF-8")}" +
+                                    "&mobile=${URLEncoder.encode(item.optString("mobile"), "UTF-8")}" +
+                                    "&kefu_tel=${URLEncoder.encode(item.optString("kefu_tel"), "UTF-8")}" +
+                                    "&visit_type=${URLEncoder.encode(item.optString("visit_type"), "UTF-8")}" +
+                                    "&source=${URLEncoder.encode(item.optString("source"), "UTF-8")}"
+                            val url = java.net.URL("$baseUrl/api/v1/visit?$params")
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.requestMethod = "GET"
+                            conn.connectTimeout = 8000
+                            conn.readTimeout = 8000
+                            conn.setRequestProperty("X-AutoDial-PIN", item.optString("pin"))
+                            if (conn.responseCode in 200..299) continue // 成功，不加入 remaining
+                            conn.disconnect()
+                        } catch (_: Exception) {}
+                        remaining.put(item) // 失败，保留
+                    }
+                    if (remaining.length() > 0) {
+                        prefs.edit().putString(PENDING_SYNCS_KEY, remaining.toString()).apply()
+                    } else {
+                        prefs.edit().remove(PENDING_SYNCS_KEY).apply()
+                    }
+                } finally {
+                    executor.shutdown()
                 }
             }
         }
@@ -186,9 +191,11 @@ class RegisterFragment : Fragment() {
         etManagerName.setOnClickListener { showAdvisorPicker() }
 
         // 如果本地没有姓名但 PIN 已设置，异步从云中继查询
-        if (managerName.isEmpty() && pin.isNotEmpty()) {
+        if (managerName.isEmpty() && pin.isNotEmpty() && isAdded) {
+            // C1修复: 主线程预取 context，后台线程不再调用 requireContext()
+            val appCtx = requireContext().applicationContext
             executor.execute {
-                val nameFromCloud = fetchManagerNameFromCloud(pin)
+                val nameFromCloud = fetchManagerNameFromCloud(pin, appCtx)
                 if (nameFromCloud != null) {
                     managerName = nameFromCloud
                     prefs.edit().putString("manager_name", nameFromCloud).apply()
@@ -620,11 +627,11 @@ class RegisterFragment : Fragment() {
 
     /**
      * 从云中继查询 PIN 对应的顾问姓名。返回 null 表示查询失败或未找到。
+     * C1修复: 由调用方在主线程预取 appCtx 传入，本函数在后台线程执行时不再调用 requireContext()。
      */
-    private fun fetchManagerNameFromCloud(pin: String): String? {
+    private fun fetchManagerNameFromCloud(pin: String, appCtx: Context): String? {
         try {
-            val ctx = requireContext().applicationContext
-            val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+            val prefs = appCtx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
             val serverUrl = prefs.getString("cloud_server", "") ?: ""
             if (serverUrl.isEmpty()) return null
 
@@ -655,10 +662,12 @@ class RegisterFragment : Fragment() {
      * 失败时存入待同步队列，等云端重连后自动补推。
      */
     private fun syncToCloudRelay(name: String, mobile: String) {
+        // C1修复: 主线程预取 context，后台线程不再调用 requireContext()
+        if (!isAdded) return
+        val appCtx = requireContext().applicationContext
         executor.execute {
             try {
-                val ctx = requireContext().applicationContext
-                val prefs = ctx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
+                val prefs = appCtx.getSharedPreferences("autodial", Context.MODE_PRIVATE)
                 val serverUrl = prefs.getString("cloud_server", "") ?: ""
                 if (serverUrl.isEmpty()) return@execute
 
@@ -687,7 +696,7 @@ class RegisterFragment : Fragment() {
                 }
             } catch (_: Exception) {}
             // 同步失败 → 存入队列，等云端重连后补推
-            savePendingVisit(name, mobile, managerName, pin, requireContext())
+            savePendingVisit(name, mobile, managerName, pin, appCtx)
         }
     }
 

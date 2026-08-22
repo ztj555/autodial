@@ -26,7 +26,7 @@ class CallLogDb private constructor(context: Context) : SQLiteOpenHelper(context
             if (instance == null) {
                 instance = CallLogDb(context.applicationContext)
             }
-            return instance ?: throw IllegalStateException("CallLogDb not initialized. Call init(context) first.")
+            return instance ?: throw IllegalStateException("CallLogDb instance not ready. Call getInstance(context) first.")
         }
         const val TABLE_DIAL = "dial_log"
         const val COL_ID = "_id"

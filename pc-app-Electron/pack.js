@@ -1,4 +1,6 @@
 const https = require('https');
+const os = require('os');
+const path = require('path');
 // 仅在 Electron 下载期间临时放行证书（企业代理环境）
 // ⚠️ 这是妥协方案，理想情况应在系统证书存储中安装受信任的企业 CA
 const oldReject = https.globalAgent.options.rejectUnauthorized;
@@ -6,7 +8,8 @@ https.globalAgent.options.rejectUnauthorized = false;
 
 const { packager } = require('@electron/packager');
 
-const ELECTRON_CACHE = 'C:\\Users\\EDY\\AppData\\Local\\electron\\Cache';
+// 使用当前用户默认的 Electron 缓存目录，不再硬编码他人机器路径
+const ELECTRON_CACHE = path.join(os.homedir(), 'AppData', 'Local', 'electron', 'Cache');
 
 async function build() {
   console.log('[Build] 开始打包 AutoDial PC...');

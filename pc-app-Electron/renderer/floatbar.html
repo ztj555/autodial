@@ -413,10 +413,6 @@ window.api.on('error', (data) => {
   showToast(data.message, 'error');
 });
 
-// 右键菜单触发 — 由主进程 floatbar-context-menu 发送
-window.api.on('menu-dial', () => { dialFromFloat(); });
-window.api.on('menu-hangup', () => { hangupFromFloat(); });
-
 // ==================== 剪贴板读取 ====================
 let lastClipboard = '';
 let clipboardTimer = null;
