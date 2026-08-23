@@ -17,6 +17,7 @@ android {
 
     signingConfigs {
         // E1修复: 禁止硬编码签名密码。密码仅从环境变量或项目根 keystore.properties 读取（env 优先）。
+        // v4.14+ 修正: 仅 release 需要密钥；debug 使用 AGP 默认调试签名（与 README「assembleDebug 无需密钥」一致）。
         def keystoreProps = new Properties()
         def keystorePropsFile = rootProject.file('keystore.properties')
         if (keystorePropsFile.exists()) {
@@ -31,9 +32,6 @@ android {
         }
         def ksStorePass = secret('KEYSTORE_PASSWORD', 'KEYSTORE_PASSWORD')
         def ksKeyPass = secret('KEY_PASSWORD', 'KEY_PASSWORD')
-        if (ksStorePass == null || ksKeyPass == null) {
-            throw new GradleException('请设置环境变量 KEYSTORE_PASSWORD/KEY_PASSWORD 或项目根 keystore.properties（见 README 部署指南），禁止硬编码签名密码')
-        }
         def ksFileEnv = System.getenv('KEYSTORE_FILE')
         def ksFileProp = keystoreProps.getProperty('KEYSTORE_FILE')
         def ksPath = '../autodial-release.p12'
@@ -43,17 +41,18 @@ android {
             ksPath = ksFileProp
         }
         def ksKeyAlias = secret('KEY_ALIAS', 'KEY_ALIAS') ?: 'autodial'
-        release {
-            storeFile file(ksPath)
-            storePassword ksStorePass
-            keyAlias ksKeyAlias
-            keyPassword ksKeyPass
+        // 仅当请求 release 相关任务且缺少密钥时才报错，避免误伤 debug/CI 常规构建
+        def wantsRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
+        if ((ksStorePass == null || ksKeyPass == null) && wantsRelease) {
+            throw new GradleException('请设置环境变量 KEYSTORE_PASSWORD/KEY_PASSWORD 或项目根 keystore.properties（见 README 部署指南），禁止硬编码签名密码')
         }
-        debug {
-            storeFile file(ksPath)
-            storePassword ksStorePass
-            keyAlias ksKeyAlias
-            keyPassword ksKeyPass
+        if (ksStorePass != null && ksKeyPass != null) {
+            release {
+                storeFile file(ksPath)
+                storePassword ksStorePass
+                keyAlias ksKeyAlias
+                keyPassword ksKeyPass
+            }
         }
     }
 
@@ -61,10 +60,12 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            if (signingConfigs.findByName('release') != null) {
+                signingConfig signingConfigs.release
+            }
         }
         debug {
-            signingConfig signingConfigs.debug
+            // v4.14+：debug 使用 AGP 默认调试签名，无需密钥
         }
     }
 

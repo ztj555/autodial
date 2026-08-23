@@ -56,6 +56,7 @@ jobs:
       shell: bash
     
     - name: Build Release APK
+      if: ${{ secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
       working-directory: ./android-app
       run: ./gradlew assembleRelease --stacktrace
       env:
