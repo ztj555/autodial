@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial Chrome扩展 - Popup界面演示</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #EBF4FF;
+  --surface: #FFFFFF;
+  --surface-2: #D8ECFC;
+  --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
+  --border: #DCEAF7;
+  --border-input: #DFEBF6;
+  --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
+  --text: #162840;
+  --text-2: #5880A8;
+  --primary: #2B6CC4;
+  --primary-light: #4A90E0;
+  --primary-dark: #1A56A8;
+  --green: #40C057;
+  --red: #F03E3E;
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-float: 0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
+}
+html { background: var(--bg); }
+body {
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  letter-spacing: .02em;
+  padding: 14px;
+  max-height: 600px;
+  overflow-y: auto;
+  margin: 0 auto;
+  box-shadow: 0 0 40px rgba(0,0,0,0.1);
+}
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 2px 2px 12px;
+}
+.app-icon {
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.app-icon svg { width: 19px; height: 19px; }
+.title-group { display: flex; align-items: baseline; gap: 6px; }
+.title-group h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
+.ver { font-size: 11px; color: var(--text-2); background: var(--surface-2); padding: 2px 8px; border-radius: var(--r-pill); }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#statusPanel, #setupPanel { animation: panelIn .22s ease-out; }
+.hero-card {
+  background: var(--grad-hero);
+  border: 1px solid var(--hero-border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.hero-row { display: flex; align-items: center; gap: 12px; }
+.status-indicator {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--icon-tile); display: grid; place-items: center; flex-shrink: 0;
+}
+.status-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45);
+  animation: pulse 2s ease-in-out infinite;
+}
+.status-dot.offline {
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(240,62,62,.14), 0 0 8px rgba(240,62,62,.4);
+  animation: none;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45); }
+  50% { box-shadow: 0 0 0 6px rgba(64,192,87,.08), 0 0 12px rgba(64,192,87,.35); }
+}
+.hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hero-title { font-size: 15px; font-weight: 700; }
+.hero-sub { font-size: 12px; color: var(--text-2); }
+.btn {
+  border: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 600; letter-spacing: .02em;
+  transition: filter .15s, transform .08s, box-shadow .15s;
+}
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn-primary {
+  width: 100%;
+  background: var(--grad-btn);
+  color: #FFFFFF;
+  border-radius: var(--r-lg);
+  padding: 11px 12px;
+  margin-top: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  box-shadow: var(--shadow-btn);
+}
+.btn-primary svg { width: 15px; height: 15px; }
+.btn-primary:hover { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(var(--primary-rgb),.34); }
+.btn-ghost {
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: var(--primary); }
+.btn-danger {
+  background: var(--surface); color: var(--red);
+  border: 1px solid rgba(240,62,62,.3); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-danger:hover { background: rgba(240,62,62,.06); }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; }
+.btn-row .btn { flex: 1; }
+.info-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 6px 8px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.info-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 6px; border-bottom: 1px solid var(--divider);
+  border-radius: var(--r-sm);
+  transition: background .15s;
+  cursor: pointer;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row:hover { background: var(--input-bg); }
+.row-ico {
+  width: 22px; height: 22px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.row-ico svg { width: 14px; height: 14px; }
+.info-row .label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+.info-row .value {
+  font-size: 13px; font-weight: 500; text-align: right; margin-left: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
+}
+.info-row .value.link { color: var(--primary); cursor: pointer; }
+.info-row .value.link:hover { color: var(--primary-dark); text-decoration: underline; }
+.chev {
+  width: 13px; height: 13px; color: var(--text-2); flex-shrink: 0;
+  transition: color .15s, transform .15s;
+}
+.info-row:hover .chev { color: var(--primary); transform: translateX(1px); }
+.hint-card {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--banner-info-bg); border: 1px solid var(--banner-info-border);
+  border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 12px;
+}
+.hint-card svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--primary); }
+.hint-card span { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 6px 14px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.group { padding: 10px 0; }
+.group-divider { height: 1px; background: var(--divider); }
+.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.section-ico {
+  width: 24px; height: 24px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--text-2);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.section-ico svg { width: 14px; height: 14px; }
+.section-title { font-size: 13px; font-weight: 600; }
+.section-sub { margin-left: auto; font-size: 11px; color: var(--text-2); }
+.input-row { display: flex; gap: 8px; }
+input {
+  flex: 1; min-width: 0; height: 38px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-input); border-radius: var(--r-sm);
+  padding: 0 12px; color: var(--text); font-size: 13px;
+  font-family: inherit; outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+input::placeholder { color: var(--text-2); opacity: .7; }
+input:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .14);
+}
+.field-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--text-2); }
+.field-status.ok { color: var(--green); }
+.field-status.err { color: var(--red); }
+.btn-sm {
+  width: auto; height: 38px; padding: 0 16px;
+  font-size: 12px; border-radius: var(--r-sm); flex-shrink: 0;
+}
+.demo-badge {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: var(--shadow-btn);
+}
+</style>
+</head>
+<body>
+<div class="demo-badge">🎨 UI演示模式</div>
+
+<!-- Topbar -->
+<header class="topbar">
+  <div class="app-icon">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg>
+  </div>
+  <div class="title-group">
+    <h1>AutoDial</h1>
+    <span class="ver">v5</span>
+  </div>
+</header>
+
+<!-- 状态页（PIN 已设置） -->
+<div id="statusPanel">
+  <div class="hero-card">
+    <div class="hero-row">
+      <div class="status-indicator">
+        <span id="statusDot" class="status-dot"></span>
+      </div>
+      <div class="hero-text">
+        <div id="statusText" class="hero-title">PIN 已就绪</div>
+        <div id="cloudStatus" class="hero-sub">已连接</div>
+      </div>
+    </div>
+    <button id="syncBtn" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      同步登记列表
+    </button>
+  </div>
+
+  <div class="info-card">
+    <div class="info-row" onclick="showToast('查看坐席信息')">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg></span>
+      <span class="label">坐席手机号</span>
+      <span id="myPhone" class="value link">138****8000</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row" onclick="showToast('编辑顾问姓名')">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      <span class="label">接待顾问</span>
+      <span id="myMgrName" class="value link">张三</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row" onclick="showToast('查看服务器详情')">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+      <span class="label">云端地址</span>
+      <span id="cloudAddr" class="value link">101.34.65.254:35430</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button id="editServerBtn" class="btn btn-ghost" onclick="switchToSetup()">修改服务器</button>
+    <button id="clearPinBtn" class="btn btn-danger" onclick="clearPin()">清除 PIN</button>
+  </div>
+</div>
+
+<!-- 设置页（隐藏） -->
+<div id="setupPanel" style="display:none">
+  <div class="hint-card">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
+    <span>打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
+  </div>
+
+  <div class="section">
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <span class="section-title">云中继地址</span>
+      </div>
+      <div class="input-row">
+        <input id="serverInput" placeholder="101.34.65.254:35430" value="101.34.65.254:35430" />
+        <button id="testServerBtn" class="btn btn-ghost btn-sm" onclick="testServer()">测试</button>
+      </div>
+      <span id="serverStatus" class="field-status"></span>
+    </div>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">配对码</span>
+        <span class="section-sub">4位或11位数字</span>
+      </div>
+      <div class="input-row">
+        <input id="pinInput" placeholder="输入配对码" maxlength="11" value="13800138000" />
+        <button id="savePinBtn" class="btn btn-primary btn-sm" onclick="savePin()">保存</button>
+      </div>
+      <span id="pinStatus" class="field-status"></span>
+    </div>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">接待顾问姓名</span>
+      </div>
+      <div class="input-row">
+        <input id="mgrNameInput" placeholder="请填写您的姓名" value="张三" />
+        <button id="saveMgrNameBtn" class="btn btn-primary btn-sm" onclick="saveMgrName()">保存</button>
+      </div>
+      <span id="mgrNameStatus" class="field-status"></span>
+    </div>
+  </div>
+
+  <button id="backToStatusBtn" class="btn btn-ghost" onclick="switchToStatus()" style="width:100%">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    返回
+  </button>
+</div>
+
+<script>
+// Toast
+let toastTimer = null;
+function showToast(msg, type) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:white;border:1px solid #DCEAF7;border-radius:999px;box-shadow:0 6px 24px rgba(43,108,196,.18);padding:9px 18px;font-size:12px;font-weight:500;z-index:999;white-space:nowrap;`;
+  if (type === 'success') t.style.borderColor = '#40C057';
+  if (type === 'error') t.style.borderColor = '#F03E3E';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// 切换面板
+function switchToSetup() {
+  document.getElementById('statusPanel').style.display = 'none';
+  document.getElementById('setupPanel').style.display = 'block';
+}
+
+function switchToStatus() {
+  document.getElementById('setupPanel').style.display = 'none';
+  document.getElementById('statusPanel').style.display = 'block';
+}
+
+// 同步按钮
+document.getElementById('syncBtn').addEventListener('click', () => {
+  showToast('正在同步...', 'success');
+  setTimeout(() => showToast('✓ 同步成功', 'success'), 1000);
+});
+
+// 测试服务器
+function testServer() {
+  const status = document.getElementById('serverStatus');
+  status.textContent = '测试中...';
+  setTimeout(() => {
+    status.textContent = '✓ 连接成功';
+    status.className = 'field-status ok';
+  }, 1500);
+}
+
+// 保存PIN
+function savePin() {
+  const pin = document.getElementById('pinInput').value;
+  if (!pin || pin.length < 4) {
+    document.getElementById('pinStatus').textContent = '请输入有效的配对码';
+    document.getElementById('pinStatus').className = 'field-status err';
+    return;
+  }
+  document.getElementById('pinStatus').textContent = '✓ 保存成功';
+  document.getElementById('pinStatus').className = 'field-status ok';
+  showToast('配对码已保存', 'success');
+}
+
+// 保存顾问姓名
+function saveMgrName() {
+  document.getElementById('mgrNameStatus').textContent = '✓ 保存成功';
+  document.getElementById('mgrNameStatus').className = 'field-status ok';
+  showToast('顾问姓名已保存', 'success');
+}
+
+// 清除PIN
+function clearPin() {
+  if (confirm('确定要清除配对码吗？')) {
+    showToast('配对码已清除', 'success');
+    switchToSetup();
+  }
+}
+
+// 模拟在线状态
+setTimeout(() => {
+  document.getElementById('statusDot').classList.add('online');
+}, 500);
+</script>
+</body>
+</html>

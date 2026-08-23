@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial Android端 - 主界面演示</title>
+<style>
+:root {
+  --bg: #EBF4FF;
+  --surface: #FFFFFF;
+  --surface-2: #D8ECFC;
+  --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
+  --border: #DCEAF7;
+  --border-input: #DFEBF6;
+  --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
+  --text: #162840;
+  --text-2: #5880A8;
+  --primary: #2B6CC4;
+  --primary-light: #4A90E0;
+  --primary-dark: #1A56A8;
+  --green: #40C057;
+  --red: #F03E3E;
+  --orange: #F08C00;
+  --purple: #7B2CBF;
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-float: 0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
+  --font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #000;
+  color: var(--text);
+  font-family: var(--font-family);
+  overflow: hidden;
+  user-select: none;
+}
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  background: var(--bg);
+  margin: 20px auto;
+  border-radius: 40px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 0 60px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+}
+.status-bar {
+  height: 44px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.status-bar .time { font-size: 15px; font-weight: 700; }
+.status-bar .icons { display: flex; gap: 6px; align-items: center; }
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  padding-bottom: 80px;
+}
+/* Hero Card */
+.hero-card {
+  background: var(--grad-hero);
+  border: 1px solid var(--hero-border);
+  border-radius: var(--r-xl);
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
+}
+.hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.hero-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(64,192,87,.16);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45); }
+  50% { box-shadow: 0 0 0 6px rgba(64,192,87,.08), 0 0 12px rgba(64,192,87,.35); }
+}
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.info-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+}
+.info-label {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.info-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.info-value.connected {
+  color: var(--green);
+}
+/* Quick Actions */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.action-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: var(--shadow-card);
+}
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-float);
+}
+.action-btn:active {
+  transform: scale(0.95);
+}
+.action-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
+  background: var(--icon-tile);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+}
+.action-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.action-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+/* Call Log List */
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.call-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.call-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.call-item:hover {
+  background: var(--input-bg);
+}
+.call-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--icon-tile);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.call-avatar svg {
+  width: 22px;
+  height: 22px;
+}
+.call-info {
+  flex: 1;
+  min-width: 0;
+}
+.call-number {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.call-time {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.call-status {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.call-status.success {
+  color: var(--green);
+}
+.call-status.missed {
+  color: var(--red);
+}
+/* Bottom Navigation */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 12px;
+  z-index: 100;
+}
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: all 0.15s;
+}
+.nav-item.active .nav-icon {
+  color: var(--primary);
+}
+.nav-item.active .nav-label {
+  color: var(--primary);
+  font-weight: 600;
+}
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+}
+.nav-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.nav-label {
+  font-size: 11px;
+  color: var(--text-2);
+}
+.demo-badge {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: var(--shadow-btn);
+}
+/* Tab Content */
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+/* Stats Cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+/* Connect Settings */
+.setting-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.setting-row:last-child {
+  border-bottom: none;
+}
+.setting-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.setting-value {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  background: var(--surface-2);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.toggle-switch.on {
+  background: var(--primary);
+}
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch.on::after {
+  transform: translateX(20px);
+}
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: var(--grad-btn);
+  border: none;
+  border-radius: var(--r-lg);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--shadow-btn);
+  margin-top: 12px;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+.btn-primary:active {
+  transform: scale(0.97);
+}
+</style>
+</head>
+<body>
+<div class="demo-badge">🎨 UI演示模式</div>
+<div class="phone-frame">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="time">10:30</span>
+    <div class="icons">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 0 0-6 0zm-4-4l2 2a7.074 7.074 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+    </div>
+  </div>
+
+  <!-- Content Area -->
+  <div class="content">
+    <!-- Tab 1: Call Log (默认显示) -->
+    <div class="tab-content active" id="tab-calllog">
+      <div class="hero-card">
+        <div class="hero-header">
+          <div class="hero-title">通话记录</div>
+          <div class="connection-status">
+            <span class="status-dot"></span>
+            <span>已连接</span>
+          </div>
+        </div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">今日拨打</div>
+            <div class="info-value connected">23</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">接通率</div>
+            <div class="info-value">78%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-actions">
+        <div class="action-btn" onclick="showToast('打开拨号盘')">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          <div class="action-label">拨号</div>
+        </div>
+        <div class="action-btn" onclick="showToast('查看统计')">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <div class="action-label">统计</div>
+        </div>
+        <div class="action-btn" onclick="showToast('设置')">
+          <div class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          <div class="action-label">设置</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <span>最近通话</span>
+        <span style="font-size:12px;color:var(--primary);cursor:pointer;">查看全部</span>
+      </div>
+      <div class="call-list">
+        <div class="call-item">
+          <div class="call-avatar">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6l-9 9-4-4 9-9 4 4z" fill="currentColor"/></svg>
+          </div>
+          <div class="call-info">
+            <div class="call-number">138****8001</div>
+            <div class="call-time">今天 10:25 · 2分30秒</div>
+          </div>
+          <div class="call-status success">✓</div>
+        </div>
+        <div class="call-item">
+          <div class="call-avatar">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6l-9 9-4-4 9-9 4 4z" fill="currentColor"/></svg>
+          </div>
+          <div class="call-info">
+            <div class="call-number">139****1234</div>
+            <div class="call-time">今天 10:18 · 1分15秒</div>
+          </div>
+          <div class="call-status success">✓</div>
+        </div>
+        <div class="call-item">
+          <div class="call-avatar" style="background:rgba(240,62,62,.1);color:var(--red);">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <div class="call-info">
+            <div class="call-number">136****5678</div>
+            <div class="call-time">今天 09:55 · 未接通</div>
+          </div>
+          <div class="call-status missed">✗</div>
+        </div>
+        <div class="call-item">
+          <div class="call-avatar">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6l-9 9-4-4 9-9 4 4z" fill="currentColor"/></svg>
+          </div>
+          <div class="call-info">
+            <div class="call-number">137****9012</div>
+            <div class="call-time">今天 09:42 · 3分45秒</div>
+          </div>
+          <div class="call-status success">✓</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Register -->
+    <div class="tab-content" id="tab-register">
+      <div class="hero-card">
+        <div class="hero-title">客户登记</div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-row">
+          <div class="setting-label">自动登记</div>
+          <div class="toggle-switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">重复过滤</div>
+          <div class="toggle-switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="showToast('添加新客户')">+ 添加客户</button>
+    </div>
+
+    <!-- Tab 3: Stats -->
+    <div class="tab-content" id="tab-stats">
+      <div class="hero-card">
+        <div class="hero-title">数据统计</div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value">156</div>
+          <div class="stat-label">本周拨打</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">82%</div>
+          <div class="stat-label">接通率</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">45</div>
+          <div class="stat-label">有效通话</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">3.2m</div>
+          <div class="stat-label">平均时长</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Connect -->
+    <div class="tab-content" id="tab-connect">
+      <div class="hero-card">
+        <div class="hero-title">连接设置</div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">服务器地址</div>
+            <div class="setting-value">192.168.1.100:35430</div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">配对码</div>
+            <div class="setting-value">13800138000</div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">自动重连</div>
+          <div class="toggle-switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="showToast('正在测试连接...')">测试连接</button>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="switchTab('calllog', this)">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 5a2 2 0 0 1 2-2h3.28a1 1 0 0 1 .948.684l1.498 4.493a1 1 0 0 1-.502 1.21l-2.257 1.13a11.042 11.042 0 0 0 5.516 5.516l1.13-2.257a1 1 0 0 1 1.21-.502l4.493 1.498a1 1 0 0 1 .684.949V19a2 2 0 0 1-2 2h-1C9.716 21 3 14.284 3 6V5z" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <div class="nav-label">通话</div>
+    </div>
+    <div class="nav-item" onclick="switchTab('register', this)">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <div class="nav-label">登记</div>
+    </div>
+    <div class="nav-item" onclick="switchTab('stats', this)">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="nav-label">统计</div>
+    </div>
+    <div class="nav-item" onclick="switchTab('connect', this)">
+      <div class="nav-icon">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <div class="nav-label">连接</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Toast
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;top:60px;left:50%;transform:translateX(-50%);background:white;border:1px solid #DCEAF7;border-radius:999px;box-shadow:0 6px 24px rgba(43,108,196,.18);padding:10px 20px;font-size:13px;font-weight:500;z-index:999;white-space:nowrap;`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+
+// Tab切换
+function switchTab(tabName, navItem) {
+  // 隐藏所有tab
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  // 显示目标tab
+  document.getElementById('tab-' + tabName).classList.add('active');
+  
+  // 更新导航状态
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  navItem.classList.add('active');
+}
+</script>
+</body>
+</html>

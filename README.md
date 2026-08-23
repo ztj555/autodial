@@ -80,10 +80,10 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 ├── cloud-relay/
 │   ├── python/
 │   │   ├── cloud_relay_v2.py        # ★ 云中继主程序（WS + REST + Web面板）
-│   │   ├── dashboard.html           # Web 管理面板
+│   │   ├── dashboard.html           # Web 管理面板（v6.0 Sky Design System）
 │   │   ├── requirements.txt         # Python 依赖
 │   │   ├── install.bat / build.bat  # 安装/构建脚本
-│   │   ├── test_cloud_relay_v2.py   # 单元测试（pytest）
+│   │   ├── test_cloud_relay_v2.py / test_cloud_relay.py / test_auth.py / test_batch_import.py / test_server_start.py / test_stress_50_users.py  # pytest 测试集
 │   │   └── docs/                    # 架构设计文档（Mermaid图）
 │   ├── Dockerfile / docker-compose.yml  # Docker 部署
 │   ├── start.bat                    # 快速启动脚本
@@ -91,10 +91,10 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
 │   ├── manifest.json                # MV3 配置（v5.0.0）
 │   ├── background.js                # Service Worker：PIN/路由/登记
-│   ├── content-script.js            # 全帧注入：扫号/按钮/主题/菜单
+│   ├── content-script.js            # 全帧注入：扫号/按钮/菜单（主题数据取自 themes.js）
 │   ├── popup.html + popup.js        # 弹窗：配置 PIN + 服务器
-│   ├── auth.html                    # 设备授权弹窗（手机换 PIN 登录时扩展侧批准/拒绝）
-│   ├── themes.js                    # 扩展主题变量（9 套主题统一定义）
+│   ├── auth.html + auth.js          # 设备授权弹窗（外部脚本规避 MV3 CSP）
+│   ├── themes.js                    # 扩展主题变量（9 套主题唯一定义源 AD_THEMES）
 │   ├── AutoDial-API.md + README.md  # API文档 + 使用说明
 │   └── icons/                       # 扩展图标 (16/48/128)
 ├── pc-app-Electron/                 # Electron PC 端
@@ -103,7 +103,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── phone-connection-manager.js  # 手机连接管理
 │   ├── modules/
 │   │   ├── cloud.js                 # 云中继同步
-│   │   ├── server.js                # 本地 HTTP+WS 服务
+│   │   ├── server.js                # 本地 HTTP+WS 服务（回环 Host + 可信来源校验）
 │   │   ├── settings.js              # 服务器/配置同步
 │   │   ├── discovery.js             # UDP 设备发现
 │   │   ├── firewall.js              # 防火墙规则管理
@@ -116,13 +116,14 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   └── themes/                      # 主题数据
 ├── pc-app-go/                       # Go PC 端（Wails 桌面应用）
 │   ├── main.go                      # 应用入口
-│   ├── app.go                       # HTTP + WS 服务 + 启动/剪贴板
-│   ├── server.go                    # HTTP/WS 服务核心（路由/转发）
+│   ├── app.go                       # Wails 绑定方法 + 启动/剪贴板
+│   ├── server.go                    # HTTP/WS 服务核心（路由/转发，监听 127.0.0.1）
+│   ├── security.go                  # Origin/来源校验（回环 Host + 可信来源）
 │   ├── cloud.go                     # 云中继连接/同步
 │   ├── devices.go                   # 设备/PIN 校验 + 多手机管理
 │   ├── settings.go                  # 持久化配置
 │   ├── logger.go                    # 文件日志
-│   ├── tray.go                      # 系统托盘
+│   ├── tray.go                      # 系统托盘（Win32 原生）
 │   ├── udp.go                       # UDP 设备发现
 │   ├── wails.json                   # Wails 框架配置
 │   ├── frontend/                    # 前端界面（index.html + JS/主题）
@@ -155,11 +156,12 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │       ├── FileLogger.kt            # 文件日志
 │       ├── NotifyHelper.kt          # 通知辅助
 │       └── PrefCtrl.kt              # SharedPrefs 封装
-├── 技术文档/                         # 各端技术文档 + UI 技术文档
-├── 场景测试列表.md                   # 50 场景覆盖
-├── 场景检测报告.md                   # 代码审计结果
-├── 待验证问题.md                     # QA 验证清单
-└── CHANGELOG.md                      # 版本更新日志
+├── 技术文档/
+│   ├── README.md             # 文档导航（文档体系索引）
+│   ├── AutoDial技术文档.md    # ★ 全端技术细节（架构/REST/WS/协议/DB）
+│   └── AutoDial-UI设计文档.md  # UI 设计规范与重设计方案（含落地状态）
+├── 测试与质量.md               # 场景测试 50 例 + 检测报告 + QA 待验证清单
+└── CHANGELOG.md               # 版本更新日志
 ```
 
 ## 快速启动
@@ -174,7 +176,7 @@ python cloud_relay_v2.py
 
 > ⚠️ **依赖版本提示**：代码使用 `websockets.legacy.server`（14.0 起弃用但**从未移除**，最新版仍可导入，不会 `ImportError`）。建议安装时钉死 `websockets<14` 以锁定仍受支持的版本（防御性）。云中继 `Dockerfile` 中 `pip install ... websockets>=12.0 ...` 未加引号，`>` 会被 shell 解析为重定向、版本约束实际不生效（详见《Bug检查报告-2026-08-21.md》PY-P0-2，已降级为 P2）。
 
-启动后 WebSocket + REST API + Web 面板均监听 35430 端口。生产部署建议使用 Docker 或 Supervisor（详见部署指南）。
+启动后 WebSocket + REST API + Web 面板均监听 35430 端口。生产部署建议使用 Docker 或 Supervisor（见下文「部署」章节）。
 
 ### 2. Chrome 扩展
 
@@ -225,7 +227,7 @@ cd pc-app-Electron && npm install && npm start
 |------|------|------|
 | GET | `/api/v1/advisor/register?pin=...&name=...` | 注册顾问 |
 | GET | `/api/v1/advisor/name?pin=...` | 查询顾问姓名 |
-| GET | `/api/v1/advisor/update?pin=...&name=...` | 更新顾问姓名 |
+| GET | `/api/v1/advisor/update?pin=...&name=...` | 更新顾问姓名（🔐 管理员） |
 
 ### PIN 分组管理
 
@@ -350,6 +352,100 @@ cd pc-app-Electron && npm install && npm start
 - 手机离线 → pending_visits 堆积 → 重连时补推
 - `cloud_server` 空时自动选列表第一台为当前服务器
 
+## 部署
+
+> 生产环境：腾讯云 101.34.65.254 | Ubuntu 22.04 | 1Panel v2.0.15
+
+### ⚠️ 已知部署坑（修复前必读）
+
+1. **websockets 版本未锁定（弃用 API）**：代码依赖 `websockets.legacy.server`。实测（12.0/16.0/16.1.1）与官方 changelog 确认：legacy 自 14.0 起**弃用但从未移除**（15/16/17 均保留可导入），不会 `ImportError`。但 `requirements.txt` 声明 `websockets>=12.0` 无上界，未来版本一旦移除 legacy 将导致启动失败。**建议：安装时钉死 `pip install "websockets>=12,<14"`**（防御性措施）。
+2. **Dockerfile 版本约束失效**：`RUN pip install --no-cache-dir websockets>=12.0 aiohttp>=3.11` 中 `>` 被 /bin/sh 解析为输出重定向（在 /app 下生成垃圾文件 `=12.0`），版本约束完全失效。修复前请勿直接 `docker build`；建议改为 `pip install --no-cache-dir "websockets>=12,<14" "aiohttp>=3.11"`。
+
+### 一、云中继部署
+
+环境要求：Ubuntu 22.04+ / Python 3.10+ / `"websockets>=12,<14" pystray Pillow`（生产可仅装 `websockets aiohttp`）。
+
+**Docker 部署（推荐）**：
+
+```bash
+docker run -d --restart=always --name autodial-relay \
+  -p 35430:35430 \
+  -v /opt/autodial/data:/app/data \
+  autodial/cloud-relay
+```
+
+> **数据持久化（v4.14 起）**：容器内 entrypoint.py 默认设置 `AUTODIAL_DB_PATH=/app/data/visits.db`，数据库与日志（APPDATA=/app/data）均落在挂载卷，容器重建不丢数据。自定义位置：`-e AUTODIAL_DB_PATH=/app/data/visits.db`。
+
+**Supervisor 部署**：
+
+```bash
+cd /opt/autodial/cloud-relay/python
+pip install "websockets>=12,<14" pystray Pillow
+
+# /etc/supervisor/conf.d/autodial.conf
+[program:autodial-relay]
+command=/usr/bin/python3 /opt/autodial/cloud-relay/python/cloud_relay_v2.py
+directory=/opt/autodial/cloud-relay/python
+autostart=true
+autorestart=true
+user=root
+stdout_logfile=/var/log/autodial-relay.log
+stderr_logfile=/var/log/autodial-relay-err.log
+
+supervisorctl reread && supervisorctl update && supervisorctl start autodial-relay
+```
+
+**验证**：
+
+```bash
+curl http://localhost:35430/health
+# 预期: {"service": "AutoDial Cloud Relay", "version": "4.10", "port": 35430, ...}
+```
+
+**安全配置（v4.14 起）**：管理员默认账号 `18335162275` / 初始密码 `123456`（SHA-256 加盐哈希存储），**首次登录后立即修改**；登录限频 60s/5 次（超限返回 `RATE_LIMITED`）；除 `/health`、`/`、`/api/v1/dial`、`/api/v1/visit` 等业务端点外，管理/统计/客户数据读端点均需管理员令牌（`?token=` 或 `Authorization: Bearer`）；手机端上报端点（calls/batch、events/log、stats/report）无需令牌。
+
+**双实例部署（35430 + 35440）**：`python cloud_relay_v2.py --port 35430 &` + `python cloud_relay_v2.py --port 35440 &`（1Panel 两容器或 Supervisor 两进程）。
+
+### 二、Android APK 构建
+
+GitHub Actions 自动构建，产物：`app-release`（正式签名）/ `app-debug`（Debug 签名）。本地构建：
+
+```bash
+cd android-app
+cp keystore.properties.example keystore.properties   # 填入真实密钥后
+./gradlew assembleRelease    # 需密钥（keystore.properties 或环境变量）
+./gradlew assembleDebug      # 无需密钥
+```
+
+> **v4.14 起（AN-P0-1 修复）**：签名密码禁止硬编码，仅从项目根 `keystore.properties` 或环境变量（`KEYSTORE_PASSWORD`/`KEY_PASSWORD`/`KEY_ALIAS`/`KEYSTORE_FILE`，env 优先）读取，缺失时构建报错。密钥文件 `android-app/autodial-release.p12`（RSA 2048 / SHA256 / 25 年）；GitHub Actions Secrets：`KEYSTORE_BASE64` + `KEYSTORE_PASSWORD` + `KEY_ALIAS` + `KEY_PASSWORD`。
+
+### 三、Chrome 扩展分发
+
+1. 加载已解压：`chrome://extensions/` → 开发者模式 → 加载 `AutoDial-Extension/`
+2. 打包 .crx：扩展管理页 → 打包扩展 → 选择目录
+3. 私钥文件 `.pem` 妥善保管，用于后续版本更新
+
+### 四、服务器列表管理
+
+- 默认服务器：首次启动自动使用 `101.34.65.254:35430`（App/插件端可修改）
+- 远程列表：GitHub Gist `https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt`；Gitee `https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt`
+- 格式：`[old]` 段旧站、`[new]` 段新站，支持行末别名，四端自动兼容：
+
+```
+[old]
+262ao85kz470.vicp.fun:55535 旧主站
+[new]
+101.34.65.254:35430 腾讯云主站
+```
+
+### 五、防火墙与监控
+
+```bash
+ufw allow 35430/tcp        # 云中继端口（腾讯云安全组另加入站规则）
+```
+
+- `/health` 端点监控（UptimeRobot 等）；SQLite `visits.db` 定期备份；日志 `/var/log/autodial-relay.log` 已内置 RotatingFileHandler 轮转
+
 ## 注意事项
 
 1. 云中继端口 35430 需防火墙放行
@@ -360,3 +456,4 @@ cd pc-app-Electron && npm install && npm start
 6. 管理员默认账号 `18335162275 / 123456`（哈希存储），首次登录后请立即修改
 7. PC 端本地端口 35432 仅接受回环 Host + 可信来源（Chrome 扩展/本机程序），外部网页无法直接拨号
 8. 2026-08-22 已依据《Bug检查报告-2026-08-21.md》完成四批 49 点修复（P0 有效 9 项全部处理 + 精选 P1 + 中危清理），详见 CHANGELOG.md；剩余建议单独立项项（REST 线程池化、HTTPS 迁移、PIN 误检测设计取舍）见 CHANGELOG 与报告
+9. 文档体系：技术细节见 `技术文档/AutoDial技术文档.md`，UI 规范见 `技术文档/AutoDial-UI设计文档.md`，测试场景/审计/QA 清单见 `测试与质量.md`，导航见 `技术文档/README.md`

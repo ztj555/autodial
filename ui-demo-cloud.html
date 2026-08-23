@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial 云中转 - 管理面板演示</title>
+<style>
+:root {
+  --bg: #EBF4FF;
+  --surface: #FFFFFF;
+  --surface-2: #D8ECFC;
+  --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
+  --border: #DCEAF7;
+  --border-input: #DFEBF6;
+  --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
+  --text: #162840;
+  --text-2: #5880A8;
+  --primary: #2B6CC4;
+  --primary-light: #4A90E0;
+  --primary-dark: #1A56A8;
+  --green: #40C057;
+  --red: #F03E3E;
+  --orange: #F08C00;
+  --purple: #7B2CBF;
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-float: 0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text);
+  font-size: 13px; letter-spacing: .02em;
+  display: flex;
+}
+button { font: inherit; cursor: pointer; }
+/* Sidebar */
+.sidebar {
+  width: 240px; flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh;
+  z-index: 50;
+}
+.side-logo { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; }
+.logo-tile {
+  width: 36px; height: 36px; border-radius: var(--r-sm); flex-shrink: 0;
+  background: var(--grad-btn); color: #fff;
+  display: grid; place-items: center;
+  box-shadow: var(--shadow-btn);
+}
+.logo-tile svg { width: 19px; height: 19px; }
+.logo-text strong { font-size: 15px; font-weight: 700; display: block; line-height: 1.3; }
+.ver-pill {
+  font-size: 10px; font-weight: 600; color: var(--primary);
+  background: rgba(var(--primary-rgb),.10);
+  border-radius: var(--r-pill); padding: 1px 8px; margin-top: 3px; display: inline-block;
+}
+.side-nav { flex: 1; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.side-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 12px;
+  border: none; border-radius: var(--r-md);
+  background: transparent; color: var(--text-2);
+  font-size: 13px; font-weight: 500; text-align: left;
+  transition: background .15s, color .15s;
+}
+.side-item svg { width: 17px; height: 17px; flex-shrink: 0; }
+.side-item:hover { background: var(--input-bg); color: var(--text); }
+.side-item.active { background: var(--grad-btn); color: #fff; font-weight: 600; box-shadow: var(--shadow-btn); }
+.side-status { margin: 12px; padding: 12px 14px; background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.status-row { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+.status-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--green); flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(64,192,87,.16);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45); }
+  50% { box-shadow: 0 0 0 6px rgba(64,192,87,.08), 0 0 12px rgba(64,192,87,.35); }
+}
+.status-sub { margin-top: 5px; font-size: 11px; color: var(--text-2); }
+/* Main Area */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  height: 64px; padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px;
+}
+.topbar-title { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.auto-badge {
+  font-size: 11px; font-weight: 600; color: var(--green);
+  background: rgba(64,192,87,.12);
+  border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap;
+}
+.icon-btn {
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  border: none; cursor: pointer;
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+  transition: filter .15s;
+}
+.icon-btn:hover { filter: brightness(1.04); box-shadow: var(--shadow-card); }
+.icon-btn svg { width: 16px; height: 16px; }
+.content { flex: 1; padding: 24px; overflow-y: auto; }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn .22s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* Cards */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-card);
+  padding: 20px; margin-bottom: 16px;
+}
+.card-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.title-ico {
+  width: 28px; height: 28px; border-radius: var(--r-sm); flex-shrink: 0;
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center;
+}
+.title-ico svg { width: 15px; height: 15px; }
+/* Hero Banner */
+.hero-card {
+  background: var(--grad-hero); border: 1px solid var(--hero-border);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-card);
+  padding: 20px 24px; margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.hero-left { display: flex; align-items: center; gap: 14px; }
+.status-indicator {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.status-indicator svg { width: 24px; height: 24px; }
+.hero-info h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.hero-info p { font-size: 12px; color: var(--text-2); }
+.hero-stats { display: flex; gap: 24px; }
+.hero-stat { text-align: center; }
+.hero-stat .val { font-size: 24px; font-weight: 700; color: var(--primary); }
+.hero-stat .lbl { font-size: 11px; color: var(--text-2); margin-top: 2px; }
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  transition: all 0.15s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-float);
+}
+.stat-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--r-md);
+  background: var(--icon-tile);
+  color: var(--primary);
+  display: grid; place-items: center;
+  margin-bottom: 12px;
+}
+.stat-icon svg { width: 20px; height: 20px; }
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+/* Table */
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  text-align: left;
+  padding: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--divider);
+}
+td {
+  padding: 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--divider);
+}
+tr:hover td {
+  background: var(--input-bg);
+}
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge.online {
+  background: rgba(64,192,87,.12);
+  color: var(--green);
+}
+.badge.offline {
+  background: rgba(240,62,62,.1);
+  color: var(--red);
+}
+.btn-primary {
+  padding: 8px 16px;
+  background: var(--grad-btn);
+  border: none;
+  border-radius: var(--r-sm);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter .15s;
+}
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+.btn-ghost {
+  padding: 8px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-ghost:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+/* Charts placeholder */
+.chart-placeholder {
+  height: 300px;
+  background: var(--input-bg);
+  border: 2px dashed var(--border);
+  border-radius: var(--r-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.demo-badge {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: var(--primary);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: var(--shadow-btn);
+}
+.toast {
+  position: fixed; bottom: 14px; left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-pill); box-shadow: var(--shadow-float);
+  padding: 9px 18px;
+  font-size: 12px; font-weight: 500; color: var(--text);
+  transition: transform 0.25s; z-index: 999; white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: var(--green); color: var(--green); }
+</style>
+</head>
+<body>
+<div class="demo-badge">🎨 UI演示模式</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="side-logo">
+    <div class="logo-tile">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg>
+    </div>
+    <div class="logo-text">
+      <strong>AutoDial</strong>
+      <span class="ver-pill">v6.0</span>
+    </div>
+  </div>
+  
+  <div class="side-nav">
+    <button class="side-item active" onclick="switchPage('dashboard', this)">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>总览</span>
+    </button>
+    <button class="side-item" onclick="switchPage('clients', this)">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>客户端</span>
+    </button>
+    <button class="side-item" onclick="switchPage('phones', this)">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>手机设备</span>
+    </button>
+    <button class="side-item" onclick="switchPage('logs', this)">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>日志</span>
+    </button>
+    <button class="side-item" onclick="switchPage('settings', this)">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>设置</span>
+    </button>
+  </div>
+  
+  <div class="side-status">
+    <div class="status-row">
+      <span class="status-dot"></span>
+      <span>服务运行中</span>
+    </div>
+    <div class="status-sub">已运行 3天 12小时</div>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">管理面板</div>
+    <div class="topbar-right">
+      <span class="auto-badge">✓ 自动重启启用</span>
+      <button class="icon-btn" title="刷新" onclick="showToast('数据已刷新', 'success')">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+  
+  <div class="content">
+    <!-- Dashboard Page -->
+    <div class="page active" id="page-dashboard">
+      <div class="hero-card">
+        <div class="hero-left">
+          <div class="status-indicator">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="hero-info">
+            <h2>云端中继服务</h2>
+            <p>所有系统运行正常 · 最后更新: 刚刚</p>
+          </div>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <div class="val">12</div>
+            <div class="lbl">活跃客户端</div>
+          </div>
+          <div class="hero-stat">
+            <div class="val">8</div>
+            <div class="lbl">在线手机</div>
+          </div>
+          <div class="hero-stat">
+            <div class="val">1,234</div>
+            <div class="lbl">今日通话</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          <div class="stat-value">12</div>
+          <div class="stat-label">注册客户端</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(64,192,87,.1);color:var(--green);">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          <div class="stat-value">8</div>
+          <div class="stat-label">在线手机</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(240,140,0,.1);color:var(--orange);">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 6l-9 9-4-4 9-9 4 4z" fill="currentColor"/></svg>
+          </div>
+          <div class="stat-value">1,234</div>
+          <div class="stat-label">今日通话</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(123,44,191,.1);color:var(--purple);">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 5v10a2 2 0 0 1-2 2H8l-4 4V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          <div class="stat-value">456</div>
+          <div class="stat-label">今日短信</div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-title">
+          <div class="title-ico">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          通话趋势（最近7天）
+        </div>
+        <div class="chart-placeholder">
+          📊 Chart.js 图表区域 - 显示通话量趋势
+        </div>
+      </div>
+    </div>
+    
+    <!-- Clients Page -->
+    <div class="page" id="page-clients">
+      <div class="card">
+        <div class="card-title">
+          <div class="title-ico">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          客户端列表
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>客户端ID</th>
+                <th>IP地址</th>
+                <th>状态</th>
+                <th>最后活跃</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>PC-001</td>
+                <td>192.168.1.100</td>
+                <td><span class="badge online">在线</span></td>
+                <td>刚刚</td>
+                <td><button class="btn-ghost" onclick="showToast('查看详情')">详情</button></td>
+              </tr>
+              <tr>
+                <td>PC-002</td>
+                <td>192.168.1.101</td>
+                <td><span class="badge online">在线</span></td>
+                <td>2分钟前</td>
+                <td><button class="btn-ghost" onclick="showToast('查看详情')">详情</button></td>
+              </tr>
+              <tr>
+                <td>PC-003</td>
+                <td>192.168.1.102</td>
+                <td><span class="badge offline">离线</span></td>
+                <td>1小时前</td>
+                <td><button class="btn-ghost" onclick="showToast('查看详情')">详情</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Phones Page -->
+    <div class="page" id="page-phones">
+      <div class="card">
+        <div class="card-title">
+          <div class="title-ico">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          手机设备列表
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>设备名称</th>
+                <th>配对码</th>
+                <th>状态</th>
+                <th>所属客户端</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>华为 Mate 40</td>
+                <td>138****8000</td>
+                <td><span class="badge online">在线</span></td>
+                <td>PC-001</td>
+                <td><button class="btn-ghost" onclick="showToast('重启连接')">重启</button></td>
+              </tr>
+              <tr>
+                <td>小米 13</td>
+                <td>139****1234</td>
+                <td><span class="badge online">在线</span></td>
+                <td>PC-002</td>
+                <td><button class="btn-ghost" onclick="showToast('重启连接')">重启</button></td>
+              </tr>
+              <tr>
+                <td>OPPO Find X5</td>
+                <td>136****5678</td>
+                <td><span class="badge offline">离线</span></td>
+                <td>PC-001</td>
+                <td><button class="btn-ghost" onclick="showToast('重启连接')">重启</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Logs Page -->
+    <div class="page" id="page-logs">
+      <div class="card">
+        <div class="card-title">
+          <div class="title-ico">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8"/><path d="M14 2v6h6" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          系统日志
+        </div>
+        <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;font-family:monospace;font-size:12px;line-height:1.8;max-height:400px;overflow-y:auto;">
+          <div style="color:var(--green);">[2024-01-15 10:30:15] ✓ 云端服务启动成功</div>
+          <div style="color:var(--primary);">[2024-01-15 10:30:18] ℹ 监听端口: 35430</div>
+          <div style="color:var(--green);">[2024-01-15 10:31:02] ✓ PC-001 连接成功 (192.168.1.100)</div>
+          <div style="color:var(--green);">[2024-01-15 10:31:15] ✓ 手机设备注册: 138****8000</div>
+          <div style="color:var(--primary);">[2024-01-15 10:32:00] ℹ 转发拨号请求: 138****8000 → 139****5678</div>
+          <div style="color:var(--green);">[2024-01-15 10:32:05] ✓ 拨号成功</div>
+          <div style="color:var(--primary);">[2024-01-15 10:35:20] ℹ 转发短信请求</div>
+          <div style="color:var(--green);">[2024-01-15 10:35:25] ✓ 短信发送成功</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Page -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-title">
+          <div class="title-ico">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.8"/></svg>
+          </div>
+          系统设置
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div>
+            <label style="font-size:12px;color:var(--text-2);margin-bottom:6px;display:block;">服务器端口</label>
+            <input type="text" value="35430" style="width:100%;padding:10px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:14px;outline:none;" />
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-2);margin-bottom:6px;display:block;">最大并发连接数</label>
+            <input type="number" value="50" style="width:100%;padding:10px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:14px;outline:none;" />
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-2);margin-bottom:6px;display:block;">日志保留天数</label>
+            <input type="number" value="30" style="width:100%;padding:10px;background:var(--input-bg);border:1px solid var(--border-input);border-radius:var(--r-sm);color:var(--text);font-size:14px;outline:none;" />
+          </div>
+          <button class="btn-primary" onclick="showToast('设置已保存', 'success')" style="align-self:flex-start;">保存设置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Toast
+let toastTimer = null;
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2500);
+}
+
+// Page切换
+function switchPage(pageName, btn) {
+  // 隐藏所有page
+  document.querySelectorAll('.page').forEach(p => {
+    p.classList.remove('active');
+  });
+  // 显示目标page
+  document.getElementById('page-' + pageName).classList.add('active');
+  
+  // 更新导航状态
+  document.querySelectorAll('.side-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

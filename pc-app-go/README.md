@@ -15,7 +15,8 @@
 pc-app-go/
 ├── main.go         # Wails 应用入口
 ├── app.go          # Wails 绑定方法（GetInfo, SendDial, UpdateSettings 等）
-├── server.go       # HTTP + WebSocket 服务器
+├── server.go       # HTTP + WebSocket 服务器（监听 127.0.0.1）
+├── security.go     # Origin/来源校验（回环 Host + 可信来源，v4.14）
 ├── devices.go      # 设备注册与管理（PIN 标识、ACK 机制、拨号队列）
 ├── cloud.go        # 云中继客户端连接
 ├── udp.go          # UDP 广播发现
@@ -27,6 +28,8 @@ pc-app-go/
 ├── frontend/       # 前端资源（HTML/JS）
 └── build/          # 构建资源（图标等）
 ```
+
+> **安全说明（v4.14）**：HTTP/WS 仅监听 `127.0.0.1`，并要求回环 Host + 可信来源（`chrome-extension://` 等，空/`null` Origin 拒绝、精确 host 比对，`security.go`），外部网页无法静默拨号。
 
 ## 快速启动
 
