@@ -1,10 +1,13 @@
 name: Android Build
 
-# v4.3.0（2026-08-24）
-# - 修复 GitHub 表达式解析器在 step-level `if` 中拒绝 `secrets` 上下文（"Unrecognized named-value: 'secrets'"）的问题
+# v4.4.0（2026-08-24）
+# - 修复 app-debug 产物缺失：android-actions/setup-android@v3 默认不装任何 SDK 组件，
+#   显式安装 platforms;android-34 + build-tools;34.0.0 + platform-tools（与 compileSdk 34 匹配）
+# - 修复 GitHub 表达式解析器在 step-level `if` 中拒绝 `secrets` 上下文的问题
 # - 改用 job-level env 注入 secrets，表达式统一走 env 上下文（env 在 step `if` 中永远可用）
 # - 移除 push/pull_request 的 paths 过滤：任何 master push 都触发构建
 # - 使用仓库自带 gradlew（已入库），不再下载 Gradle 重新生成 wrapper
+# - gradlew 添加 chmod +x 兜底（应对 Windows 提交导致的 Unix 执行位缺失）
 # - 签名 secrets 全部配置齐才构建签名 release；否则自动降级为 debug-only，构建永不因签名配置失败
 
 on:
@@ -35,6 +38,12 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        # 显式装与 android-app/app/build.gradle 的 compileSdk 34 匹配的平台与构建工具
+        packages: |
+          platforms;android-34
+          build-tools;34.0.0
+          platform-tools
 
     - name: Accept SDK Licenses
       run: yes | sdkmanager --licenses || true
