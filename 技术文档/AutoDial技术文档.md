@@ -701,6 +701,7 @@ SQLite `autodial.db`，DCL 单例，版本 2：
 - `android/app/build.gradle`：versionCode 453 / versionName "4.53"
 - 签名：`autodial-release.p12`（RSA 2048/SHA256/25 年），**v4.14 起密码禁止硬编码**，仅从项目根 `keystore.properties` 或环境变量（KEYSTORE_PASSWORD/KEY_PASSWORD/KEY_ALIAS/KEYSTORE_FILE，env 优先）读取，缺失时报错；`keystore.properties.example` 为模板
 - GitHub Actions：自动构建 Release + Debug APK；Secrets：KEYSTORE_BASE64、KEYSTORE_PASSWORD、KEY_ALIAS、KEY_PASSWORD
+- 云端远程构建全流程 + CI 排错经验：见 `CI构建与排错指南.md`（触发方式 / Secrets 配置 / 产物下载 / 六轮排错复盘 / 陷阱速查）
 
 ### 5.12 录上门登记流程（RegisterFragment）
 

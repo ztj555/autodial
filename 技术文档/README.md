@@ -10,6 +10,7 @@
 |------|------|--------|
 | `AutoDial技术文档.md` | ★ 全端技术细节：系统架构、云中继（REST 41 端点/WS 协议/8 表/去重/面板）、Chrome 扩展、PC 端（Electron+Go）、Android 端、PIN 校验、安全设计、端口体系 | 原总技术文档 + 云端 + 手机端 + 插件端 + 电脑端 5 份 |
 | `AutoDial-UI设计文档.md` | UI 设计总纲（统一 token 体系）+ 手机端 UI 规范 + 插件端/云端/电脑端重设计方案 + 手机端评审意见 | 原 5 份 UI 设计文档 |
+| `CI构建与排错指南.md` | ★ Android APK 云端（GitHub Actions）远程构建全流程 + Secrets 配置 + 产物下载 + 2026-08-24 六轮 CI 排错经验与 GitHub Actions 陷阱速查 | 2026-08-24 CI 修复实战沉淀 |
 
 ## 二、根目录文档
 
