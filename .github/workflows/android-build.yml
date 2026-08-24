@@ -1,11 +1,11 @@
 name: Android Build
 
-# v4.2.0（2026-08-24）
-# - 移除 push/pull_request 的 paths 过滤：任何 master push 都触发构建，避免"只改 workflow/README 不触发"的困惑
-# - 使用仓库自带 gradlew（已入库），不再下载 Gradle 重新生成 wrapper —— 旧版在此步做配置阶段评估，
-#   旧 build.gradle 缺少签名密钥时直接抛错，导致整个 CI 挂掉
+# v4.3.0（2026-08-24）
+# - 修复 GitHub 表达式解析器在 step-level `if` 中拒绝 `secrets` 上下文（"Unrecognized named-value: 'secrets'"）的问题
+# - 改用 job-level env 注入 secrets，表达式统一走 env 上下文（env 在 step `if` 中永远可用）
+# - 移除 push/pull_request 的 paths 过滤：任何 master push 都触发构建
+# - 使用仓库自带 gradlew（已入库），不再下载 Gradle 重新生成 wrapper
 # - 签名 secrets 全部配置齐才构建签名 release；否则自动降级为 debug-only，构建永不因签名配置失败
-# - Decode Keystore 步骤加 if 守卫，避免 KEYSTORE_BASE64 未配置时生成空 p12 文件误导后续步骤
 
 on:
   workflow_dispatch:
@@ -17,6 +17,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
     - name: Checkout code
@@ -39,9 +44,9 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
 
     - name: Decode Keystore from Secret
-      if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      if: env.KEYSTORE_BASE64 != ''
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android-app/autodial-release.p12
+        echo "$KEYSTORE_BASE64" | base64 -d > android-app/autodial-release.p12
         ls -la android-app/autodial-release.p12
       shell: bash
 
@@ -50,14 +55,11 @@ jobs:
       run: ./gradlew assembleDebug --stacktrace
 
     - name: Build Signed Release APK
-      if: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+      if: env.KEYSTORE_BASE64 != '' && env.KEYSTORE_PASSWORD != '' && env.KEY_PASSWORD != ''
       working-directory: ./android-app
       run: ./gradlew assembleRelease --stacktrace
       env:
         KEYSTORE_FILE: autodial-release.p12
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     - name: Upload Release APK
       if: always()
