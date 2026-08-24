@@ -43,6 +43,10 @@ jobs:
     - name: Setup Gradle (cache + wrapper)
       uses: gradle/actions/setup-gradle@v3
 
+    - name: Make gradlew executable
+      working-directory: ./android-app
+      run: chmod +x gradlew
+
     - name: Decode Keystore from Secret
       if: env.KEYSTORE_BASE64 != ''
       run: |
