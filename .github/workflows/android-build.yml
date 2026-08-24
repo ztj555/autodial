@@ -1,13 +1,14 @@
 name: Android Build
 
-# v4.6.0（2026-08-24）
-# - 把 Upload APK 步骤的 if-no-files-found 从 warn 改为 error：产物缺失必须让 job 失败，
-#   修复"20 秒假 Success 但 APK 完全没生成"的诡异现象
-# - Build Debug APK 前新增 Verify gradlew works 步骤（./gradlew --version），先验证 gradlew 可用
-# - 编译参数改为 --info --no-daemon --stacktrace：更快失败、更多输出
-# - 移除 android-actions/setup-android@v3（卡在 sdkmanager --licenses 交互式确认）
-# - 改用 GitHub ubuntu-latest runner 预装 Android SDK（licenses 已预接受）
-# - 其余保持：env 中转 secrets、任何 master push 触发、gradlew chmod 兜底、无 secrets 降级 debug-only
+# v4.7.0（2026-08-24）一次性修复 wrapper stub + 此前所有加固项
+# - 仓库里的 gradlew 是 4 行 echo stub（"Please run: gradle wrapper --gradle-version 8.2"），
+#   每次跑都 exit 0 但根本没编译 —— 这就是所有"假绿"的真凶
+# - 新增 Bootstrap Gradle wrapper 步骤：在 CI 上下载 Gradle 8.2 distribution，
+#   用 gradle wrapper task 重新生成完整 wrapper（jar + properties + gradlew 脚本）
+# - Verify Android SDK 中若需补装，预先 yes | sdkmanager --licenses（避免 setup-android@v3 的交互式确认坑）
+# - Upload 步骤保留 if-no-files-found: error（产物缺失立即 fail）
+# - 编译参数 --info --no-daemon --stacktrace
+# - 其余保持：env 中转 secrets、任何 master push 触发、chmod gradlew 兜底、无 secrets 降级 debug-only
 
 on:
   workflow_dispatch:
@@ -41,6 +42,7 @@ jobs:
         ls "$ANDROID_HOME/platforms" 2>/dev/null || echo "NO platforms dir"
         ls "$ANDROID_HOME/build-tools" 2>/dev/null || echo "NO build-tools dir"
         # runner 预装 SDK 通常已含 android-34；缺时才用 sdkmanager 兜底补装
+        # 预先 yes 接受 licenses，避免交互式确认卡死
         if [ ! -d "$ANDROID_HOME/platforms/android-34" ]; then
           echo "android-34 missing, installing via sdkmanager..."
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
@@ -53,13 +55,17 @@ jobs:
     - name: Setup Gradle (cache + wrapper)
       uses: gradle/actions/setup-gradle@v3
 
-    - name: Make gradlew executable
-      working-directory: ./android-app
-      run: chmod +x gradlew
-
-    - name: Verify gradlew works
-      working-directory: ./android-app
-      run: ./gradlew --version
+    - name: Bootstrap Gradle wrapper
+      # 仓库的 gradlew 是 4 行 echo stub，必须先重新生成完整 wrapper 才能跑 Gradle
+      # 下载 Gradle 8.2 distribution，用其 gradle 命令跑 wrapper task，覆盖 stub
+      run: |
+        wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
+        unzip -q gradle-8.2-bin.zip
+        export PATH="$PWD/gradle-8.2/bin:$PATH"
+        cd android-app
+        gradle wrapper --gradle-version 8.2 --distribution-type bin
+        ls -la gradlew gradlew.bat gradle/wrapper/
+      shell: bash
 
     - name: Decode Keystore from Secret
       if: env.KEYSTORE_BASE64 != ''
