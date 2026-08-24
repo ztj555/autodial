@@ -419,6 +419,17 @@ cp keystore.properties.example keystore.properties   # 填入真实密钥后
 
 > **v4.14 起（AN-P0-1 修复）**：签名密码禁止硬编码，仅从项目根 `keystore.properties` 或环境变量（`KEYSTORE_PASSWORD`/`KEY_PASSWORD`/`KEY_ALIAS`/`KEYSTORE_FILE`，env 优先）读取，缺失时构建报错。密钥文件 `android-app/autodial-release.p12`（RSA 2048 / SHA256 / 25 年）；GitHub Actions Secrets：`KEYSTORE_BASE64` + `KEYSTORE_PASSWORD` + `KEY_ALIAS` + `KEY_PASSWORD`。
 
+> **GitHub Actions 签名 Secrets 配置**：仓库 `Settings → Secrets and variables → Actions → New repository secret`，依次添加 4 项（值只填一次，之后无法查看）：
+>
+> | Secret | 值 |
+> | --- | --- |
+> | `KEYSTORE_BASE64` | `base64 -w0 android-app/autodial-release.p12` 的完整输出（Windows 用 `certutil -encode` 后去头尾） |
+> | `KEYSTORE_PASSWORD` | keystore 密码 |
+> | `KEY_ALIAS` | 密钥别名（默认 `autodial`） |
+> | `KEY_PASSWORD` | key 密码 |
+>
+> **CI 降级策略（v4.1.0 起）**：以上 4 个 Secrets 任一缺失，CI 自动跳过签名 release 构建、只产出 `app-debug`，**不会构建失败**；全部配置后才额外产出签名 `app-release`。
+
 ### 三、Chrome 扩展分发
 
 1. 加载已解压：`chrome://extensions/` → 开发者模式 → 加载 `AutoDial-Extension/`
