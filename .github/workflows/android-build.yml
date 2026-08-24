@@ -1,6 +1,7 @@
 name: Android Build
 
-# v4.1.0 CI 加固版（2026-08-24）
+# v4.2.0（2026-08-24）
+# - 移除 push/pull_request 的 paths 过滤：任何 master push 都触发构建，避免"只改 workflow/README 不触发"的困惑
 # - 使用仓库自带 gradlew（已入库），不再下载 Gradle 重新生成 wrapper —— 旧版在此步做配置阶段评估，
 #   旧 build.gradle 缺少签名密钥时直接抛错，导致整个 CI 挂掉
 # - 签名 secrets 全部配置齐才构建签名 release；否则自动降级为 debug-only，构建永不因签名配置失败
@@ -10,14 +11,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ master ]
-    paths:
-      - 'android-app/**'
-      - '.github/workflows/android-build.yml'
   pull_request:
     branches: [ master ]
-    paths:
-      - 'android-app/**'
-      - '.github/workflows/android-build.yml'
 
 jobs:
   build:
