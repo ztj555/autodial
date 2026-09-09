@@ -1008,6 +1008,23 @@ class ConnectFragment : Fragment() {
                         connectionMode.visibility = View.VISIBLE
                         connectionMode.setTextColor(Color.parseColor(colors.text2))
                     }
+                    "reconnect_stopped" -> {
+                        // v4.15: 自动重连次数耗尽时不再静默
+                        statusText.text = "自动重连已暂停"
+                        statusText.setTextColor(Color.parseColor(colors.red))
+                        NotifyHelper.connToast(requireActivity(), "自动重连已暂停（服务器长时间不可达），请点击\"连接\"手动重试", Toast.LENGTH_LONG)
+                        discoveryHint.text = "⚠️ 自动重连已暂停，请点击\"连接\"手动重试"
+                        discoveryHint.visibility = View.VISIBLE
+                    }
+                    else -> if (reason != null && reason.startsWith("auth_fail:")) {
+                        // v4.15: 显示服务端返回的具体拒绝原因，不再一律显示"配对码错误"
+                        val detail = reason.removePrefix("auth_fail:").trim().ifEmpty { "配对码错误" }
+                        statusText.text = "连接被拒绝"
+                        statusText.setTextColor(Color.parseColor(colors.red))
+                        NotifyHelper.connToast(requireActivity(), "连接被拒绝：$detail", Toast.LENGTH_LONG)
+                        discoveryHint.text = "⚠️ $detail"
+                        discoveryHint.visibility = View.VISIBLE
+                    }
                 }
             }
             updateStrategyBadge()

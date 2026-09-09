@@ -9,6 +9,18 @@ console.log('[AutoDial BG] v4.0 已加载 (PIN 模式)');
 const PC_BASE = 'http://127.0.0.1:35432';
 const PC_PING_TIMEOUT = 500;  // 本地 ping 500ms 足够，超时走云端
 
+// v4.15: 统一带超时的 fetch。此前拨号/挂断/短信等 PC 请求无超时，
+// PC 端假死（端口还监听但不回包）时请求会挂起数分钟，业务员毫无反馈。
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 2000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // 后台定时探测 PC 状态（每 15 秒），保证拨号时缓存始终有效，不卡顿
 async function refreshPcStatus() {
   try {
@@ -201,10 +213,10 @@ async function uploadAdvisorName(pin, name) {
 // ==================== 双模拨号（PIN 版） ====================
 
 async function dial(phone, tabId) {
-  // 1) PC 直连优先
+  // 1) PC 直连优先（v4.15: 3 秒超时，PC 假死时快速转云端，不再永久挂起）
   if (await isPcAlive()) {
     try {
-      const res = await fetch(`${PC_BASE}/dial?number=${encodeURIComponent(phone)}`);
+      const res = await fetchWithTimeout(`${PC_BASE}/dial?number=${encodeURIComponent(phone)}`, {}, 3000);
       if (res.ok) {
         notifyTab(tabId, { type: 'dialResult', ok: true });
         return { success: true };
@@ -217,16 +229,16 @@ async function dial(phone, tabId) {
   if (!pin) {
     const stored = await chrome.storage.local.get(['self_phone']);
     const err = stored.self_phone
-      ? '服务器不可达 (端口35430)'
+      ? '无法连接云端服务器，请联系管理员'
       : '未检测到坐席手机号，请打开 CRM 页面';
     notifyTab(tabId, { type: 'dialResult', ok: false, err });
     return { success: false, error: err };
   }
 
   try {
-    const res = await fetch(`${await getCloudApi()}/api/v1/dial?number=${encodeURIComponent(phone)}`, {
+    const res = await fetchWithTimeout(`${await getCloudApi()}/api/v1/dial?number=${encodeURIComponent(phone)}`, {
       headers: { 'X-AutoDial-PIN': pin }
-    });
+    }, 8000);
     const d = await res.json();
     if (d.code === 'PC_CONNECTED') {
       pcAvailable = true;
@@ -236,7 +248,7 @@ async function dial(phone, tabId) {
     notifyTab(tabId, { type: 'dialResult', ok: d.ok, err: d.message || '' });
     return { success: d.ok, error: d.message || '' };
   } catch {
-    notifyTab(tabId, { type: 'dialResult', ok: false, err: '网络错误，请检查云端服务器' });
+    notifyTab(tabId, { type: 'dialResult', ok: false, err: '无法连接云端服务器，请联系管理员' });
     return { success: false, error: '网络错误' };
   }
 }
@@ -398,17 +410,21 @@ async function getConsultantList() {
 async function hangup(tabId) {
   if (await isPcAlive()) {
     try {
-      const r = await fetch(`${PC_BASE}/hangup`);
+      const r = await fetchWithTimeout(`${PC_BASE}/hangup`, {}, 2000);
       return { success: r.ok };
     } catch {}
   }
   const pin = await getPin();
   if (!pin) return { success: false, error: 'PIN 未设置' };
   try {
-    await fetch(`${await getCloudApi()}/api/v1/hangup`, {
+    // v4.15: 解析云端真实返回——此前不读响应体一律报"已挂断"，
+    // 手机离线/权限不足时业务员以为挂断了，实际通话还在继续
+    const res = await fetchWithTimeout(`${await getCloudApi()}/api/v1/hangup`, {
       headers: { 'X-AutoDial-PIN': pin }
-    });
-    return { success: true };
+    }, 3000);
+    const d = await res.json().catch(() => null);
+    if (d && d.ok) return { success: true };
+    return { success: false, error: (d && (d.message || d.code)) || '手机未连接，挂断失败' };
   } catch {
     return { success: false, error: '挂断请求失败' };
   }
@@ -417,7 +433,7 @@ async function hangup(tabId) {
 async function sendSms(phone, tabId) {
   if (await isPcAlive()) {
     try {
-      const r = await fetch(`${PC_BASE}/sms?number=${encodeURIComponent(phone)}`);
+      const r = await fetchWithTimeout(`${PC_BASE}/sms?number=${encodeURIComponent(phone)}`, {}, 2000);
       return { success: r.ok };
     } catch {}
   }
@@ -432,6 +448,29 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function notifyTab(tabId, msg) {
   if (tabId) {
     chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }).catch(() => {});
+  }
+}
+
+// v4.15: 换人使用电脑时同步切换 PIN。
+// 仅信任 CSS 选择器精确命中（precise=true）——TreeWalker 兜底检测可能误判，
+// 与已设 PIN 冲突时只警示不切换，避免把拨号路由到错误的号码。
+async function maybeSwitchPin(newPhone, precise, tabId) {
+  try {
+    if (!newPhone) return;
+    const s = await chrome.storage.local.get(['pin']);
+    const oldPin = s.pin || '';
+    if (newPhone === oldPin) return;
+    if (precise) {
+      chrome.storage.local.set({ pin: newPhone });
+      console.log('[AutoDial BG] 坐席已切换:', oldPin, '→', newPhone);
+      if (oldPin && tabId) {
+        notifyTab(tabId, { type: 'pinNotice', text: '坐席号已切换为 ' + newPhone, warn: false });
+      }
+    } else if (oldPin && tabId) {
+      notifyTab(tabId, { type: 'pinNotice', text: '检测到坐席号 ' + newPhone + ' 与已设置 PIN ' + oldPin + ' 不一致，请核对', warn: true });
+    }
+  } catch (e) {
+    console.warn('[AutoDial BG] PIN switch check failed:', e);
   }
 }
 
@@ -468,6 +507,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'selfPhoneDetected') {
     chrome.storage.local.set({ self_phone: msg.phone });
     console.log('[AutoDial BG] 坐席手机号已检测:', msg.phone);
+    // v4.15: 换人使用时同步切换 PIN，防止"电话打给上一任坐席"（异步执行，不阻塞监听器）
+    maybeSwitchPin(msg.phone, !!msg.precise, tabId);
     if (msg.name) {
       chrome.storage.local.set({ manager_name: msg.name });
       // 上传到云中继，让手机端能按 PIN 查到姓名
@@ -526,7 +567,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'openDesktop') {
-    fetch(`${PC_BASE}/open`)
+    fetchWithTimeout(`${PC_BASE}/open`)
       .then(r => r.json())
       .then(d => sendResponse({ success: d.success }))
       .catch(() => sendResponse({ success: false }));
@@ -534,7 +575,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'toggleFloatbar') {
-    fetch(`${PC_BASE}/toggle-floatbar`)
+    fetchWithTimeout(`${PC_BASE}/toggle-floatbar`)
       .then(r => r.json())
       .then(d => sendResponse({ success: d.success, visible: d.visible }))
       .catch(() => sendResponse({ success: false }));

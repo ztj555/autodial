@@ -742,6 +742,8 @@ class ConnectionManager(private val context: Context) {
                         if (state != ConnectionState.CONNECTED) {
                             setState(ConnectionState.DISCONNECTED)
                             manualConnecting = false
+                            // v4.15: LAN_ONLY 发现失败不再静默，让 UI 显示"连接失败"指引
+                            handler.post { notifyError(ConnectionError.Disconnected("connection_failed")) }
                         }
                     }
                 }
@@ -1049,6 +1051,8 @@ class ConnectionManager(private val context: Context) {
         if (isConnected) return
         if (reconnectAttempts >= MAX_RETRY_ATTEMPTS) {
             v6LogW(TAG, lastPin, "达到最大重试次数($MAX_RETRY_ATTEMPTS), 停止")
+            // v4.15: 重试耗尽不再静默，通知 UI 显示"自动重连已暂停"
+            handler.post { notifyError(ConnectionError.Disconnected("reconnect_stopped")) }
             return
         }
 
@@ -1078,6 +1082,8 @@ class ConnectionManager(private val context: Context) {
 
         if (cloudReconnectAttempts >= MAX_CLOUD_RETRY_ATTEMPTS) {
             v6LogW(TAG, lastPin, "Cloud 重连达到最大次数, 停止")
+            // v4.15: 重试耗尽不再静默，通知 UI 显示"自动重连已暂停"
+            handler.post { notifyError(ConnectionError.Disconnected("reconnect_stopped")) }
             return
         }
 
@@ -1099,12 +1105,16 @@ class ConnectionManager(private val context: Context) {
     }
 
     private fun getReconnectDelay(attempt: Int): Long {
-        return when (attempt) {
+        val base = when (attempt) {
             1 -> 0L; 2 -> 1000L; 3 -> 3000L
             in 4..6 -> 5000L; in 7..10 -> 10000L
             in 11..15 -> 30000L; in 16..20 -> 60000L
             else -> 300000L
         }
+        // v4.15: 加入随机抖动——网络恢复后多台设备不再同一瞬间冲击云端/PC，
+        // 配合云端"IP+PIN"限频，消除早上全员开机时的连接挤兑
+        val jitterMax = if (base >= 5000L) 10000L else 3000L
+        return base + (0L..jitterMax).random()
     }
 
     // ==================== 内部: 状态管理 ====================

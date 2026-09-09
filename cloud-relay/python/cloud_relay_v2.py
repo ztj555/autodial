@@ -16,6 +16,7 @@ import time
 import sqlite3
 import uuid
 import hashlib
+import secrets
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -170,6 +171,13 @@ def init_db():
         updated_at TEXT NOT NULL,
         PRIMARY KEY (device_id, date)
     )'''
+    # v4.15: 离线登记补推队列持久化（此前存内存，服务器重启即丢）
+    create_pending_visits = '''CREATE TABLE IF NOT EXISTS pending_visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pin TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )'''
     try:
         conn = _connect_db()
         c = conn.cursor()
@@ -188,6 +196,8 @@ def init_db():
         c.execute(create_call_records)
         c.execute(create_phone_events)
         c.execute(create_phone_daily)
+        c.execute(create_pending_visits)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_pending_visits_pin ON pending_visits(pin)')
         conn.commit()
         # 兼容旧版 DB：添加新列
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
@@ -223,6 +233,8 @@ def init_db():
         c.execute(create_call_records)
         c.execute(create_phone_events)
         c.execute(create_phone_daily)
+        c.execute(create_pending_visits)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_pending_visits_pin ON pending_visits(pin)')
         conn.commit()
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
         except: pass  # column already exists
@@ -282,10 +294,18 @@ def _seed_default_admin():
         c.execute('SELECT COUNT(*) FROM admin_accounts')
         if c.fetchone()[0] == 0:
             now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            # 安全修复：初始账号/密码从环境变量读取；未设置时生成随机密码并打印到日志，
+            # 不再在源码中硬编码已知弱口令（18335162275/123456）。
+            seed_user = (os.environ.get('AUTODIAL_ADMIN_USER') or '').strip() or '18335162275'
+            seed_pass = (os.environ.get('AUTODIAL_ADMIN_PASS') or '').strip()
+            if not seed_pass:
+                seed_pass = secrets.token_hex(4)
+                log.warning('ADMIN_SEED: 未设置 AUTODIAL_ADMIN_PASS，已生成随机初始密码，请立即登录并修改。账号=%s 密码=%s',
+                            seed_user, seed_pass)
             c.execute('INSERT INTO admin_accounts (username, password, created_at) VALUES (?, ?, ?)',
-                      ('18335162275', _hash_pwd('123456'), now_str))
+                      (seed_user, _hash_pwd(seed_pass), now_str))
             conn.commit()
-            log.info('ADMIN_SEED: 已创建默认管理员账号 (18335162275)')
+            log.info('ADMIN_SEED: 已创建默认管理员账号 (%s)', seed_user)
     except Exception as e:
         log.error(f'ADMIN_SEED failed: {e}')
     finally:
@@ -342,12 +362,16 @@ def cleanup_memory():
         if not _pin_attempts[ip]:
             del _pin_attempts[ip]
 
-    # 4. pending_visits: 每 PIN 最多保留 100 条
-    for pin, group in list(pin_groups.items()):
-        if len(group.pending_visits) > 100:
-            trimmed = group.pending_visits[-100:]
-            log.warning(f'MEM_CLEANUP: pin={pin} pending_visits trimmed {len(group.pending_visits)}→{len(trimmed)}')
-            group.pending_visits = trimmed
+    # 4. pending_visits（v4.15 起持久化在 SQLite）: 清理 7 天前仍未补推成功的记录
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%S')
+        c.execute('DELETE FROM pending_visits WHERE created_at < ?', (cutoff,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
     # 5. PinGroup.last_dial: 清理超过 10 分钟的拨号记录
     for pin, group in pin_groups.items():
@@ -483,9 +507,13 @@ def remove_from_group(ws):
     group = pin_groups.get(pin)
     if not group:
         return
+    was_member = (ws in group.pcs) or (ws in group.phones)
     group.pcs.discard(ws)
     group.phones.discard(ws)
-    if not group.pcs and not group.phones:
+    # v4.15: 只有当该连接此前确实还在组内时才允许清空整组。
+    # 否则会踩中"先踢后删"竞态：新手机刚被加入组、旧连接的 finally 才执行到这里，
+    # 把带着新手机的组从字典里删掉 → 新手机假在线，收不到任何 dial/visit_record。
+    if was_member and not group.pcs and not group.phones:
         del pin_groups[pin]
 
 # ==================== 心跳超时检测 ====================
@@ -496,19 +524,22 @@ MAX_TOTAL_CONNECTIONS = 500  # 全局连接上限（腾讯云中等配置安全�
 MAX_PIN_ATTEMPTS_PER_MINUTE = 5
 _pin_attempts: dict[str, list] = defaultdict(list)
 
-def check_rate_limit(client_ip: str) -> bool:
-    """检查是否超频，返回 True 表示应该拒绝"""
+def check_rate_limit(client_ip: str, pin: str = '') -> bool:
+    """检查是否超频，返回 True 表示应该拒绝。
+    v4.15: 限频维度从"仅 IP"改为"IP+PIN"——同一办公室 NAT 出口下的多台设备
+    互不挤占配额，避免早上全员开机时只有前 5 台能连上、其余被"请求过于频繁"拒绝。"""
     # P1: localhost 请求不限频（健康检查、管理界面自身调用）
     if client_ip in ('127.0.0.1', '::1', 'localhost'):
         return False
     now = datetime.now()
     # 清理过期条目
-    _pin_attempts[client_ip] = [
-        t for t in _pin_attempts[client_ip] if now - t < timedelta(minutes=1)
+    key = f'{client_ip}|{pin}' if pin else client_ip
+    _pin_attempts[key] = [
+        t for t in _pin_attempts[key] if now - t < timedelta(minutes=1)
     ]
-    if len(_pin_attempts[client_ip]) >= MAX_PIN_ATTEMPTS_PER_MINUTE:
+    if len(_pin_attempts[key]) >= MAX_PIN_ATTEMPTS_PER_MINUTE:
         return True
-    _pin_attempts[client_ip].append(now)
+    _pin_attempts[key].append(now)
     return False
 
 # ==================== 消息转发 ====================
@@ -625,15 +656,16 @@ async def handle_connection(ws, path=None):
 
             # ===== 手机端握手 =====
             if msg_type == 'phone_hello':
-                # 频率限制检查
-                if check_rate_limit(client_ip):
-                    await ws.send(json.dumps({'type': 'auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
-                    log.warning(f'RATE_LIMITED phone_hello ip={client_ip}')
-                    # v6诊断: 记录当前速率限制状态
-                    recent_attempts = len([t for t in _pin_attempts.get(client_ip, []) if datetime.now() - t < timedelta(minutes=1)])
-                    log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
-                    continue
                 pin = msg.get('pin', '')
+                # v4.15: 频率限制改为 IP+PIN 维度
+                rl_key = f'{client_ip}|{pin}' if pin else client_ip
+                if check_rate_limit(client_ip, pin):
+                    await ws.send(json.dumps({'type': 'auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
+                    log.warning(f'RATE_LIMITED phone_hello ip={client_ip} pin={pin}')
+                    # v6诊断: 记录当前速率限制状态
+                    recent_attempts = len([t for t in _pin_attempts.get(rl_key, []) if datetime.now() - t < timedelta(minutes=1)])
+                    log.warning(f'RATE_LIMIT_STATE key={rl_key} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
+                    continue
                 if not validate_pin(pin):
                     await ws.send(json.dumps({'type': 'auth_fail', 'reason': '配对码须为4位或11位数字'}))
                     continue
@@ -645,13 +677,15 @@ async def handle_connection(ws, path=None):
                 meta['authorized'] = False
                 group = get_group(pin)
                 # Fix B4: 同 PIN 只允许一台手机在线，踢掉旧连接
+                # v4.15: 先从组内移出再 close，避免 close 等待期间旧连接的 finally
+                # 触发 remove_from_group 误删整组（幽灵分组竞态）
                 for old_phone in list(group.phones):
                     if old_phone != ws:
+                        group.phones.discard(old_phone)
                         try:
                             await old_phone.close(4001, 'duplicate_reconnect')
                         except Exception:
                             pass
-                        group.phones.discard(old_phone)
                 is_first_device = len(group.pcs) == 0 and len(group.phones) == 0
 
                 # ===== 设备-PIN 绑定授权检查 =====
@@ -798,33 +832,34 @@ async def handle_connection(ws, path=None):
                 await forward_to_pcs(pin, msg, ws)
                 record_message(pin, msg_type, len(raw))
                 log.info(f'PHONE_HELLO pin={pin} device={meta["device_name"]} ip={client_ip} pcs={len(group.pcs)}')
-                # 补推离线堆积的 visit_record（await 确认发送后再清除）
-                if group and group.pending_visits:
-                    pushed = []
-                    failed = []
-                    for visit in group.pending_visits:
+                # 补推离线堆积的 visit_record（v4.15: 从 SQLite 读取，重启不丢）
+                pending_rows = _db_get_pending_visits(pin)
+                if pending_rows:
+                    pushed = 0
+                    for vid, visit in pending_rows:
                         try:
                             await forward_to_phones(pin, {
                                 'type': 'visit_record',
                                 'data': visit
                             })
-                            pushed.append(visit)
+                            _db_delete_pending_visit(vid)
+                            pushed += 1
                         except Exception:
-                            failed.append(visit)
-                    group.pending_visits = failed  # 保留失败的，下次重试
-                    log.info(f'phone_hello pin={pin}: pushed {len(pushed)} pending visits, {len(failed)} failed')
+                            pass  # 发送失败保留记录，下次重试
+                    log.info(f'phone_hello pin={pin}: pushed {pushed}/{len(pending_rows)} pending visits')
                 continue
 
             # ===== PC 端握手 =====
             if msg_type == 'pc_hello':
-                # 频率限制检查
-                if check_rate_limit(client_ip):
-                    await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
-                    log.warning(f'RATE_LIMITED pc_hello ip={client_ip}')
-                    recent_attempts = len([t for t in _pin_attempts.get(client_ip, []) if datetime.now() - t < timedelta(minutes=1)])
-                    log.warning(f'RATE_LIMIT_STATE ip={client_ip} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
-                    continue
                 pin = msg.get('pin', '')
+                # v4.15: 频率限制改为 IP+PIN 维度（与 phone_hello 对齐）
+                rl_key = f'{client_ip}|{pin}' if pin else client_ip
+                if check_rate_limit(client_ip, pin):
+                    await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '请求过于频繁，请稍后再试'}))
+                    log.warning(f'RATE_LIMITED pc_hello ip={client_ip} pin={pin}')
+                    recent_attempts = len([t for t in _pin_attempts.get(rl_key, []) if datetime.now() - t < timedelta(minutes=1)])
+                    log.warning(f'RATE_LIMIT_STATE key={rl_key} attempts_in_last_minute={recent_attempts}/{MAX_PIN_ATTEMPTS_PER_MINUTE}')
+                    continue
                 if not validate_pin(pin):
                     await ws.send(json.dumps({'type': 'pc_auth_fail', 'reason': '配对码须为4位或11位数字'}))
                     continue
@@ -892,12 +927,13 @@ async def handle_connection(ws, path=None):
                     # 授权通过：加入分组发送 auth_ok（不改变 default_pin，仅本次会话有效）
                     group = get_group(auth_pin)
                     # 踢掉相同 PIN 的旧手机
+                    # v4.15: 先移出组再 close，防止 close 等待期间旧连接 finally 误删整组
                     for old_phone in list(group.phones):
+                        group.phones.discard(old_phone)
                         try:
                             await old_phone.close(4001, 'duplicate_reconnect')
                         except Exception:
                             pass
-                        group.phones.discard(old_phone)
                     group.phones.add(phone_ws)
                     # S2修复: 授权通过后标记手机连接为已授权，此后其消息才允许转发给 PC
                     phone_meta = ws_meta.get(phone_ws)
@@ -1163,6 +1199,13 @@ def _err_json(code, message):
 
 _AUTH_ERR = (401, JSON_HDR, _err_json('UNAUTHORIZED', '需要管理权限'))
 
+def _safe_int(value, default=0):
+    """安全地把字符串转成 int；非法输入（如 'abc'）返回默认值，避免整型解析异常导致 500。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 def _schedule_async(coro):
     """调度 async 任务：事件循环内用 create_task，跨线程用 run_coroutine_threadsafe"""
     global loop
@@ -1245,22 +1288,57 @@ def _set_device_default_pin(device_name, pin):
 
 # ==================== 访问登记辅助函数 ====================
 
+# v4.15: 离线补推队列持久化到 SQLite（此前存 PinGroup.pending_visits 内存列表，
+# 服务器重启/组被删除时全部丢失）
+
+def _db_add_pending_visit(pin, visit_record):
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        c.execute('INSERT INTO pending_visits (pin, payload, created_at) VALUES (?, ?, ?)',
+                  (pin, json.dumps(visit_record, ensure_ascii=False),
+                   datetime.now().strftime('%Y-%m-%dT%H:%M:%S')))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        log.error(f'PENDING_VISIT_DB_ADD failed pin={pin}: {e}')
+        return False
+
+def _db_get_pending_visits(pin):
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        c.execute('SELECT id, payload FROM pending_visits WHERE pin=? ORDER BY id', (pin,))
+        rows = c.fetchall()
+        conn.close()
+        return [(r[0], json.loads(r[1])) for r in rows]
+    except Exception as e:
+        log.error(f'PENDING_VISIT_DB_GET failed pin={pin}: {e}')
+        return []
+
+def _db_delete_pending_visit(vid):
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        c.execute('DELETE FROM pending_visits WHERE id=?', (vid,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        log.error(f'PENDING_VISIT_DB_DEL failed id={vid}: {e}')
+
 def _push_visit_to_phone(pin, visit_record):
-    """推送 visit_record 给对应 pin 的手机，离线则堆积"""
+    """推送 visit_record 给对应 pin 的手机，离线则落库待补推"""
     group = pin_groups.get(pin)
     if group and group.phones:
         try:
             _schedule_async(forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}))
         except Exception as e:
             log.warning(f'VISIT push failed pin={pin}: {e}')
-            if group:
-                group.pending_visits.append(visit_record)
-    elif group:
-        group.pending_visits.append(visit_record)
-        log.info(f'VISIT queued (offline) pin={pin} pending={len(group.pending_visits)}')
+            _db_add_pending_visit(pin, visit_record)
     else:
-        grp = get_group(pin)
-        grp.pending_visits.append(visit_record)
+        _db_add_pending_visit(pin, visit_record)
+        log.info(f'VISIT queued (offline) pin={pin}')
 
 async def health_check_handler(path, request_headers):
     """处理 HTTP 请求（健康检查 + API + Web 界面）
@@ -1405,7 +1483,7 @@ async def health_check_handler(path, request_headers):
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
         qs = parse_qs(parsed.query)
-        n = int(qs.get('n', ['100'])[0])
+        n = _safe_int(qs.get('n', ['100'])[0], 100)
         q = qs.get('q', [''])[0]
         logs = get_logs(min(n, 1000))
         if q:
@@ -1433,9 +1511,9 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('INVALID_NUMBER', '号码不合法'))
 
         group = pin_groups.get(pin)
-        # PC_CONNECTED 去重：PC在线让扩展走本地
-        if group and group.pcs:
-            return (200, JSON_HDR, _err_json('PC_CONNECTED', 'PC 端在线，请走本地直连'))
+        # v4.15: 移除 PC_CONNECTED 拒绝逻辑。此前只要同 PIN 任意 PC 在线，扩展走云端
+        # 拨号就被拒——但"PC 在线"指的是别的电脑（扩展只会用本机 127.0.0.1），导致
+        # 在另一台电脑上插件的云端拨号被永久锁死。现在云端照常转发，PC 端仅作旁路监听。
         # 手机离线
         if not group or not group.phones:
             return (200, JSON_HDR, _err_json('PHONE_OFFLINE', '手机未连接'))
@@ -1469,8 +1547,7 @@ async def health_check_handler(path, request_headers):
         track_ext_activity(pin)
 
         group = pin_groups.get(pin)
-        if group and group.pcs:
-            return (200, JSON_HDR, _err_json('PC_CONNECTED', 'PC 端在线，请走本地直连'))
+        # v4.15: 与 /dial 对齐，移除 PC_CONNECTED 拒绝（同 PIN 别的电脑在线不应锁死挂断）
         if not group or not group.phones:
             return (200, JSON_HDR, _err_json('PHONE_OFFLINE', '手机未连接'))
 
@@ -1786,12 +1863,13 @@ async def health_check_handler(path, request_headers):
             # 授权通过：加入分组发送 auth_ok（不改变 default_pin，仅本次会话有效）
             group = get_group(auth_pin)
             # 踢掉相同 PIN 的旧手机（通过 phone_ws 同组清除）
+            # v4.15: 先移出组再 close，防止 close 等待期间旧连接 finally 误删整组
             for old_phone in list(group.phones):
+                group.phones.discard(old_phone)
                 try:
                     await old_phone.close(1001, 'duplicate_reconnect')
                 except Exception:
                     pass
-                group.phones.discard(old_phone)
             group.phones.add(phone_ws)
             # S2修复: REST 授权通过后同样标记手机连接为已授权（与 WS 版 auth_response 对齐）
             phone_meta = ws_meta.get(phone_ws)
@@ -2040,9 +2118,9 @@ async def health_check_handler(path, request_headers):
         pin = qs.get('pin', [''])[0].strip()
         model = qs.get('model', [''])[0].strip()
         version = qs.get('version', [''])[0].strip()
-        phone_dial = int(qs.get('count', ['0'])[0])
-        phone_dur = int(qs.get('duration', ['0'])[0])
-        phone_conn = int(qs.get('connected', ['0'])[0])
+        phone_dial = _safe_int(qs.get('count', ['0'])[0], 0)
+        phone_dur = _safe_int(qs.get('duration', ['0'])[0], 0)
+        phone_conn = _safe_int(qs.get('connected', ['0'])[0], 0)
         if not device_id:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id不能为空'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -2108,6 +2186,7 @@ async def health_check_handler(path, request_headers):
                         continue
 
                     crm_id = (rec.get('crm_id') or '').strip()
+                    pin = (rec.get('pin') or '').strip()
                     name = (rec.get('name') or '').strip()
                     mobile = (rec.get('mobile') or '').strip()
                     kefu_tel = (rec.get('kefu_tel') or '').strip()
@@ -2126,8 +2205,8 @@ async def health_check_handler(path, request_headers):
                         '''INSERT OR IGNORE INTO visits
                         (crm_id, pin, name, mobile, kefu_tel, visit_type, source, visit_time,
                          crm_synced, visit_extra, created_at, updated_at)
-                        VALUES (?, '', ?, ?, ?, ?, 'crm_import', ?, 1, ?, ?, ?)''',
-                        (crm_id if crm_id else None, name, mobile, kefu_tel,
+                        VALUES (?, ?, ?, ?, ?, ?, 'crm_import', ?, 1, ?, ?, ?)''',
+                        (crm_id if crm_id else None, pin, name, mobile, kefu_tel,
                          visit_type, visit_time, visit_extra, now_str, now_str)
                     )
                     if c.rowcount > 0:
@@ -2234,7 +2313,11 @@ async def health_check_handler(path, request_headers):
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
             if group_id:
-                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (int(group_id),))
+                try:
+                    gid = int(group_id)
+                except (TypeError, ValueError):
+                    return (400, JSON_HDR, _err_json('INVALID_GROUP', '分组 ID 无效'))
+                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
                 group_pins = [r['pin'] for r in c.fetchall()]
                 if group_pins:
                     placeholders = ','.join(['?'] * len(group_pins))
@@ -2478,8 +2561,8 @@ async def health_check_handler(path, request_headers):
         date_from = qs.get('date_from', [''])[0]
         date_to = qs.get('date_to', [''])[0]
         number = qs.get('number', [''])[0]
-        limit = min(int(qs.get('limit', ['200'])[0]), 1000)
-        offset = int(qs.get('offset', ['0'])[0])
+        limit = min(_safe_int(qs.get('limit', ['200'])[0], 200), 1000)
+        offset = _safe_int(qs.get('offset', ['0'])[0], 0)
 
         conn = None
         try:
@@ -2574,7 +2657,7 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0]
         event_type = qs.get('event_type', [''])[0]
-        limit = min(int(qs.get('limit', ['100'])[0]), 500)
+        limit = min(_safe_int(qs.get('limit', ['100'])[0], 100), 500)
         conn = None
         try:
             conn = _connect_db()

@@ -105,7 +105,38 @@ class DialService : Service() {
             else pendingDialQueue.addLast(value)
         }
 
+    // v4.15: 已处理消息 ID 去重（LRU）。PC 端 ACK 超时重发、云端重连重投时，
+    // 同一条 dial/sms/hangup 只执行一次——此前会重复拨打同一客户。
+    private val processedMessageIds = object : LinkedHashMap<String, Boolean>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?): Boolean = size > 128
+    }
+    private fun isDuplicateMessageId(id: String): Boolean =
+        synchronized(processedMessageIds) { processedMessageIds.containsKey(id) }
+    private fun rememberMessageId(id: String) {
+        synchronized(processedMessageIds) { processedMessageIds[id] = true }
+    }
+
     private var listenerRegistered = false
+
+    /**
+     * v4.15: 按系统版本选择前台服务类型启动。
+     * Android 14 对 phoneCall 类型做运行时资格校验（要求默认拨号器/正在通话），
+     * 未授权时 startForeground 会抛 SecurityException → 服务永远起不来（退后台被杀、
+     * 开机自启 5 秒超时崩溃）。specialUse 类型无运行时资格要求，Android 14+ 用它。
+     */
+    private fun startForegroundCompat(notification: android.app.Notification) {
+        when {
+            Build.VERSION.SDK_INT >= 34 ->
+                startForeground(NOTIFICATION_ID, notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            Build.VERSION.SDK_INT >= 29 ->
+                startForeground(NOTIFICATION_ID, notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+            else ->
+                @Suppress("DEPRECATION")
+                startForeground(NOTIFICATION_ID, notification)
+        }
+    }
 
     internal fun requestDialInForeground(number: String) {
         Companion.pendingBackgroundDialNumber = number
@@ -180,6 +211,21 @@ class DialService : Service() {
             val originalType = msg.optString("type", "")
             FileLogger.logMessage("RECV", originalType, msg.toString())
             if (messageId.isNotEmpty()) {
+                // v4.15: 重复消息只补发 ACK，不再执行（防止同一号码被重复拨打）
+                if (isDuplicateMessageId(messageId)) {
+                    Log.d(TAG, "duplicate $originalType (id=$messageId), re-ACK only")
+                    FileLogger.i("DialService", "duplicate message $originalType (id=$messageId), re-ACK only")
+                    try {
+                        sendToPC(JSONObject().apply {
+                            put("type", "ack")
+                            put("messageId", messageId)
+                            put("originalType", originalType)
+                            put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
+                        })
+                    } catch (_: Exception) {}
+                    return
+                }
+                rememberMessageId(messageId)
                 try {
                     sendToPC(JSONObject().apply {
                         put("type", "ack")
@@ -243,8 +289,10 @@ class DialService : Service() {
         override fun onError(error: ConnectionManager.ConnectionError) {
             when (error) {
                 is ConnectionManager.ConnectionError.AuthFailed -> {
-                    updateNotification("\u914d\u5bf9\u7801\u9519\u8bef")
-                    notifyConnectionChange(false, "pin_wrong")
+                    updateNotification("\u8fde\u63a5\u88ab\u62d2\u7edd")
+                    // v4.15: 不再把所有认证失败笼统映射成 pin_wrong——
+                    // 服务端的具体原因（设备未注册/PIN不一致/请求过频繁）透传到 UI 显示
+                    notifyConnectionChange(false, "auth_fail:" + error.reason)
                 }
                 is ConnectionManager.ConnectionError.Disconnected -> {
                     updateNotification("\u8fde\u63a5\u5df2\u65ad\u5f00")
@@ -285,7 +333,7 @@ class DialService : Service() {
             isRunning = true
             callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
-            startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d"))
+            startForegroundCompat(buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d"))
 
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "autodial:wake").apply {
@@ -316,6 +364,9 @@ class DialService : Service() {
 
             registerScreenOnReceiver()
 
+            // v4.15: 选卡请求兜底接收器（界面不可见时也能收到，不再发进真空）
+            registerSimSelectFallbackReceiver()
+
             connectionManager.loadSavedConfig()
 
         } catch (e: Exception) {
@@ -323,7 +374,7 @@ class DialService : Service() {
             isRunning = true
             callLogDb = CallLogDb.getInstance(this)
             createNotificationChannel()
-            try { startForeground(NOTIFICATION_ID, buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")) } catch (_: Exception) {}
+            try { startForegroundCompat(buildNotification("\u8de8\u5c4f\u62e8\u53f7 \u8fd0\u884c\u4e2d")) } catch (_: Exception) {}
             // v9: 补全异常恢复路径 — 缺失 WakeLock/CallState/ScreenOn 会导致功能残缺
             try {
                 val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -342,6 +393,7 @@ class DialService : Service() {
             try { connectionManager.registerNetworkMonitor() } catch (_: Exception) {}
             try { registerCallStateListener() } catch (_: Exception) {}
             try { registerScreenOnReceiver() } catch (_: Exception) {}
+            try { registerSimSelectFallbackReceiver() } catch (_: Exception) {}
             try { connectionManager.loadSavedConfig() } catch (_: Exception) {}
         }
     }
@@ -420,6 +472,7 @@ class DialService : Service() {
                 phoneStateListener?.let { try { @Suppress("DEPRECATION") tm.listen(it, PhoneStateListener.LISTEN_NONE) } catch (_: Exception) {} }
             }
             unregisterScreenOnReceiver()
+            unregisterSimSelectFallbackReceiver()
             if (::connectionManager.isInitialized) connectionManager.cleanup()
             FileLogger.shutdown()
             isRunning = false
@@ -555,6 +608,69 @@ class DialService : Service() {
             try { unregisterReceiver(it) } catch (_: Exception) {}
             screenOnReceiver = null
         }
+    }
+
+    // ==================== v4.15: 选卡请求兜底接收器 ====================
+    // 此前 ACTION_SHOW_SIM_SELECT 只有 MainActivity 注册，用户划掉 App 后
+    // 无悬浮窗权限时拨号请求会"发进真空"——PC 永远等不到回执，客户没人打。
+
+    private var simSelectFallbackReceiver: BroadcastReceiver? = null
+
+    private fun registerSimSelectFallbackReceiver() {
+        unregisterSimSelectFallbackReceiver()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != ACTION_SHOW_SIM_SELECT) return
+                // 界面可见时由 MainActivity 处理（应用内选卡/引导开权限），避免双重弹窗
+                if (isActivityVisible) return
+                val number = intent.getStringExtra("number") ?: return
+                val lastSimSlot = intent.getIntExtra("last_sim_slot", -1)
+                val lastDialTime = intent.getLongExtra("last_dial_time", 0L)
+                if (SimSelectOverlay.hasPermission(this@DialService)) {
+                    SimSelectOverlay.show(this@DialService, number, lastSimSlot, lastDialTime)
+                } else {
+                    // 无悬浮窗权限且界面不可见：给 PC 回执取消，并发提醒通知，不让拨号凭空消失
+                    _sendResultToPC(number, "cancelled")
+                    showSimSelectPermissionNotification(number)
+                }
+            }
+        }
+        simSelectFallbackReceiver = receiver
+        ContextCompat.registerReceiver(
+            this, receiver,
+            IntentFilter(ACTION_SHOW_SIM_SELECT),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    private fun unregisterSimSelectFallbackReceiver() {
+        simSelectFallbackReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+            simSelectFallbackReceiver = null
+        }
+    }
+
+    private fun showSimSelectPermissionNotification(number: String) {
+        try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pi = PendingIntent.getActivity(this, 1005, intent, flags)
+            val n = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("收到拨号请求，需要选卡")
+                .setContentText("号码 $number：请开启\"悬浮窗\"权限后再试")
+                .setSmallIcon(android.R.drawable.ic_menu_call)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build()
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(1005, n)
+        } catch (_: Exception) {}
     }
 
     // ==================== SIM info ====================

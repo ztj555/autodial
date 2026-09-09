@@ -38,9 +38,27 @@ object SimSelectOverlay {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private val handler = Handler(Looper.getMainLooper())
+    // v4.15: 记录当前展示的号码，超时消失时用于给 PC 发取消回执
+    private var currentNumber: String? = null
 
     // 自动消失（30秒无操作）
-    private val autoDismissRunnable = Runnable { dismiss() }
+    private val autoDismissRunnable = Runnable {
+        // v4.15: 超时自动消失也要通知 PC 取消——此前静默蒸发，PC 端永远显示"拨打中"
+        val number = currentNumber
+        if (number != null) {
+            try {
+                DialService._instance?.let { svc ->
+                    svc.startService(Intent(svc, DialService::class.java).apply {
+                        action = "DIAL_CANCELLED"
+                        putExtra("number", number)
+                    })
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "超时发送取消回执失败: ${e.message}")
+            }
+        }
+        dismiss()
+    }
 
     /**
      * 弹出选卡悬浮窗
@@ -54,6 +72,7 @@ object SimSelectOverlay {
             try {
                 // 先移除已有的
                 dismiss()
+                currentNumber = number
                 windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
                 val params = WindowManager.LayoutParams().apply {
@@ -93,6 +112,7 @@ object SimSelectOverlay {
      */
     fun dismiss() {
         handler.removeCallbacks(autoDismissRunnable)
+        currentNumber = null
         try {
             overlayView?.let {
                 windowManager?.removeView(it)

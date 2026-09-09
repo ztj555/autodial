@@ -21,8 +21,6 @@ Header: X-AutoDial-PIN: 13800138000
 {"ok": true, "code": "ACCEPTED"}
 // PIN 格式错误
 {"ok": false, "code": "INVALID_PIN", "message": "PIN 格式错误，须为4位或11位数字"}
-// PC 在线，应走本地
-{"ok": false, "code": "PC_CONNECTED", "message": "PC 端在线，请走本地直连"}
 // 手机离线
 {"ok": false, "code": "PHONE_OFFLINE", "message": "手机未连接"}
 // 5 秒内同号码
@@ -30,6 +28,9 @@ Header: X-AutoDial-PIN: 13800138000
 // 号码不合法
 {"ok": false, "code": "INVALID_NUMBER", "message": "号码不合法"}
 ```
+
+> v4.15 起：云端不再返回 `PC_CONNECTED` 拒绝码（旧版服务器仍可能返回，扩展兼容处理）。
+> 只要手机在线，云端一律转发 dial/hangup——PC 端仅作旁路监听，同 PIN 其他电脑在线不再锁死本机的云端拨号。
 
 处理流程：PIN 强校验 → 号码校验 → 检查 PC 在线 → 检查手机在线 → 5s 去重 → 异步转发 → 返回 ACCEPTED。
 
@@ -154,7 +155,7 @@ Header: X-AutoDial-PIN: 13800138000
 | `ACCEPTED` | 指令已接受 | 正常 |
 | `INVALID_PIN` | PIN 非 4 位或 11 位数字 | 提示检查 PIN 设置 |
 | `PHONE_OFFLINE` | PIN 组存在但手机不在线 | 提示手机未连接云中继 |
-| `PC_CONNECTED` | PC 在线，应走本地 | 刷新缓存，切回 localhost |
+| `PC_CONNECTED` | （v4.15 起云端不再返回）PC 在线 | 刷新缓存，切回 localhost |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复 | 忽略 |
 | `INVALID_NUMBER` | 号码不合法 | 提示用户 |
 | `MISSING_FIELDS` | 缺少必填字段 | 补全后再试 |

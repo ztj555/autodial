@@ -32,12 +32,13 @@
         var m = phoneText.match(/1[3-9]\d{9}/);
         if (m) {
           var name = nameEl ? nameEl.textContent.trim() : '';
-          return { phone: m[0], name: name };
+          // v4.15: precise=true 表示选择器精确命中，可作为自动切换坐席号的依据
+          return { phone: m[0], name: name, precise: true };
         }
       }
     } catch(e) {}
 
-    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化）
+    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化；可能误判，不可自动切换坐席号）
     var PHONE_RE = /1[3-9]\d{9}/;
     var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     var prevText = '';
@@ -45,7 +46,7 @@
       var text = w.currentNode.textContent.trim();
       var m = text.match(PHONE_RE);
       if (m) {
-        return { phone: m[0], name: prevText };
+        return { phone: m[0], name: prevText, precise: false };
       }
       // 记录不含数字、长度2-10的纯文本（可能是姓名）
       if (text && !/\d/.test(text) && text.length >= 2 && text.length <= 10) {
@@ -439,6 +440,8 @@
           flashFloat('未检测到号码', false);
           return;
         }
+        // v4.15: 点击立即进入"拨号中"状态（清除旧失败提示），结果回来后刷新
+        flashFloat('拨号中…', undefined);
         chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
       });
 
@@ -1395,39 +1398,75 @@
     }
 
     function updatePhone(phone) {
-      currentPhone = phone;
-      window.__adPhone = phone;
+      currentPhone = phone || null;
+      window.__adPhone = currentPhone;
+      // v4.15: 记录最近一次收到号码的时间，供"残留号码保鲜检查"使用
+      if (currentPhone) window.__adLastPhoneAt = Date.now();
+      // v4.15: 号码清空时同步清除残留的客户姓名，防止"张三 + 李四的号码"错配登记
+      if (!currentPhone) window.__adCustomerName = '';
       if (!floatEl) return;
       const t = T();
       const label = document.getElementById('__ad_dial_label');
-      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + escHtml(phone) + '</span>';
-      floatEl.style.background = t.gradAccent;
-      floatEl.style.color = t.textOnAccent || t.text;
-      floatEl.style.boxShadow = `0 6px 20px ${t.accent}59`;
+      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
+      if (currentPhone) {
+        floatEl.style.background = t.gradAccent;
+        floatEl.style.color = t.textOnAccent || t.text;
+        floatEl.style.boxShadow = `0 6px 20px ${t.accent}59`;
+      } else {
+        floatEl.style.background = t.bg2;
+        floatEl.style.color = t.text;
+        floatEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
+      }
+      // v4.15: 检测到新号码时恢复挂断按钮——此前挂断成功一次后永久消失，直到刷新页面
+      const hu = document.getElementById('__ad_hangup');
+      if (hu && hu.style.display === 'none') hu.style.display = 'flex';
     }
 
     function flashFloat(text, ok) {
       if (!floatEl) return;
       const t = T();
       const label = document.getElementById('__ad_dial_label');
-      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (ok ? '✓ ' : '✗ ') + escHtml(text) + '</span>';
-      floatEl.style.background = ok ? t.gradGreen : t.gradRed;
-      floatEl.style.color = '#FFFFFF';
-      floatEl.style.boxShadow = ok
-        ? `0 6px 20px ${t.green}55`
-        : `0 6px 20px ${t.red}55`;
+      // v4.15: ok=undefined 表示"进行中"中性态；失败态不再 1 秒消失——
+      // 业务员正看客户资料很容易错过红闪，误以为已拨出（ customer 永远等不到电话）
+      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (ok === false ? '✗ ' : (ok === true ? '✓ ' : '')) + escHtml(text) + '</span>';
+      if (ok === true) {
+        floatEl.style.background = t.gradGreen;
+        floatEl.style.color = '#FFFFFF';
+        floatEl.style.boxShadow = `0 6px 20px ${t.green}55`;
+      } else if (ok === false) {
+        floatEl.style.background = t.gradRed;
+        floatEl.style.color = '#FFFFFF';
+        floatEl.style.boxShadow = `0 6px 20px ${t.red}55`;
+      } else {
+        floatEl.style.background = t.bg2;
+        floatEl.style.color = t.text;
+        floatEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
+      }
       // 清理旧定时器，防止闪烁冲突
       clearTimeout(window.__ad_flash_timer);
-      // 成功2.5秒恢复，失败6秒恢复
-      window.__ad_flash_timer = setTimeout(() => {
-        const lb = document.getElementById('__ad_dial_label');
-        if (lb) lb.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
-        floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
-        floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
-        floatEl.style.boxShadow = currentPhone
-          ? `0 6px 20px ${t.accent}59`
-          : `0 4px 14px ${t.accent}1F`;
-      }, ok ? 2500 : 1000);
+      const token = (window.__ad_flash_seq = (window.__ad_flash_seq || 0) + 1);
+      if (ok === true) {
+        // 成功 2.5 秒恢复
+        window.__ad_flash_timer = setTimeout(() => {
+          if (token === window.__ad_flash_seq) restoreFloatLabel(t);
+        }, 2500);
+      } else if (ok === undefined) {
+        // 中性态 10 秒兜底恢复（结果一直没回来时）
+        window.__ad_flash_timer = setTimeout(() => {
+          if (token === window.__ad_flash_seq) restoreFloatLabel(t);
+        }, 10000);
+      }
+      // 失败态（ok===false）保持到下次操作或号码变化，由 updatePhone/下次 flashFloat 清除
+    }
+
+    function restoreFloatLabel(t) {
+      const lb = document.getElementById('__ad_dial_label');
+      if (lb) lb.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
+      floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
+      floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
+      floatEl.style.boxShadow = currentPhone
+        ? `0 6px 20px ${t.accent}59`
+        : `0 4px 14px ${t.accent}1F`;
     }
 
     // ─── HTML 转义 ──────────────────────────────────
@@ -1531,7 +1570,7 @@
           window.__adMyPhone = result.phone;
           chrome.storage.local.set({ self_phone: result.phone });
           console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', result.phone);
-          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: result.phone, name: result.name || '' });
+          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: result.phone, name: result.name || '', precise: !!result.precise });
           // 同步检测并存储经理姓名
           if (result.name) {
             window.__adMyName = result.name;
@@ -1573,6 +1612,10 @@
       if (msg.type === 'dialResult') {
         flashFloat(msg.ok ? '已拨出' : (msg.err || '失败'), msg.ok);
       }
+      if (msg.type === 'pinNotice') {
+        // v4.15: 坐席号切换/不一致提示（切换=中性醒目，不一致=红色警告）
+        flashFloat(msg.text || '', msg.warn ? false : undefined);
+      }
       if (msg.type === 'reDetect') {
         // 用户点拨号时background让重新扫手机号和姓名
         const result = getMyPhoneAndNameFromCRM();
@@ -1605,6 +1648,16 @@
         window.__adCustomerName = e.data.name;
       }
     });
+
+    // v4.15: 残留号码保鲜检查。详情页 iframe 心跳（见 scan 的 setInterval）停止
+    // 15 秒（页面已切换/iframe被移除）→ 清空残留号码，防止误拨上一位客户
+    window.__adLastPhoneAt = 0;
+    setInterval(() => {
+      if (currentPhone && Date.now() - (window.__adLastPhoneAt || 0) > 15000) {
+        console.log('[AutoDial v4] 页面已离开详情页，清除残留号码:', currentPhone);
+        updatePhone(null);
+      }
+    }, 5000);
 
     return; // 顶层页面只做浮动按钮，不做手机号扫描
   }
@@ -1725,9 +1778,21 @@
     return '';
   }
 
+  // v4.15: 本帧最近一次检出号码时的 URL，用于 SPA 切换后清除残留号码
+  var adLastDetectedUrl = '';
+
   function scan() {
     const phone = getPhoneFromDetailPage();
-    if (phone) return;
+    if (phone) {
+      adLastDetectedUrl = window.location.href;
+      return;
+    }
+    // v4.15: 本帧之前检出过号码、且页面已切走 → 通知顶层清除，
+    // 防止残留号码导致误拨上一位客户
+    if (adLastDetectedUrl && window.location.href !== adLastDetectedUrl) {
+      adLastDetectedUrl = '';
+      try { chrome.runtime.sendMessage({ type: 'phoneDetected', phone: null }); } catch (_) {}
+    }
   }
 
   if (document.body) {
@@ -1735,6 +1800,9 @@
   }
 
   setTimeout(scan, 100);
+  // v4.15: 每 5 秒心跳一次——静态详情页也要持续上报号码；心跳停止（页面切换/iframe
+  // 被移除）时顶层会在 15 秒后清除残留号码
+  setInterval(scan, 5000);
 
   const obs = new MutationObserver(() => {
     clearTimeout(scan._timer);
