@@ -1,5 +1,36 @@
 # AutoDial 更新日志
 
+## 2026-09-10
+
+### 配对码遗留问题修复（v4.16）+ 设备自动注册（v4.16.1）+ 后台登录门禁 + 35440 数据落卷 — 完成于 2026-09-10
+
+设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备，两套数据为预期）。
+
+**云中继 `cloud_relay_v2.py`**
+- [B1] `phone_hello` 改用 `deviceId` 作为设备唯一键（`meta['device_id'] = msg.get('deviceId') or deviceName`，旧 APK 缺字段自动回退 deviceName，零破坏）；设备-PIN 绑定查询、踢旧连接、AUTH/PHONE_HELLO 日志全部改用 device_id
+- [B2] 同步修正三处遗漏的 deviceId 传递：转发 PC 的 hello（原 831 行）、RESEND 给新连 PC（原 884 行）、WS 授权通过后的转发；`/api/v1/devices` 的 `online_map` 在线判断改按 device_id 匹配；`/api/v1/auth/pending` 返回体补 device_id
+- [A1] **设备自动注册（v4.16.1）**：`AUTO_REGISTER_DEVICE` 默认开启，未注册设备首次连接自动绑定当前 PIN 并放行，取消"联系管理员预设"硬门槛；换 PIN 仍走插件授权（防误输顶号）；env `AUTODIAL_AUTO_REGISTER=0` 可恢复严格模式。服务器实测：模拟未注册手机 → AUTO_REGISTER 日志 → DB 生成绑定 → auth_ok
+- [A2] 跨 PIN 授权文案改为可操作提示：插件/CRM 未打开 → "需对方授权：请对方（PIN xxx）在电脑上打开 CRM 界面后，重新点击「连接」"；120s 超时 → "授权超时：对方未在 CRM 界面确认。请对方打开 CRM 页面后，重新点击「连接」"
+
+**Android**
+- [B1'] `ConnectionManager.kt` LAN / Cloud 两处 `phone_hello` 增加 `deviceId`（复用 `PrefCtrl.getDeviceId()` 的 device_uuid；deviceName 保持型号仅作展示）
+- [A1'] `ConnectionManager.kt` Cloud 消息 when 显式新增 `auth_pending` 分支并透传上层（修复：此前落入 `DialService.onMessageReceived` 被静默丢弃，只能干等 120 秒）
+- [A2'] `DialService.kt` 新增 `ACTION_AUTH_PENDING` 广播（带 message/default_name，不走 notifyConnectionChange 避免误触发重连）
+- [A3'] `ConnectFragment.kt` 注册 `authPendingReceiver`，等待授权显示橙点脉冲 + "等待授权中…（原因）"；等待期间"取消"真正断开连接（云端 finally 自动清理挂起请求）；doConnect 3 秒提示不再覆盖等待文案
+
+**后台前端 `dashboard.html`**
+- [G1] 登录门禁：未登录（无会话 token）时 body.locked 隐藏登录框以外全部内容 + 禁滚动 + 强制弹出登录框（不可点空白关闭）；登录成功/登出/401 均自动回登录页。数据 API 服务端 `_check_admin` 原本就有，此改动补齐"界面本身不外泄"一层
+
+**部署（101.34.65.254）**
+- v4.16 / v4.16.1 / 文案修订 / 登录门禁分四批上线，双实例（35430 supervisor + 35440 Docker 镜像 v2）均验证 /health 正常；逐行 diff 确认服务器无本地缺失的独有配置，纯升级无回退；各步均有备份（`cloud_relay_v2.py.bak.pre-v4.16_20260910`、`.bak.v4.16_20260910`、`dashboard.html.bak.pre-login-gate_20260910`、Docker 镜像 v1）
+- [D1] **35440 数据落卷修复**：Dockerfile 漏设 `AUTODIAL_DB_PATH`，数据库原落在容器内 `/app/visits.db`，重建即清零（当天已发生数轮）。容器重建加 `-e AUTODIAL_DB_PATH=/app/data/visits.db` + Dockerfile 补 ENV 行；验证 DB 已落挂载卷 `/opt/autodial/data/visits.db`，双实例独立容灾设计不变
+- 注：/health 返回的 `version: "4.10"` 为代码内版本常量未更新，实际已是 v4.16.1，不影响功能
+
+**备注**
+- Kotlin 改动本机无 Java/Android SDK 未编译验证，需 GitHub Actions 构建确认；旧 APK 缺 deviceId 自动回退，无需强制升级
+- 旧 APK 以型号名作设备键期间，同型号多台共享一条绑定（首连者定 PIN）；新 APK（device_uuid）发放后按设备唯一。老 APK 将弃用
+- 待办（B3）：后台给各设备预设 default_pin 的一次性动作，随新 APK 发放视需要执行
+
 ## 2026-08-22
 
 ### 第四批 P2/P3 清理修复（QA 独立回归 13/13 PASS）— 完成于 2026-08-22 11:00

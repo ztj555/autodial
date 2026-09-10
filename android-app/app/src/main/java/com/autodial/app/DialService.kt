@@ -44,6 +44,8 @@ class DialService : Service() {
         private const val ACTION_LAST_CALL_HINT = "com.autodial.LAST_CALL_HINT"
         const val ACTION_SHOW_SIM_SELECT = "com.autodial.SHOW_SIM_SELECT"
         const val ACTION_SHOW_SMS_CONFIRM = "com.autodial.SHOW_SMS_CONFIRM"
+        // v4.16 修复A: 云端等待浏览器插件授权的中间态（不改变已连接/断开语义，仅供 UI 展示）
+        const val ACTION_AUTH_PENDING = "com.autodial.AUTH_PENDING"
         const val ACTION_CLOUD_STATUS = "com.autodial.CLOUD_STATUS"
         const val ACTION_EXECUTE_PENDING_DIAL = "com.autodial.EXECUTE_PENDING_DIAL"
 
@@ -281,6 +283,17 @@ class DialService : Service() {
                         FileLogger.i("DialService", "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
                         Log.d(TAG, "\u6536\u5230\u6302\u65ad\u6307\u4ee4")
                         if (::dialEngine.isInitialized) dialEngine.endCall()
+                    }
+                    // v4.16 修复A: 等待浏览器插件授权 —— 广播给 UI 展示"等待授权中"，
+                    // 不调用 notifyConnectionChange（其语义是"已断开"，会误触发重连/状态栏逻辑）
+                    "auth_pending" -> {
+                        FileLogger.i("DialService", "等待授权中: ${msg.optString("message", "")}")
+                        val intent = Intent(ACTION_AUTH_PENDING).apply {
+                            putExtra("message", msg.optString("message", ""))
+                            putExtra("default_name", msg.optString("default_name", ""))
+                            setPackage(packageName)
+                        }
+                        sendBroadcast(intent)
                     }
                 }
             } catch (e: Exception) { Log.e(TAG, "\u6d88\u606f\u5904\u7406\u5931\u8d25: ${e.message}") }

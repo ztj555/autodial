@@ -367,6 +367,10 @@
         .import-table td.cell-edit { cursor: pointer; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 
         /* ===== 登录框 ===== */
+        /* ===== 登录门禁：未登录时隐藏登录框以外的全部内容 ===== */
+        body.locked > *:not(.login-overlay) { visibility: hidden !important; }
+        body.locked { overflow: hidden; }
+
         .login-overlay { z-index: 9999; }
         .login-box {
             background: var(--surface); border-radius: var(--r-xl);
@@ -2079,9 +2083,16 @@
     </script>
 
     <script>
-        // 页面加载时检查登录状态
+        // 页面加载时检查登录状态：未登录 → 门禁模式，只显示登录页
         (function(){
-            if (isLoggedIn()) {
+            var overlay = document.getElementById('login-overlay');
+            if (!isLoggedIn()) {
+                document.body.classList.add('locked');
+                overlay.dataset.locked = '1';
+                overlay.classList.add('show');
+                var lu = document.getElementById('login-user');
+                if (lu) lu.focus();
+            } else {
                 fetch(withToken(VISIT_API_BASE + '/api/v1/admin/accounts')).then(function(r) {
                     if (r.status === 401) { clearSessionToken(); location.reload(); }
                     else {
@@ -2107,7 +2118,7 @@
             if (!p) { document.getElementById('login-err').style.display='block'; document.getElementById('login-err').textContent='请输入密码'; return; }
             doLogin(u, p);
         }
-        document.getElementById('login-overlay').addEventListener('click', function(e){ if(e.target===this) hideLogin(); });
+        document.getElementById('login-overlay').addEventListener('click', function(e){ if(e.target===this && !this.dataset.locked) hideLogin(); });
     </script>
 </body>
 </html>

@@ -776,6 +776,8 @@ class ConnectionManager(private val context: Context) {
                     ws.send(JSONObject().apply {
                         put("type", "phone_hello"); put("pin", pin)
                         put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
+                        // v4.16: 设备唯一键 = 现有 device_uuid（与通话/事件/统计上报同一身份），deviceName 仅为展示名
+                        put("deviceId", PrefCtrl(context).getDeviceId())
                     }.toString())
                 } catch (e: Exception) { v6LogE(TAG, pin, "LAN hello 发送失败: ${e.message}") }
             }
@@ -917,6 +919,8 @@ class ConnectionManager(private val context: Context) {
                         ws.send(JSONObject().apply {
                             put("type", "phone_hello"); put("pin", pin)
                             put("deviceName", android.os.Build.MODEL ?: android.os.Build.DEVICE ?: "Android")
+                            // v4.16: 设备唯一键 = 现有 device_uuid（与通话/事件/统计上报同一身份），deviceName 仅为展示名
+                            put("deviceId", PrefCtrl(context).getDeviceId())
                             put("messageId", probeId)
                         }.toString())
                     } catch (e: Exception) { v6LogE(TAG, pin, "Cloud hello 发送失败: ${e.message}") }
@@ -976,6 +980,11 @@ class ConnectionManager(private val context: Context) {
                                 val ackMsgId = msg.optString("messageId", "")
                                 if (ackMsgId.isNotEmpty()) handlePcProbeAck(ackMsgId)
                                 // 同时透传给上层（DialService 也会处理，但不会再重复探活）
+                                handler.post { notifyMessage(msg) }
+                            }
+                            "auth_pending" -> {
+                                // v4.16: 修复 A —— 等待浏览器插件授权的中间态，透传给 DialService 广播给 UI
+                                v6LogI(TAG, pin, "等待授权中: ${msg.optString("message", "")}")
                                 handler.post { notifyMessage(msg) }
                             }
                             else -> handler.post { notifyMessage(msg) }

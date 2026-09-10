@@ -361,6 +361,11 @@ class ConnectFragment : Fragment() {
                     IntentFilter("com.autodial.CLOUD_STATUS"),
                     ContextCompat.RECEIVER_NOT_EXPORTED
                 )
+                // v4.16 修复A: 监听 auth_pending 广播（等待浏览器插件授权）
+                ContextCompat.registerReceiver(requireActivity(), authPendingReceiver,
+                    IntentFilter(DialService.ACTION_AUTH_PENDING),
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
             } catch (_: Exception) {}
 
             // 检查当前连接状态
@@ -548,11 +553,33 @@ class ConnectFragment : Fragment() {
         }
     }
 
+    // v4.16 修复A: 等待浏览器插件授权的中间态（auth_pending）
+    private var authWaiting = false
+
+    private val authPendingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                if (!isAdded) return
+                authWaiting = true
+                val message = intent?.getStringExtra("message") ?: ""
+                statusText.text = if (message.isNotEmpty()) "等待授权中…\n$message" else "等待授权中…"
+                statusText.setTextColor(Color.parseColor("#E6A23C"))
+                statusDot.setImageResource(R.drawable.dot_orange)
+                startPulseAnimation()
+                connectionMode.text = "手机授权等待 · 可点\"取消\"退出"
+                connectionMode.setTextColor(Color.parseColor("#E6A23C"))
+                connectionMode.visibility = View.VISIBLE
+                // 按钮保持"取消"（连接中已有该状态），点击走 handleCancelClick → 断开发起中的连接
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         ThemeManager.removeOnThemeChangedListener(themeListener)
         try { requireActivity().unregisterReceiver(receiver) } catch (_: Exception) {}
         try { requireActivity().unregisterReceiver(cloudStatusReceiver) } catch (_: Exception) {}
+        try { requireActivity().unregisterReceiver(authPendingReceiver) } catch (_: Exception) {}
         cancelWaitingForPcRefresh()
         stopPulseAnimation()
         stopDiscovery()
@@ -680,6 +707,13 @@ class ConnectFragment : Fragment() {
 
     /** 取消正在进行的连接 */
     private fun handleCancelClick() {
+        // v4.16 修复A: 等待授权期间点"取消"，真正断开发起中的连接
+        // （云端 finally 会清理 _pending_auths，无残留），120 秒后不会再弹出授权超时
+        if (authWaiting) {
+            authWaiting = false
+            sendDisconnectCommand()
+            return
+        }
         connecting = false
         pinInput.isEnabled = true
         updateConnectionUI(false, null)
@@ -707,7 +741,8 @@ class ConnectFragment : Fragment() {
 
         lifecycleScope.launch {
             delay(3000)
-            if (!DialService.isConnected && isAdded) {
+            // v4.16: 已进入"等待授权中"时不再覆盖提示文案
+            if (!DialService.isConnected && !authWaiting && isAdded) {
                 val colors2 = ThemeManager.getColors(requireContext())
                 statusText.text = "连接中，请稍候...\n超时？检查防火墙或连接策略"
                 statusText.setTextColor(Color.parseColor(colors2.primary))
@@ -934,6 +969,8 @@ class ConnectFragment : Fragment() {
     private fun updateConnectionUI(connected: Boolean, reason: String?) {
         try {
             if (!isAdded) return
+            // v4.16: 任何连接状态变化都退出"等待授权"态（auth_ok 走 connected 分支，auth_fail 走下方拒绝分支）
+            authWaiting = false
             updateServerAliasText()
             val colors = ThemeManager.getColors(requireContext())
             pinInput.isEnabled = !connecting

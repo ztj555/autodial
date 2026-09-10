@@ -33,6 +33,13 @@ DEFAULT_PORT = 35430
 PORT = DEFAULT_PORT
 # Fix D4: Web 管理界面和 WebSocket 共用 PORT, WEB_PORT 已废弃
 
+# v4.16.1: 设备自动注册（内部部署便捷模式）。
+# 开启时，未在云端注册的设备首次 phone_hello 自动绑定到其当前使用的 PIN，
+# 不再报"未在云端注册"拒绝，免去管理员逐台预设默认 PIN。
+# 同 PIN 直连 auth_ok 不受影响；绑定后改用其他 PIN 仍走浏览器插件授权（防误输 PIN 顶号）。
+# 关闭方式：环境变量 AUTODIAL_AUTO_REGISTER=0（恢复"未注册即拒绝"严格模式）
+AUTO_REGISTER_DEVICE = os.environ.get('AUTODIAL_AUTO_REGISTER', '1') == '1'
+
 # 解析命令行参数 (Fix D4: simplified CLI parsing)
 args = sys.argv[1:]
 for i, arg in enumerate(args):
@@ -396,7 +403,7 @@ def cleanup_memory():
                 try:
                     await ws.send(json.dumps({
                         'type': 'auth_fail',
-                        'reason': '授权超时（120秒内无响应）'
+                        'reason': '授权超时：对方未在 CRM 界面确认。请对方打开 CRM 页面后，重新点击「连接」'
                     }))
                     await ws.close(4003, 'auth_timeout')
                 except Exception:
@@ -673,6 +680,8 @@ async def handle_connection(ws, path=None):
                 meta['pin'] = pin
                 meta['role'] = 'phone'
                 meta['device_name'] = msg.get('deviceName', f'Phone-{client_ip[-3:]}')
+                # v4.16 修复B: 设备唯一键改用手机端 deviceId（现有 device_uuid），向后兼容旧 APK 回退 deviceName
+                meta['device_id'] = msg.get('deviceId') or meta['device_name']
                 # S2修复: 每次重新握手先清除授权标记，防止旧会话授权状态被带到新 PIN
                 meta['authorized'] = False
                 group = get_group(pin)
@@ -689,34 +698,44 @@ async def handle_connection(ws, path=None):
                 is_first_device = len(group.pcs) == 0 and len(group.phones) == 0
 
                 # ===== 设备-PIN 绑定授权检查 =====
+                # v4.16 修复B: 绑定/查询/去重一律用 device_id；面向用户的消息继续传 device_name
+                device_id = meta['device_id']
                 device_name = meta['device_name']
-                default_pin = _get_device_default_pin(device_name)
+                default_pin = _get_device_default_pin(device_id)
                 needs_auth = False
 
                 if default_pin is None:
-                    # 设备未在云端注册 → 拒绝
-                    await ws.send(json.dumps({
-                        'type': 'auth_fail',
-                        'reason': f'设备 {device_name} 未在云端注册，请联系管理员预设默认 PIN'
-                    }))
-                    log.warning(f'AUTH_DENIED_NO_DEFAULT device={device_name} pin={pin}')
-                    continue
+                    if AUTO_REGISTER_DEVICE:
+                        # v4.16.1: 自动注册 —— 未知设备绑定到当前使用的 PIN，直接放行
+                        _set_device_default_pin(device_id, pin)
+                        default_pin = pin
+                        log.info(f'AUTO_REGISTER device={device_id} name={device_name} pin={pin} ip={client_ip}')
+                    else:
+                        # 严格模式：设备未在云端注册 → 拒绝
+                        await ws.send(json.dumps({
+                            'type': 'auth_fail',
+                            'reason': f'设备 {device_name} 未在云端注册，请联系管理员预设默认 PIN'
+                        }))
+                        log.warning(f'AUTH_DENIED_NO_DEFAULT device={device_id} name={device_name} pin={pin}')
+                        continue
                 elif default_pin != pin:
                     # PIN 不匹配：需扩展端授权（仅当目标 PIN 的扩展已激活且 CRM 页面打开）
                     needs_auth = True
                     ext_online = is_ext_online(pin)
                     if not ext_online:
+                        # v4.16.1: 直接拒绝并给出可操作提示——对方打开 CRM 后重连即可重新检测
                         await ws.send(json.dumps({
                             'type': 'auth_fail',
-                            'reason': f'PIN {pin} 的浏览器插件未激活或 CRM 页面未打开，无法授权'
+                            'reason': f'需对方授权：请对方（PIN {pin}）在电脑上打开 CRM 界面后，重新点击「连接」'
                         }))
-                        log.warning(f'AUTH_DENIED_EXT_OFFLINE device={device_name} pin={pin} default_pin={default_pin}')
+                        log.warning(f'AUTH_DENIED_EXT_OFFLINE device={device_id} name={device_name} pin={pin} default_pin={default_pin}')
                         continue
                     # 创建授权请求
                     req_id = uuid.uuid4().hex[:12]
                     _pending_auths[req_id] = {
                         'ws': ws,
                         'pin': pin,
+                        'device_id': device_id,
                         'device_name': device_name,
                         'default_pin': default_pin,
                         'created_at': time.time()
@@ -760,7 +779,7 @@ async def handle_connection(ws, path=None):
                         'default_name': owner_name,      # 手机主人的姓名
                         'message': f'等待 PIN {pin} 的浏览器插件授权中（需 CRM 页面打开）...'
                     }))
-                    log.info(f'AUTH_REQUEST id={req_id} device={device_name} pin={pin} default_pin={default_pin} ext_online=1')
+                    log.info(f'AUTH_REQUEST id={req_id} device={device_id} name={device_name} pin={pin} default_pin={default_pin} ext_online=1')
 
                 if needs_auth:
                     continue  # 跳过后续处理，等待 PC 授权
@@ -827,11 +846,11 @@ async def handle_connection(ws, path=None):
                             pass
                     log.info(f'NEW_DEVICE_JOIN pin={pin} device={meta["device_name"]} existing={existing_devices}')
                 # 转发 phone_hello 给同 PIN 的所有 PC
-                # Bug6修复: 附加 deviceId（用手机端 device_name），使 PC 端能正确识别云端设备
-                msg['deviceId'] = meta['device_name']
+                # Bug6修复 + v4.16: 附加 deviceId（现用 device_id 唯一键），使 PC 端能正确识别云端设备
+                msg['deviceId'] = meta.get('device_id') or meta['device_name']
                 await forward_to_pcs(pin, msg, ws)
                 record_message(pin, msg_type, len(raw))
-                log.info(f'PHONE_HELLO pin={pin} device={meta["device_name"]} ip={client_ip} pcs={len(group.pcs)}')
+                log.info(f'PHONE_HELLO pin={pin} device={meta["device_id"]} name={meta["device_name"]} ip={client_ip} pcs={len(group.pcs)}')
                 # 补推离线堆积的 visit_record（v4.15: 从 SQLite 读取，重启不丢）
                 pending_rows = _db_get_pending_visits(pin)
                 if pending_rows:
@@ -884,7 +903,8 @@ async def handle_connection(ws, path=None):
                                 'type': 'phone_hello',
                                 'pin': pin,
                                 'deviceName': phone_device_name,
-                                'deviceId': phone_device_name,
+                                # v4.16: 用 device_id 唯一键（旧 meta 无此字段时回退 device_name）
+                                'deviceId': phone_meta.get('device_id') or phone_device_name,
                                 'reconnect': True
                             }))
                             log.info(f'RESEND phone_hello to new PC: device={phone_device_name} pin={pin}')
@@ -954,12 +974,13 @@ async def handle_connection(ws, path=None):
                             'type': 'phone_hello',
                             'pin': auth_pin,
                             'deviceName': device_name,
-                            'deviceId': device_name
+                            # v4.16: device_id 唯一键
+                            'deviceId': auth_req.get('device_id') or device_name
                         }, phone_ws)
                     except Exception:
                         pass
                     await ws.send(json.dumps({'type': 'auth_response_ack', 'ok': True}))
-                    log.info(f'AUTH_APPROVED id={req_id} device={device_name} pin={auth_pin} approved_by_pc={meta.get("device_name","?")}')
+                    log.info(f'AUTH_APPROVED id={req_id} device={auth_req.get("device_id") or device_name} name={device_name} pin={auth_pin} approved_by_pc={meta.get("device_name","?")}')
                 else:
                     # 授权拒绝
                     try:
@@ -971,7 +992,7 @@ async def handle_connection(ws, path=None):
                     except Exception:
                         pass
                     await ws.send(json.dumps({'type': 'auth_response_ack', 'ok': True}))
-                    log.info(f'AUTH_DENIED id={req_id} device={device_name} pin={auth_pin} denied_by_pc={meta.get("device_name","?")}')
+                    log.info(f'AUTH_DENIED id={req_id} device={auth_req.get("device_id") or device_name} name={device_name} pin={auth_pin} denied_by_pc={meta.get("device_name","?")}')
                 continue
 
             pin = meta['pin']
@@ -1835,6 +1856,7 @@ async def health_check_handler(path, request_headers):
             if req['pin'] == pin and now - req['created_at'] < 120:
                 result.append({
                     'request_id': req_id,
+                    'device_id': req.get('device_id', ''),
                     'device_name': req['device_name'],
                     'default_pin': req['default_pin'],
                     'pin': req['pin']
@@ -2422,14 +2444,16 @@ async def health_check_handler(path, request_headers):
             c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
             rows = [dict(r) for r in c.fetchall()]
             # 标注在线状态 + IP + 当前PIN
-            online_map = {}      # device_name -> {ip, pin}
+            # v4.16 修复B: 在线状态按 device_id 匹配（旧 meta 无 device_id 时回退 device_name）
+            online_map = {}      # device_id -> {ip, pin}
             try:
                 snapshot = list(ws_meta.items())
             except Exception:
                 snapshot = []
             for _ws, _meta in snapshot:
                 if _meta.get('role') == 'phone' and _meta.get('device_name'):
-                    online_map[_meta['device_name']] = {
+                    _did = _meta.get('device_id') or _meta['device_name']
+                    online_map[_did] = {
                         'ip': _meta.get('ip', ''),
                         'pin': _meta.get('pin', '')
                     }

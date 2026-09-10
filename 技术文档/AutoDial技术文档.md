@@ -1,6 +1,6 @@
 # AutoDial 技术文档
 
-> 合并自原《AutoDial总技术文档》《AutoDial云端技术文档》《AutoDial-手机端技术文档》《AutoDial浏览器插件端技术文档》《AutoDial电脑端技术文档》。修订：2026-08-22 | v4.14（全链路修复 + 安全加固）
+> 合并自原《AutoDial总技术文档》《AutoDial云端技术文档》《AutoDial-手机端技术文档》《AutoDial浏览器插件端技术文档》《AutoDial电脑端技术文档》。修订：2026-09-10 | v4.16.1（设备唯一键 deviceId + 自动注册 + 等待授权 UI + 后台登录门禁 + 35440 数据落卷）
 
 ## 版本现状（各端独立演进）
 
@@ -8,14 +8,14 @@
 |------|--------|--------|----------|
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | PIN（4位或11位纯数字） |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | PIN（4位或11位纯数字） |
-| **云中继（主）** | **v4.14**（`/health` API 报 4.10） | Python + websockets + SQLite | PIN（4位或11位纯数字） |
+| **云中继（主）** | **v4.16.1**（`/health` API 报 4.10） | Python + websockets + SQLite | PIN（4位或11位纯数字） |
 | **Chrome 扩展** | **v5.0.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
 | **Android 端** | **v4.53** | Kotlin + OkHttp | PIN + WS 双通道 |
 | **云端管理面板** | **v6.0**（Sky Design System） | dashboard.html + Chart.js | 管理员账号（SHA-256 加盐哈希） |
 
 > 各端版本号不统一（云端 API 报 4.10 / 面板 v6.0 / 扩展 5.0.0 / Android 4.53，代码注释中 v4.57 系开发批次号 / Electron 3.0.0）。文中的 v4.x 叙事指系统整体迭代批次。
 >
-> **v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
+> **v4.16.1**：设备自动注册（未注册设备首连自动绑定当前 PIN 放行，env `AUTODIAL_AUTO_REGISTER=0` 关闭）；跨 PIN 授权文案改可操作提示。**v4.16**：设备唯一键改用 `deviceId`（Android 端复用 device_uuid，旧 APK 回退 deviceName）；Android 端 `auth_pending` 等待授权 UI（此前被静默丢弃只能干等 120s）；后台登录门禁（未登录仅显示登录页）；35440 Docker 数据库落持久卷（此前落在容器内，重建即丢）。设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备）。**v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
 
 ---
 
@@ -74,7 +74,7 @@
 
 ### 2.1 架构
 
-主中继 `cloud_relay_v2.py`（v4.14，2857 行，41 个 REST 端点），Python 标准库 sqlite3，依赖 `websockets pystray Pillow`（websockets 需锁上界 `>=12,<14`，见 README「部署」章节已知部署坑）。
+主中继 `cloud_relay_v2.py`（v4.16.1，2964 行，41 个 REST 端点），Python 标准库 sqlite3，依赖 `websockets pystray Pillow`（websockets 需锁上界 `>=12,<14`，见 README「部署」章节已知部署坑）。
 
 ```
 cloud_relay_v2.py
@@ -230,10 +230,13 @@ class PinGroup:
 
 **手机端握手**：
 ```json
-→ {"type": "phone_hello", "pin": "13800138000", "deviceName": "Redmi K40"}
+→ {"type": "phone_hello", "pin": "13800138000", "deviceName": "Redmi K40", "deviceId": "<device_uuid>"}
 ← {"type": "auth_ok", "pin": "13800138000", "pcCount": 1, "pc_present": true}
+← {"type": "auth_pending", "reason": "...", "messageId": "..."}
 ← {"type": "auth_fail", "reason": "配对码须为4位或11位数字"}
 ```
+
+> **设备身份与绑定（v4.16/v4.16.1）**：云端以 `deviceId` 为设备唯一键查/写 `phones` 表并做设备-PIN 绑定（`deviceName` 仅作展示，旧 APK 缺字段时回退 deviceName，Android 端复用 `PrefCtrl.getDeviceId()` 的 device_uuid）。绑定规则：`default_pin` 未设置的设备（未注册）首次连接**自动注册**——绑定到当前所用 PIN 并放行（`AUTO_REGISTER_DEVICE`，env `AUTODIAL_AUTO_REGISTER=0` 可关）；已绑定设备用默认 PIN 连接直接放行，换用其他 PIN 则进入 `auth_pending` 等待对应 PIN 的浏览器插件（CRM 页面需打开）授权，120s 无响应 `auth_fail`。授权通过仅本次会话有效，不修改 `default_pin`。老 APK（型号名身份）过渡期间同型号多台共享一条绑定，新 APK 发放后按设备唯一。
 
 **PC 端握手**：
 ```json
@@ -248,7 +251,7 @@ class PinGroup:
 |------|------|------|
 | `phone_hello` / `pc_hello` | 客户端→云 | 上线握手（同 PIN 双手机连接时云中继无条件 close 旧手机 ws，4001 duplicate_reconnect） |
 | `auth_ok` / `auth_fail` / `pc_auth_ok` / `pc_auth_fail` | 云→客户端 | 认证结果 |
-| `auth_pending` / `auth_response` | 云⇌扩展 | 设备授权请求/响应（仅 PC 端可响应，防手机自批） |
+| `auth_pending` / `auth_response` | 云⇌扩展 / 云→手机 | 设备授权请求/响应（仅 PC 端可响应，防手机自批）；v4.16 起云→手机同样透传 `auth_pending`，Android 端显示等待授权 UI |
 | `reconnect_request` | 云→手机 | 离线唤醒（v4.14 纳入转发白名单，targetDevice 兼容设备名/当前 PIN） |
 | `dial` / `dial_result` | PC/云→手机 / 手机→云→PC | 拨号指令 / 结果 |
 | `hangup` | PC/云→手机 | 挂断 |
@@ -315,7 +318,7 @@ else:
 | 系统日志 | 关键词搜索 + 行数选择 + 流量统计 |
 | 设置 | 端口/日志级别 + 系统信息 |
 
-自动刷新 15s；连接历史每 30s 快照保留 24h；v6.0 起 10 套主题（9 套 + 天空蓝暗色）顶栏切换、localStorage 持久化；管理员登录限频；敏感查询统一携带会话令牌（withToken）；含用户数据的动态 onclick 全部 data-action 事件委托（防注入）。
+自动刷新 15s；连接历史每 30s 快照保留 24h；v6.0 起 10 套主题（9 套 + 天空蓝暗色）顶栏切换、localStorage 持久化；管理员登录限频；敏感查询统一携带会话令牌（withToken）；含用户数据的动态 onclick 全部 data-action 事件委托（防注入）。**2026-09-10 起登录门禁**：浏览器无会话 token 打开 `/` 时 `body.locked` 隐藏登录框以外全部界面并强制弹出登录框（不可点空白关闭），登录成功/登出/401 自动回登录页——数据 API 侧 `_check_admin` 鉴权之外补齐"界面本身不外泄"。
 
 ### 2.12 部署要点
 
@@ -324,8 +327,11 @@ pip install "websockets>=12,<14" pystray Pillow   # websockets 需锁上界（le
 python cloud_relay_v2.py                           # 单命令启动，WS+REST+面板共用 35430
 ```
 
-- Docker 部署：`AUTODIAL_DB_PATH=/app/data/visits.db`（v4.14 起容器 entrypoint 默认设置，数据库与日志落持久卷）
+- **生产环境（101.34.65.254 腾讯云，双实例容灾）**：35430 主实例（supervisor 进程 `autodial`，DB `/opt/autodial/visits.db`）+ 35440 备用实例（Docker 容器 `autodial-relay`，DB 落挂载卷 `/opt/autodial/data/visits.db`）。两套数据各自独立是**有意的容灾设计**——主实例故障时切备用实例继续打电话（核心功能）；运维脚本在 `/opt/autodial/scripts/`（status/restart-35430/restart-35440/rebuild-docker）。每次变更前备份旧版（`*.bak.*` 后缀留存于 /opt/autodial/）
+- Docker 部署：`AUTODIAL_DB_PATH=/app/data/visits.db`（2026-09-10 修复：Dockerfile 补 `ENV AUTODIAL_DB_PATH` 并以 `-e` 传入容器，数据库落持久卷；此前 DB 落在容器内 `/app/visits.db`，重建即丢）
+- 设备自动注册开关：`AUTODIAL_AUTO_REGISTER=0` 关闭（默认开启，未注册设备首连自动绑定当前 PIN）
 - 管理员默认账号 `18335162275 / 123456`（SHA-256 加盐哈希存储），首次登录后立即修改
+- `/health` 返回的 `version: "4.10"` 为代码内版本常量未更新，实际以 CHANGELOG 为准
 - 详细部署见根目录 README「部署」章节
 
 ---
@@ -543,6 +549,8 @@ wails build                                      # 输出 build/bin/AutoDial.exe
 
 ## 五、Android 端（v4.53，Kotlin，包名 com.autodial.app）
 
+> 注：2026-09-10 代码已并入 v4.16 改动（握手带 deviceId、auth_pending 等待授权 UI），`versionName` 仍为 4.53 待下次发版更新；旧 APK 缺 deviceId 时云端自动回退 deviceName，无需强制升级。
+
 ### 5.1 项目结构
 
 ```
@@ -586,8 +594,8 @@ enum class ConnectionStrategy { AUTO, LAN_ONLY, CLOUD_ONLY }
 ```
 
 - **LAN 发现**：UDP 广播 `255.255.255.255:35433`，3 次 discover 间隔 200ms，等待 8s；发现序列首次 60s 后每 120s（最多 4 次）
-- **LAN 连接**：OkHttp WebSocket，连接超时 5s、读超时 45s、ping 30s、TCP KeepAlive 15s idle/5s interval/3 probes；握手 `phone_hello{pin, deviceName}`
-- **云端连接**：独立 client，连接超时 6s，从 `cloud_servers` 列表遍历尝试；握手 `phone_hello{pin, deviceName, messageId}`；`auth_ok` 中 `pc_present=false` 时发起 PC 探活（8s 超时等 ACK）
+- **LAN 连接**：OkHttp WebSocket，连接超时 5s、读超时 45s、ping 30s、TCP KeepAlive 15s idle/5s interval/3 probes；握手 `phone_hello{pin, deviceName, deviceId}`
+- **云端连接**：独立 client，连接超时 6s，从 `cloud_servers` 列表遍历尝试；握手 `phone_hello{pin, deviceName, deviceId, messageId}`（v4.16 起 deviceId 复用 `PrefCtrl.getDeviceId()` 的 device_uuid）；`auth_ok` 中 `pc_present=false` 时发起 PC 探活（8s 超时等 ACK）；收到 `auth_pending` 透传上层（ConnectionManager 显式分支 → DialService `ACTION_AUTH_PENDING` 广播 → ConnectFragment 橙点脉冲"等待授权中…"，可取消断开）
 - **PC 真探活**：`phone_hello` 携带 `messageId="probe_<ts>"` → PC 回 `ack{messageId}` → `pcConfirmedOnline=true`；8s 无 ACK 保持 false
 - **公开属性**：`isConnected`、`isPcReachable`（LAN已连 或 Cloud已连且 pcConfirmedOnline）、`isLanConnected`、`isCloudConnected`、`transportMode`（"lan"/"cloud"/"lan+cloud"）
 - **重连退避**：1→3→5→10→30→60→300s（LAN 最大 30 次，Cloud 最大 8 次；网络变化重置，2s 防抖）
@@ -762,5 +770,6 @@ SQLite `autodial.db`，DCL 单例，版本 2：
 | 端口 | 协议 | 用途 | 组件 |
 |------|------|------|------|
 | **35430** | WS + HTTP | 云中继主端口（中继 + REST API + Web 面板 + 访问登记 API） | cloud_relay_v2.py |
+| **35440** | WS + HTTP | 云中继容灾备用实例（对外映射 Docker 容器内 35430，主实例故障时备用；数据独立落宿主机卷） | autodial-relay 容器 |
 | **35432** | HTTP + WS | PC 端主服务（LAN 直连 + 扩展连接，仅监听 127.0.0.1） | Electron/Go PC |
 | **35433** | UDP | LAN 设备发现（广播 announce + 响应 discover） | 全部组件 |
