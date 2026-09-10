@@ -17,6 +17,7 @@ import sqlite3
 import uuid
 import hashlib
 import secrets
+import contextvars
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -369,11 +370,15 @@ def cleanup_memory():
     if stale_pins:
         log.info(f'MEM_CLEANUP: removed {len(stale_pins)} stale ext_activity entries')
 
-    # 3. _pin_attempts: 清理超过 1 分钟未尝试的 IP
+    # 3. _pin_attempts / _rest_attempts: 清理超过 1 分钟未尝试的 IP
     for ip in list(_pin_attempts.keys()):
         _pin_attempts[ip] = [t for t in _pin_attempts[ip] if now - t < timedelta(minutes=1)]
         if not _pin_attempts[ip]:
             del _pin_attempts[ip]
+    for ip in list(_rest_attempts.keys()):
+        _rest_attempts[ip] = [t for t in _rest_attempts[ip] if now - t < timedelta(minutes=1)]
+        if not _rest_attempts[ip]:
+            del _rest_attempts[ip]
 
     # 4. pending_visits（v4.15 起持久化在 SQLite）: 清理 7 天前仍未补推成功的记录
     try:
@@ -554,6 +559,43 @@ def check_rate_limit(client_ip: str, pin: str = '') -> bool:
         return True
     _pin_attempts[key].append(now)
     return False
+
+# ==================== v4.18: REST 全局限频 ====================
+# legacy process_request 回调拿不到对端地址，改用协议子类在握手时捕获并放入 ContextVar
+_peer_ip: contextvars.ContextVar = contextvars.ContextVar('peer_ip', default='')
+
+MAX_REST_PER_MINUTE = 60  # 每个 IP 每分钟 REST 请求数（localhost 豁免）
+_rest_attempts: dict[str, list] = defaultdict(list)
+
+def check_rest_rate_limit(client_ip: str) -> bool:
+    """REST 端点全局限频，返回 True 表示应拒绝（429）。堵 PIN 枚举/管理口令爆破/接口滥用。"""
+    if not client_ip or client_ip in ('127.0.0.1', '::1', 'localhost'):
+        return False
+    now = datetime.now()
+    _rest_attempts[client_ip] = [t for t in _rest_attempts[client_ip] if now - t < timedelta(minutes=1)]
+    if len(_rest_attempts[client_ip]) >= MAX_REST_PER_MINUTE:
+        return True
+    _rest_attempts[client_ip].append(now)
+    return False
+
+class _PeerProtocol(websockets.legacy.server.WebSocketServerProtocol):
+    """捕获对端 IP 后再走常规 HTTP 处理（health_check_handler）。
+
+    注意：process_request 以实例属性方式设置，避免被 serve(process_request=...) kwarg
+    覆盖；create_protocol 工厂不传 process_request。
+    """
+    def __init__(self, *args, **kwargs):
+        kwargs.pop('process_request', None)
+        super().__init__(*args, **kwargs)
+        self.process_request = self._process_request_with_peer
+
+    async def _process_request_with_peer(self, path, request_headers):
+        try:
+            ra = self.remote_address
+            _peer_ip.set(ra[0] if isinstance(ra, tuple) else str(ra))
+        except Exception:
+            pass
+        return await health_check_handler(path, request_headers)
 
 # ==================== 消息转发 ====================
 PHONE_TO_PC_TYPES = {
@@ -1395,6 +1437,11 @@ async def health_check_handler(path, request_headers):
             pass
     
     parsed = urlparse(path)
+
+    # v4.18: REST 端点全局限频（60 次/分钟/IP；localhost 豁免）。WS 握手路径不受影响。
+    if parsed.path.startswith('/api/v1/') and check_rest_rate_limit(_peer_ip.get()):
+        log.warning(f'REST_RATE_LIMITED ip={_peer_ip.get() or "?"} path={parsed.path}')
+        return (429, JSON_HDR, _err_json('RATE_LIMITED', '请求过于频繁，请稍后再试'))
     path = parsed.path
     
     # 健康检查（兼容旧版本，加 CORS 供 popup 测试连接）
@@ -2316,10 +2363,12 @@ async def health_check_handler(path, request_headers):
                 (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
             )
             # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
+            # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
+            # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
             if kefu_tel and kefu_tel.strip():
                 c.execute(
                     'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
-                    'ON CONFLICT(pin) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at',
+                    'ON CONFLICT(pin) DO NOTHING',
                     (pin, kefu_tel.strip(), now_str)
                 )
             conn.commit()
@@ -2342,19 +2391,38 @@ async def health_check_handler(path, request_headers):
         return (200, JSON_HDR, json.dumps({'ok': True, 'code': 'ACCEPTED', 'id': row_id}).encode('utf-8'))
 
     # 查询列表: GET /api/v1/visits?pin=xxx[&group=N]
+    # v4.18: 管理面板分页——带 page 参数返回 {ok,total,page,page_size,rows}；
+    # 不带 page 保持原样返回数组（手机端同步兼容，勿改返回结构）。
+    # 额外过滤参数：days=N（最近 N 天）、source=plugin|crm_sync|phone|unsynced、
+    # d_from/d_to（日期，按 COALESCE(visit_time,created_at) 比较）
     if path == '/api/v1/visits':
         qs = parse_qs(parsed.query)
         pin = qs.get('pin', [''])[0]
         group_id = qs.get('group', [''])[0]
+        page_param = qs.get('page', [''])[0]
+        days_param = qs.get('days', [''])[0]
+        source_f = qs.get('source', [''])[0]
+        d_from = qs.get('d_from', [''])[0].strip()[:10]
+        d_to = qs.get('d_to', [''])[0].strip()[:10]
         # S3修复: 仅明确携带单 PIN（手机端同步）可不鉴权；无筛选/按分组均涉及客户数据，必须管理员
         if not pin:
             if not _check_admin(hdrs, parsed.query):
                 return _AUTH_ERR
+        try:
+            page_no = max(1, int(page_param)) if page_param else 0
+        except (TypeError, ValueError):
+            page_no = 0
+        try:
+            page_size = min(max(int(qs.get('page_size', ['50'])[0] or 50), 1), 200)
+        except (TypeError, ValueError):
+            page_size = 50
         conn = None
         try:
             conn = _connect_db()
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
+            where = []
+            args = []
             if group_id:
                 try:
                     gid = int(group_id)
@@ -2363,13 +2431,44 @@ async def health_check_handler(path, request_headers):
                 c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
                 group_pins = [r['pin'] for r in c.fetchall()]
                 if group_pins:
-                    placeholders = ','.join(['?'] * len(group_pins))
-                    c.execute(f'SELECT * FROM visits WHERE pin IN ({placeholders}) ORDER BY created_at DESC',
-                              group_pins)
+                    where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
+                    args += group_pins
                 else:
-                    c.execute('SELECT * FROM visits WHERE 1=0')
+                    where.append('1=0')
             elif pin:
-                c.execute('SELECT * FROM visits WHERE pin=? ORDER BY created_at DESC', (pin,))
+                where.append('pin=?')
+                args.append(pin)
+            if days_param:
+                try:
+                    days_n = int(days_param)
+                except (TypeError, ValueError):
+                    days_n = 0
+                if days_n > 0:
+                    cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
+                    where.append('created_at >= ?')
+                    args.append(cutoff)
+            if source_f == 'unsynced':
+                where.append('IFNULL(crm_synced,0) = 0')
+            elif source_f:
+                where.append('source = ?')
+                args.append(source_f)
+            if d_from:
+                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
+                args.append(d_from)
+            if d_to:
+                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
+                args.append(d_to + 'T23:59:59')
+            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+
+            total = 0
+            if page_no:
+                c.execute(f'SELECT COUNT(*) FROM visits {wsql}', args)
+                total = c.fetchone()[0]
+                c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                          args + [page_size, (page_no - 1) * page_size])
+            elif where:
+                # 原有行为：pin / group 筛选返回全量（手机端同步依赖）
+                c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC', args)
             else:
                 c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
             rows = [dict(r) for r in c.fetchall()]
@@ -2383,12 +2482,109 @@ async def health_check_handler(path, request_headers):
                     for r in rows:
                         r['kefu_name'] = name_map.get(r.get('kefu_tel',''), '')
             except Exception: pass
+            if page_no:
+                return (200, JSON_HDR, json.dumps(
+                    {'ok': True, 'total': total, 'page': page_no, 'page_size': page_size, 'rows': rows},
+                    ensure_ascii=False).encode('utf-8'))
             return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:
             if conn:
                 conn.close()
+
+    # v4.18: 服务端 CSV 导出（完整数据，不再只导屏幕上已渲染的行）
+    # GET /api/v1/visits/export?token=xxx[&pin=][&group=][&days=][&source=][&d_from=][&d_to=]
+    if path == '/api/v1/visits/export':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        pin = qs.get('pin', [''])[0]
+        group_id = qs.get('group', [''])[0]
+        days_param = qs.get('days', [''])[0]
+        source_f = qs.get('source', [''])[0]
+        d_from = qs.get('d_from', [''])[0].strip()[:10]
+        d_to = qs.get('d_to', [''])[0].strip()[:10]
+        conn = None
+        try:
+            conn = _connect_db()
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            where = []
+            args = []
+            if group_id:
+                try:
+                    gid = int(group_id)
+                except (TypeError, ValueError):
+                    return (400, JSON_HDR, _err_json('INVALID_GROUP', '分组 ID 无效'))
+                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
+                group_pins = [r['pin'] for r in c.fetchall()]
+                if group_pins:
+                    where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
+                    args += group_pins
+                else:
+                    where.append('1=0')
+            elif pin:
+                where.append('pin=?')
+                args.append(pin)
+            if days_param:
+                try:
+                    days_n = int(days_param)
+                except (TypeError, ValueError):
+                    days_n = 0
+                if days_n > 0:
+                    cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
+                    where.append('created_at >= ?')
+                    args.append(cutoff)
+            if source_f == 'unsynced':
+                where.append('IFNULL(crm_synced,0) = 0')
+            elif source_f:
+                where.append('source = ?')
+                args.append(source_f)
+            if d_from:
+                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
+                args.append(d_from)
+            if d_to:
+                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
+                args.append(d_to + 'T23:59:59')
+            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+            c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT 200000', args)
+            rows = [dict(r) for r in c.fetchall()]
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+        import csv as _csv
+        import io as _io
+        buf = _io.StringIO()
+        buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
+        w = _csv.writer(buf)
+        w.writerow(['ID', '客户姓名', '手机号', '顾问电话', '顾问姓名', '事由', '来源', 'CRM同步', '登记时间', '来访时间'])
+        for r in rows:
+            cells = [
+                r.get('id', ''),
+                r.get('name', ''), r.get('mobile', ''), r.get('kefu_tel', ''),
+                r.get('kefu_name', ''), r.get('visit_type', ''),
+                {'phone': '手机', 'crm_sync': 'CRM同步'}.get(r.get('source', ''), '插件'),
+                '已同步' if r.get('crm_synced') else '未同步',
+                r.get('created_at', ''), r.get('visit_time', ''),
+            ]
+            # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
+            safe_cells = []
+            for v in cells:
+                s = str(v if v is not None else '')
+                if s[:1] in ('=', '+', '-', '@'):
+                    s = "'" + s
+                safe_cells.append(s)
+            w.writerow(safe_cells)
+        filename = 'visits_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+        return (200, [
+            ('Content-Type', 'text/csv; charset=utf-8'),
+            ('Content-Disposition', f'attachment; filename={filename}'),
+            ('Access-Control-Allow-Origin', '*'),
+        ], buf.getvalue().encode('utf-8'))
 
     # 删除: GET /api/v1/visit/delete?id=N
     if path == '/api/v1/visit/delete':
@@ -2756,7 +2952,8 @@ async def run_server():
     log.info('Using WebSocket built-in ping/pong mechanism (application-layer heartbeat disabled)')
 
     async with serve(handle_connection, '0.0.0.0', PORT,
-                     process_request=health_check_handler,
+                     process_request=None,
+                     create_protocol=_PeerProtocol,
                      ping_interval=30,
                      ping_timeout=90,  # 增加 ping 超时到 90 秒
                      close_timeout=10,

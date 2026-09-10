@@ -1,5 +1,23 @@
 # AutoDial 更新日志
 
+## 2026-09-10（第三批）
+
+### 管理面板性能/导出 + REST 限频 + 姓名翻转修复（v4.18）
+
+**云中继 `cloud_relay_v2.py`**
+- [D1] `/api/v1/visits` 支持分页：`page`/`page_size`（1-200）返回 `{ok,total,page,page_size,rows}`；不带 `page` 保持返回数组（手机端同步完全兼容）；新增 `days`/`d_from`/`d_to`/`source` 服务端过滤（来源=unsynced 映射 crm_synced=0）
+- [D1] 新增 `/api/v1/visits/export`（管理员鉴权）：按当前筛选条件服务端导出**全部匹配记录**（不再只导屏幕已渲染行），CSV 带 BOM（Excel 中文不乱码）+ 防 CSV 公式注入（=+-@ 前置单引号）+ 附件头
+- [E] REST 全局限频：`MAX_REST_PER_MINUTE=60/IP`（localhost 豁免），通过 `create_protocol` 协议子类在握手时捕获对端 IP（legacy process_request 拿不到地址），堵住公网 PIN 枚举/管理口令爆破/接口滥用；`_rest_attempts` 纳入周期清理
+- [D4] `/api/v1/visit` 顾问姓名映射改为 `ON CONFLICT DO NOTHING`——登记的"接待顾问"不再覆写扩展上传的"业务员本人"姓名，人员管理姓名不再来回翻转
+
+**dashboard.html**
+- [D1] 登记列表分页（每页 50，上一页/下一页/页码/总数显示），15 秒自动刷新只拉当前页——一年 10 万行后面板不再卡死；兼容旧版服务端（数组退回全量渲染）
+- [D1] 上门趋势图只拉最近 14 天（此前每 15 秒全量拉整表两次）
+- [D1] 导出 CSV 改为服务端按筛选条件导出全量
+
+**已知取舍**
+- `/api/v1/calls` 按设备换人后历史归属问题（D5）未动——需数据模型决策，暂缓
+
 ## 2026-09-10（第二批）
 
 ### 登记数据正确性修复（v4.17）— C 类数据错账 + D2/D3 零成本安全项

@@ -643,11 +643,11 @@
                     </div>
                     <div class="filters">
                         <div class="filter-group"><label>业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()"><option value="">不限（全部）</option><option value="__group__">按分组筛选...</option></select></div>
-                        <div class="filter-group"><label>分组</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="loadVisits()"><option value="">不限分组</option></select></div>
-                        <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="loadVisits()"></div>
-                        <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="loadVisits()"></div>
-                        <div class="filter-group"><label>来源</label><select class="input" id="visit-filter-source" onchange="loadVisits()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">未同步</option></select></div>
-                        <button class="btn btn-primary btn-sm" onclick="loadVisits()">
+                        <div class="filter-group"><label>分组</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="onVisitFilterChange()"><option value="">不限分组</option></select></div>
+                        <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="onVisitFilterChange()"></div>
+                        <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="onVisitFilterChange()"></div>
+                        <div class="filter-group"><label>来源</label><select class="input" id="visit-filter-source" onchange="onVisitFilterChange()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">未同步</option></select></div>
+                        <button class="btn btn-primary btn-sm" onclick="onVisitFilterChange()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
                             刷新
                         </button>
@@ -662,6 +662,11 @@
                     </div>
                     <table class="data-table"><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>顾问(电话)</th><th>顾问姓名</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
                     <tbody id="visits-list"><tr><td colspan="11" class="empty-state">请选择筛选条件</td></tr></tbody></table>
+                    <div id="visit-pager" style="display:flex;align-items:center;gap:12px;padding:10px 4px 2px;font-size:13px;color:var(--text2);">
+                        <button class="btn btn-sm" id="visit-prev" onclick="visitGoPage(-1)">上一页</button>
+                        <span id="visit-page-info">-</span>
+                        <button class="btn btn-sm" id="visit-next" onclick="visitGoPage(1)">下一页</button>
+                    </div>
                 </div>
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>上门趋势（14天）</div>
@@ -1656,6 +1661,41 @@
         }
 
         // ==================== 上门登记 ====================
+        // v4.18: 登记列表分页（服务端分页，每 15 秒自动刷新只拉当前页，一年 10 万行也不卡）
+        let visitPage = 1, visitTotal = 0;
+        const VISIT_PAGE_SIZE = 50;
+
+        function onVisitFilterChange() { visitPage = 1; loadVisits(); }
+        function visitGoPage(delta) { visitPage = Math.max(1, visitPage + delta); loadVisits(); }
+
+        function renderVisitRows(rows) {
+            const tbody = document.getElementById('visits-list');
+            if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无记录</td></tr>'; return; }
+            tbody.innerHTML = rows.map(function(r) {
+                const srcBadge = r.source==='phone' ? '<span class="badge badge-phone-src">手机</span>'
+                    : r.source==='crm_sync' ? '<span class="badge badge-crm">CRM同步</span>'
+                    : '<span class="badge badge-plugin">插件</span>';
+                const crmBadge = r.crm_synced ? '<span class="badge badge-sync">已同步</span>' : '<span class="badge badge-unsync">未同步</span>';
+                return '<tr class="' + (r.crm_synced ? '' : 'row-warn') + '">' +
+                '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
+                '<td>' + srcBadge + '</td>' +
+                '<td>' + crmBadge + '</td>' +
+                '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
+                '<td>' + (esc(r.visit_time)||'-') + '</td>' +
+                '<td><button class="btn btn-primary btn-sm" data-action="open-edit-modal" data-id="' + escA(r.id) + '" data-name="' + escA(r.name||'') + '" data-mobile="' + escA(r.mobile||'') + '" data-kefu-tel="' + escA(r.kefu_tel||'') + '" data-type="' + escA(r.visit_type||'') + '">编辑</button> ' +
+                '<button class="btn btn-danger btn-sm" data-action="delete-visit" data-id="' + escA(r.id) + '">' + ic('trash', 12) + ' 删除</button></td>' +
+            '</tr>';
+            }).join('');
+        }
+
+        function renderVisitPager() {
+            const maxPage = Math.max(1, Math.ceil(visitTotal / VISIT_PAGE_SIZE));
+            if (visitPage > maxPage) { visitPage = maxPage; return loadVisits(); }
+            document.getElementById('visit-page-info').textContent = '第 ' + visitPage + ' / ' + maxPage + ' 页 · 共 ' + visitTotal + ' 条';
+            document.getElementById('visit-prev').disabled = visitPage <= 1;
+            document.getElementById('visit-next').disabled = visitPage >= maxPage;
+        }
+
         async function loadVisits() {
             const pinFilter = document.getElementById('visit-filter-pin')?.value || '';
             const groupFilter = document.getElementById('visit-filter-group')?.value || '';
@@ -1663,35 +1703,33 @@
             let url = VISIT_API_BASE + '/api/v1/visits?';
             if (groupFilter) url += 'group=' + encodeURIComponent(groupFilter);
             else if (pinFilter && pinFilter !== '__group__') url += 'pin=' + encodeURIComponent(pinFilter);
+            // v4.18: 日期/来源过滤改到服务端（与分页配合）；无筛选时服务端也只返回最新 500 条
+            const dFrom = document.getElementById('visit-filter-date-from')?.value || '';
+            const dTo = document.getElementById('visit-filter-date-to')?.value || '';
+            const src = document.getElementById('visit-filter-source')?.value || '';
+            if (dFrom) url += '&d_from=' + encodeURIComponent(dFrom);
+            if (dTo) url += '&d_to=' + encodeURIComponent(dTo);
+            if (src) url += '&source=' + encodeURIComponent(src);
+            url += '&page=' + visitPage + '&page_size=' + VISIT_PAGE_SIZE;
             // S4修复: 按单 PIN 筛选是手机端同步用法（无需登录）；无筛选/按分组/占位符均需管理员 token
             if (!pinFilter || groupFilter || pinFilter === '__group__') url = withToken(url);
             try {
                 const res = await fetch(url); const data = await res.json();
-                if (!Array.isArray(data)) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">查询失败</td></tr>'; return; }
-                let filtered = data;
-                const dFrom = document.getElementById('visit-filter-date-from')?.value || '';
-                const dTo = document.getElementById('visit-filter-date-to')?.value || '';
-                const src = document.getElementById('visit-filter-source')?.value || '';
-                if (dFrom) filtered = filtered.filter(function(r) { return (r.visit_time || r.created_at) >= dFrom; });
-                if (dTo) filtered = filtered.filter(function(r) { return (r.visit_time || r.created_at) <= dTo + 'T23:59:59'; });
-                if (src === 'unsynced') filtered = filtered.filter(function(r) { return !r.crm_synced; });
-                else if (src) filtered = filtered.filter(function(r) { return r.source === src; });
-                if (filtered.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无记录</td></tr>'; return; }
-                tbody.innerHTML = filtered.map(function(r) {
-                    const srcBadge = r.source==='phone' ? '<span class="badge badge-phone-src">手机</span>'
-                        : r.source==='crm_sync' ? '<span class="badge badge-crm">CRM同步</span>'
-                        : '<span class="badge badge-plugin">插件</span>';
-                    const crmBadge = r.crm_synced ? '<span class="badge badge-sync">已同步</span>' : '<span class="badge badge-unsync">未同步</span>';
-                    return '<tr class="' + (r.crm_synced ? '' : 'row-warn') + '">' +
-                    '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
-                    '<td>' + srcBadge + '</td>' +
-                    '<td>' + crmBadge + '</td>' +
-                    '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
-                    '<td>' + (esc(r.visit_time)||'-') + '</td>' +
-                    '<td><button class="btn btn-primary btn-sm" data-action="open-edit-modal" data-id="' + escA(r.id) + '" data-name="' + escA(r.name||'') + '" data-mobile="' + escA(r.mobile||'') + '" data-kefu-tel="' + escA(r.kefu_tel||'') + '" data-type="' + escA(r.visit_type||'') + '">编辑</button> ' +
-                    '<button class="btn btn-danger btn-sm" data-action="delete-visit" data-id="' + escA(r.id) + '">' + ic('trash', 12) + ' 删除</button></td>' +
-                '</tr>';
-                }).join('');
+                if (Array.isArray(data)) {
+                    // 兼容旧版服务端：返回数组时退回全量渲染（无分页）
+                    visitTotal = data.length;
+                    renderVisitRows(data);
+                    document.getElementById('visit-page-info').textContent = '共 ' + data.length + ' 条（旧版服务端，未分页）';
+                    document.getElementById('visit-prev').disabled = true;
+                    document.getElementById('visit-next').disabled = true;
+                    return;
+                }
+                if (!data || data.ok !== true || !Array.isArray(data.rows)) {
+                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">查询失败</td></tr>'; return;
+                }
+                visitTotal = data.total || 0;
+                renderVisitRows(data.rows);
+                renderVisitPager();
             } catch(e) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:var(--red);">请求失败</td></tr>'; }
         }
 
@@ -1754,22 +1792,27 @@
         }
 
         function exportCSV() {
-            const rows = document.querySelectorAll('#visits-list tr');
-            if (rows.length===0 || rows[0].querySelectorAll('td').length < 9) { toast('无数据可导出', 'error'); return; }
-            let csv = '\uFEFFID,客户姓名,手机号,顾问电话,顾问姓名,事由,来源,CRM同步,登记时间,来访时间\n';
-            rows.forEach(function(row) {
-                const cells = row.querySelectorAll('td');
-                if (cells.length < 10) return;
-                csv += Array.from(cells).slice(0,10).map(function(c) { return '"'+c.textContent.replace(/,/g,'，').replace(/\n/g,' ').trim()+'"'; }).join(',') + '\n';
-            });
-            const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = 'visits_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+            // v4.18: 改为服务端导出——导出"当前筛选条件下的全部匹配记录"，
+            // 不再只导屏幕上已渲染的行（此前最多 500 条且无提示，年底对账悄悄缺数据）
+            const pinFilter = document.getElementById('visit-filter-pin')?.value || '';
+            const groupFilter = document.getElementById('visit-filter-group')?.value || '';
+            let url = VISIT_API_BASE + '/api/v1/visits/export?';
+            if (groupFilter) url += 'group=' + encodeURIComponent(groupFilter);
+            else if (pinFilter && pinFilter !== '__group__') url += 'pin=' + encodeURIComponent(pinFilter);
+            const dFrom = document.getElementById('visit-filter-date-from')?.value || '';
+            const dTo = document.getElementById('visit-filter-date-to')?.value || '';
+            const src = document.getElementById('visit-filter-source')?.value || '';
+            if (dFrom) url += '&d_from=' + encodeURIComponent(dFrom);
+            if (dTo) url += '&d_to=' + encodeURIComponent(dTo);
+            if (src) url += '&source=' + encodeURIComponent(src);
+            window.open(withToken(url), '_blank');
+            toast('已按当前筛选条件导出全部匹配记录', 'success');
         }
 
         async function renderVisitChart() {
             try {
-                const res = await fetch(withToken(VISIT_API_BASE + '/api/v1/visits?')); const data = await res.json();
+                // v4.18: 图表只拉最近 14 天（此前每 15 秒全量拉整表，数据量大后拖垮面板）
+                const res = await fetch(withToken(VISIT_API_BASE + '/api/v1/visits?days=14')); const data = await res.json();
                 if (!Array.isArray(data)) return;
                 const ctx = document.getElementById('visit-chart')?.getContext('2d');
                 if (!ctx || typeof Chart === 'undefined') return;
