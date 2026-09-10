@@ -40,6 +40,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'pcCheck') refreshPcStatus();
 });
 refreshPcStatus(); // 启动时立刻探测一次
+flushCloudVisits().catch(() => {}); // v4.17: SW 启动时补推暂存的云端登记
 
 // ==================== 设备授权轮询 ====================
 let _authPollTimer = null;
@@ -281,7 +282,7 @@ async function registerVisit(name, phone, tabId, managerName) {
         kid: kid,
         visit_type: '贷款咨询'
       });
-      const crmRes = await fetch('https://guwen.zhudaicms.com/bserve/saoma_indb.html', {
+      const crmRes = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/saoma_indb.html', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -289,25 +290,36 @@ async function registerVisit(name, phone, tabId, managerName) {
           'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
         },
         body: crmParams.toString()
-      });
-      let crmData, jsonOk = true;
-      try { crmData = await crmRes.json(); } catch (_) {
-        // CRM 返回非 JSON（HTML/纯文本），HTTP 200 视为成功
-        console.warn('[AutoDial BG] CRM returned non-JSON, treating as success');
-        crmOk = true;
-        jsonOk = false;
-      }
+      }, 8000);
+      // v4.17: HTTP 非 2xx（401/302 登录过期、5xx）不再继续当作成功解析
+      if (!crmRes.ok) {
+        const st = crmRes.status;
+        crmErr = (st === 401 || st === 403 || st === 302)
+          ? 'CRM 登录已过期，请重新登录 CRM 后再登记'
+          : ('CRM 提交失败 (HTTP ' + st + ')');
+        console.warn('[AutoDial BG] CRM HTTP', st, '- treating as FAIL');
+      } else {
+      let crmData = null, jsonOk = false;
+      try { crmData = await crmRes.json(); jsonOk = true; } catch (_) {}
       if (jsonOk) {
-        // CRM 返回 JSON — 校验 code
+        // v4.17: 严格校验 code——此前 code 缺失也算成功，CRM 会话过期时静默丢数据
         const code = crmData.code;
-        if (code == 1 || code === 0 || code == null) {
+        if (code === 1 || code === 0) {
           crmOk = true;
           console.log('[AutoDial BG] CRM direct OK:', name, 'kid:', kid, 'code=', code);
+        } else if (code == null) {
+          crmErr = 'CRM 返回异常（无 code），请人工核对是否已写入 CRM';
+          console.warn('[AutoDial BG] CRM response has no code:', JSON.stringify(crmData).slice(0, 200));
         } else {
           crmErr = crmData.msg || ('CRM code=' + code);
           console.warn('[AutoDial BG] CRM direct FAIL code=', code, 'msg=', crmData.msg, 'raw=', JSON.stringify(crmData));
         }
+      } else {
+        // v4.17: 返回非 JSON（多为登录页 HTML/错误页）→ 不再视为成功
+        crmErr = 'CRM 登录可能已过期，请重新登录 CRM 后再登记';
+        console.warn('[AutoDial BG] CRM returned non-JSON (likely login page), treating as FAIL');
       }
+      } // end crmRes.ok
     } else {
       crmErr = '未找到顾问「' + finalManagerName + '」，请确认姓名与CRM一致';
     }
@@ -318,36 +330,86 @@ async function registerVisit(name, phone, tabId, managerName) {
 
   // === 2) 同步到云中继（本地记录 + 手机推送） ===
   let cloudOk = false;
+  // v4.17: 唯一 id——重发/补推时云端按 crm_id 去重，同一物理来访只入一次库
+  const crmId = 'ext-' + pin + '-' + Date.now();
+  const cloudParams = {
+    name: name,
+    mobile: phone,
+    kefu_tel: finalManagerName,
+    visit_type: '贷款咨询',
+    source: 'plugin',
+    crm_id: crmId
+  };
   try {
     const apiUrl = await getCloudApi();
-    const params = new URLSearchParams({
-      name: name,
-      mobile: phone,
-      kefu_tel: finalManagerName,
-      visit_type: '贷款咨询',
-      source: 'plugin'
-    });
-    const res = await fetch(apiUrl + '/api/v1/visit?' + params.toString(), {
+    const res = await fetchWithTimeout(apiUrl + '/api/v1/visit?' + new URLSearchParams(cloudParams).toString(), {
       headers: { 'X-AutoDial-PIN': pin }
-    });
-    const data = await res.json();
-    cloudOk = !!data.ok;
-    if (!cloudOk) {
-      console.warn('[AutoDial BG] Cloud relay returned error:', data.code);
+    }, 8000);
+    const data = await res.json().catch(() => null);
+    cloudOk = !!(data && data.ok);
+    if (cloudOk) {
+      // 顺路补推此前因断网欠下的登记
+      flushCloudVisits().catch(() => {});
+    } else {
+      console.warn('[AutoDial BG] Cloud relay returned error:', data && data.code);
+      queueCloudVisit(cloudParams, pin);
     }
   } catch (e) {
     console.warn('[AutoDial BG] Cloud relay unreachable:', e.message);
+    queueCloudVisit(cloudParams, pin);
   }
 
-  // CRM 写入成功即为登记成功，云端同步失败不影响用户体验
+  // CRM 写入成功即为登记成功，云端同步失败已入暂存队列（重连/下次登记时自动补推）
   if (crmOk) {
-    if (!cloudOk) console.warn('[AutoDial BG] Cloud sync skipped (server unreachable), CRM OK');
+    if (!cloudOk) console.warn('[AutoDial BG] Cloud sync deferred to pending queue, CRM OK');
     return { success: true };
   }
   if (cloudOk) {
-    return { success: false, error: 'CRM 提交失败，云端已暂存' };
+    return { success: false, error: crmErr || 'CRM 提交失败，记录已存云端与手机端' };
   }
   return { success: false, error: crmErr || '登记失败' };
+}
+
+// ==================== v4.17: 云端登记暂存队列 ====================
+// CRM 成功但云端不可达时入队；SW 启动/下次登记成功时自动补推（crm_id 保证云端去重）
+async function queueCloudVisit(paramsObj, pin) {
+  try {
+    const s = await chrome.storage.local.get(['pending_cloud_visits']);
+    const arr = s.pending_cloud_visits || [];
+    arr.push({ params: paramsObj, pin: pin, at: Date.now() });
+    while (arr.length > 500) arr.shift(); // 上限 500 条，丢最旧
+    await chrome.storage.local.set({ pending_cloud_visits: arr });
+    console.log('[AutoDial BG] visit queued for retry, total:', arr.length);
+  } catch (e) {
+    console.warn('[AutoDial BG] queue visit failed:', e);
+  }
+}
+
+async function flushCloudVisits() {
+  try {
+    const s = await chrome.storage.local.get(['pending_cloud_visits']);
+    const arr = s.pending_cloud_visits || [];
+    if (!arr.length) return;
+    const remain = [];
+    for (const item of arr) {
+      try {
+        const qs = new URLSearchParams(item.params).toString();
+        const res = await fetchWithTimeout(`${await getCloudApi()}/api/v1/visit?${qs}`, {
+          headers: { 'X-AutoDial-PIN': item.pin }
+        }, 5000);
+        const d = await res.json().catch(() => null);
+        if (!d || !d.ok) remain.push(item);
+      } catch (_) {
+        remain.push(item);
+      }
+    }
+    await chrome.storage.local.set({ pending_cloud_visits: remain });
+    if (remain.length < arr.length) {
+      console.log('[AutoDial BG] flushed', arr.length - remain.length, 'pending visits,', remain.length, 'left');
+    }
+  } catch (e) {
+    console.warn('[AutoDial BG] flush visits failed:', e);
+  }
 }
 
 /**
@@ -356,7 +418,7 @@ async function registerVisit(name, phone, tabId, managerName) {
 async function lookupKidFromCrm(managerName) {
   try {
     const params = new URLSearchParams({ keyword: managerName, brand: '1833' });
-    const res = await fetch('https://guwen.zhudaicms.com/bserve/search', {
+    const res = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -364,15 +426,16 @@ async function lookupKidFromCrm(managerName) {
         'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
       },
       body: params.toString()
-    });
+    }, 8000);
     const data = await res.json();
     if (data.code === 1 && data.data && data.data.length) {
       // 精确匹配优先
       for (const item of data.data) {
         if (item.name === managerName) return String(item.id);
       }
-      // 兜底取第一个
-      return String(data.data[0].id);
+      // v4.17: 移除"兜底取第一个"——会把客户挂到同名/相似顾问名下，交给上层明确报错
+      console.warn('[AutoDial BG] kid lookup: no exact match for', managerName,
+        'candidates:', data.data.slice(0, 5).map(x => x.name).join(','));
     }
   } catch (e) {
     console.warn('[AutoDial BG] lookupKid failed:', e.message);
@@ -386,7 +449,7 @@ async function lookupKidFromCrm(managerName) {
 async function getConsultantList() {
   try {
     const params = new URLSearchParams({ keyword: '', brand: '1833' });
-    const res = await fetch('https://guwen.zhudaicms.com/bserve/search', {
+    const res = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -394,7 +457,7 @@ async function getConsultantList() {
         'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
       },
       body: params.toString()
-    });
+    }, 8000);
     const data = await res.json();
     if (data.code === 1 && data.data && data.data.length) {
       return data.data.map(item => ({ id: String(item.id), name: item.name }));

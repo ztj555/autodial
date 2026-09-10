@@ -195,6 +195,9 @@ def init_db():
         c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        # v4.17: 去重查询走索引，数据量大后去重不再全表扫
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_mobile ON visits(mobile)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
@@ -232,6 +235,9 @@ def init_db():
         c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
+        # v4.17: 去重查询走索引，数据量大后去重不再全表扫
+        c.execute('CREATE INDEX IF NOT EXISTS idx_visits_mobile ON visits(mobile)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
@@ -1611,6 +1617,11 @@ async def health_check_handler(path, request_headers):
         name = qs.get('name', [''])[0].strip()
         if not pin or not name:
             return (200, JSON_HDR, _err_json('MISSING', 'pin 和 name 不能为空'))
+        # v4.17: 输入校验——该端点免鉴权且数据会渲染进管理面板，拒收超长/HTML 特殊字符
+        if not validate_pin(pin):
+            return (200, JSON_HDR, _err_json('INVALID_PIN', 'PIN 格式错误'))
+        if len(name) > 32 or any(ch in name for ch in '<>"\'`\\'):
+            return (200, JSON_HDR, _err_json('INVALID_NAME', '姓名超长或含非法字符'))
         
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
@@ -2266,34 +2277,43 @@ async def health_check_handler(path, request_headers):
         visit_type = qs.get('visit_type', ['贷款咨询'])[0].strip()
         source = qs.get('source', ['plugin'])[0].strip()
         visit_time = qs.get('visit_time', [''])[0].strip()
+        # v4.17: 客户端唯一 id——重发/补推场景下同一物理来访只入库一次（库侧唯一索引兜底）
+        crm_id = qs.get('crm_id', [''])[0].strip()[:64]
 
         if not name or not mobile or not kefu_tel:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', '缺少必填字段: name, mobile, kefu_tel'))
+        # 输入长度上限（防滥用/防存储异常膨胀）
+        if len(name) > 64 or len(mobile) > 32 or len(kefu_tel) > 64 or len(visit_type) > 64 or len(visit_time) > 64:
+            return (200, JSON_HDR, _err_json('INVALID_FIELDS', '字段超长'))
 
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
         try:
             conn = _connect_db()
             c = conn.cursor()
-            # 去重：优先用 CRM 来访时间 (mobile+visit_time)，否则回退到当日去重
-            if visit_time:
+            # v4.17: 去重三级——① crm_id 唯一索引（重发/补推精确去重）
+            # ② 有 visit_time：mobile+visit_time 精确匹配
+            # ③ 回退：同号 2 小时内（原"当日去重"会静默吞掉同客户当天第二次真实上门）
+            if crm_id:
+                c.execute('SELECT id FROM visits WHERE crm_id = ? LIMIT 1', (crm_id,))
+            elif visit_time:
                 c.execute(
                     'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
                     (mobile, visit_time)
                 )
             else:
-                today_str = datetime.now().strftime('%Y-%m-%d')
+                cutoff_2h = (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
                 c.execute(
-                    'SELECT id FROM visits WHERE mobile = ? AND created_at LIKE ? LIMIT 1',
-                    (mobile, today_str + '%')
+                    'SELECT id FROM visits WHERE mobile = ? AND created_at >= ? LIMIT 1',
+                    (mobile, cutoff_2h)
                 )
             if c.fetchone():
                 conn.close()
                 return (200, JSON_HDR, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
             c.execute(
-                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, created_at, updated_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (pin, name, mobile, kefu_tel, visit_type, source, visit_time, now_str, now_str)
+                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
             )
             # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
             if kefu_tel and kefu_tel.strip():
@@ -2314,7 +2334,8 @@ async def health_check_handler(path, request_headers):
         # 客户端已直接提交 CRM，云端只做记录 + WS 推送，不再重复提交 CRM
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
                         'kefu_tel': kefu_tel, 'visit_type': visit_type, 'source': source,
-                        'visit_time': visit_time, 'created_at': now_str, 'updated_at': now_str}
+                        'visit_time': visit_time, 'crm_id': crm_id,
+                        'created_at': now_str, 'updated_at': now_str}
         _push_visit_to_phone(pin, visit_record)
 
         log.info(f'VISIT_CREATE pin={pin} name={name} id={row_id}')

@@ -1287,10 +1287,20 @@ class ConnectionManager(private val context: Context) {
 
     /**
      * 处理云中继推送的 visit_record 消息：存储时间戳、发送通知、广播刷新统计页。
+     * v4.17: 携带 crm_id 且本机已登记过（手机自登记的 echo 回推）时直接跳过——
+     * 否则同一条登记会被计两次（统计翻倍）。
      */
     private fun handleVisitRecord(data: JSONObject) {
         val name = data.optString("name", "")
         val mobile = data.optString("mobile", "")
+        val crmId = data.optString("crm_id", "")
+        if (crmId.isNotEmpty()) {
+            if (com.autodial.app.RegisterFragment.hasSeenCrmId(crmId, prefs)) {
+                v6LogI(TAG, lastPin, "visit_record echo suppressed (crm_id=$crmId)")
+                return
+            }
+            com.autodial.app.RegisterFragment.rememberCrmId(crmId, prefs)
+        }
 
         // 1. 存储时间戳到 SharedPreferences（保留最近66天）
         val existing = prefs.getString("registration_timestamps", "") ?: ""

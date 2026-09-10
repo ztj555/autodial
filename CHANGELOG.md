@@ -1,5 +1,32 @@
 # AutoDial 更新日志
 
+## 2026-09-10（第二批）
+
+### 登记数据正确性修复（v4.17）— C 类数据错账 + D2/D3 零成本安全项
+
+**云中继 `cloud_relay_v2.py`**
+- [C3] `/api/v1/visit` 新增 `crm_id` 参数：客户端唯一 id，重发/补推按唯一索引精确去重（同一物理来访只入库一次）；visit_record 推送携带 crm_id
+- [C2] 无 visit_time 的回退去重从"当日同号"改为"**同号 2 小时内**"——原逻辑会静默吞掉同客户当天第二次真实上门（CRM 有两条、云端只有一条）
+- [D2] `/api/v1/advisor/register` 免鉴权端点加校验：PIN 格式 + 姓名长度≤32 + 拒收 HTML 特殊字符
+- [D3] 新增 `idx_visits_mobile`、`idx_call_records_dial` 索引，去重/翻页查询不再全表扫描；visit 字段加长度上限
+- [D2] `dashboard.html` 两处存储型 XSS 修复：登记列表 `visit_time`、人员管理 `pin` 渲染前 esc() 转义（此前可经 /api/v1/visit 与 advisor/register 注入管理员浏览器）
+
+**Chrome 扩展**
+- [C1] CRM 提交严格校验：HTTP 非 2xx（登录过期 401/302、5xx）直接判失败；返回非 JSON（登录页 HTML）不再视为成功；`code` 缺失不再算成功——此前"假成功"导致 CRM 实际未写入
+- [C3] CRM 成功但云端不可达时，登记入 chrome.storage 暂存队列（上限 500 条）；SW 启动与下次登记成功时自动补推（crm_id 保证云端去重）
+- [C7] 顾问匹配移除"兜底取第一个"——无精确匹配直接报"未找到顾问"，不再把客户挂到同名/相似顾问名下；CRM search 请求加 8s 超时
+
+**Android**
+- [C4] 统计翻倍修复（三管齐下）：①提交不再双写 registration_timestamps，统计只读 visit_records；②云端回推按 crm_id 抑制（本机已登记的 echo 直接跳过）；③统计合并加 2 秒簇去重（兼容历史双写数据）
+- [C5] 离线补推重写：补推并发保护（AtomicBoolean）+ 每条重读队列 + 成功按 crm_id 原子删除一条——补推期间新保存的记录不再被整体覆写丢失；旧快照写回竞态消除
+- [C4] 周起始修正：所有 `set(DAY_OF_WEEK, MONDAY)` 前先 `firstDayOfWeek = MONDAY`，修复周日"本周"统计归零
+- [C3] 手机自登记生成 `ph-<pin>-<ts>` crm_id：云端去重 + 本机 seen_crm_ids 抑制回推双计；补推复用同一 id
+- [C7] 顾问列表加载失败不再无限"正在加载"——15 秒内明确提示"加载失败，请检查网络或 CRM 登录状态"
+
+**已知取舍**
+- CRM 批量同步导入（/api/v1/visits/batch）与插件手工登记之间仍无跨源去重（插件无 visit_time 无法精确匹配）——重发类重复已由 crm_id 消灭，跨源重复需业务层关联，暂缓
+- REST 全局限频暂未加（websockets legacy handler 无法直接取对端 IP，需协议层改造），advisor/register 已加校验降低注入面
+
 ## 2026-09-10
 
 ### 配对码遗留问题修复（v4.16）+ 设备自动注册（v4.16.1）+ 后台登录门禁 + 35440 数据落卷 — 完成于 2026-09-10

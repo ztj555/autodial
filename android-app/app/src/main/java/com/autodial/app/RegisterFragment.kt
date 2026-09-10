@@ -41,6 +41,7 @@ class RegisterFragment : Fragment() {
 
     // CRM 顾问列表缓存
     private val advisorList = mutableListOf<Pair<String, String>>() // (name, kid)
+    private var advisorLoadFailedAt = 0L  // v4.17: 上次拉取失败的时间，用于给出明确失败提示
 
     private val themeListener: () -> Unit = {
         if (isAdded) {
@@ -68,7 +69,7 @@ class RegisterFragment : Fragment() {
         /**
          * 将本地登记写入 visit_records JSON（供统计页详情弹窗使用）
          */
-        fun saveVisitRecord(name: String, mobile: String, prefs: android.content.SharedPreferences) {
+        fun saveVisitRecord(name: String, mobile: String, prefs: android.content.SharedPreferences, crmId: String = "") {
             try {
                 var existingJson = prefs.getString("visit_records", "[]") ?: "[]"
                 var arr: org.json.JSONArray
@@ -84,6 +85,7 @@ class RegisterFragment : Fragment() {
                     put("created_at", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault())
                         .format(java.util.Date()))
                     put("timestamp", System.currentTimeMillis())
+                    if (crmId.isNotEmpty()) put("crm_id", crmId)
                 }
                 arr.put(obj)
                 // 最多保留 200 条
@@ -98,9 +100,31 @@ class RegisterFragment : Fragment() {
         }
 
         /**
+         * v4.17: 记录"本机已产生的登记唯一 id"——云端回推（echo）同一 crm_id 时跳过，
+         * 防止手机自登记 + 云端回推双计统计。LRU 200 条。
+         */
+        fun rememberCrmId(crmId: String, prefs: android.content.SharedPreferences) {
+            if (crmId.isEmpty()) return
+            try {
+                val arr = org.json.JSONArray(prefs.getString("seen_crm_ids", "[]") ?: "[]")
+                arr.put(crmId)
+                while (arr.length() > 200) arr.remove(0)
+                prefs.edit().putString("seen_crm_ids", arr.toString()).apply()
+            } catch (_: Exception) {}
+        }
+
+        fun hasSeenCrmId(crmId: String, prefs: android.content.SharedPreferences): Boolean {
+            if (crmId.isEmpty()) return false
+            return try {
+                val arr = org.json.JSONArray(prefs.getString("seen_crm_ids", "[]") ?: "[]")
+                (0 until arr.length()).any { arr.optString(it) == crmId }
+            } catch (_: Exception) { false }
+        }
+
+        /**
          * 云端同步失败时暂存记录，等重连后补推。
          */
-        fun savePendingVisit(name: String, mobile: String, managerName: String, pin: String, context: Context) {
+        fun savePendingVisit(name: String, mobile: String, managerName: String, pin: String, context: Context, crmId: String = "") {
             val prefs = context.applicationContext.getSharedPreferences("autodial", Context.MODE_PRIVATE)
             val json = prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]"
             val arr = org.json.JSONArray(json)
@@ -108,54 +132,85 @@ class RegisterFragment : Fragment() {
                 put("name", name); put("mobile", mobile)
                 put("kefu_tel", managerName); put("pin", pin)
                 put("visit_type", VISIT_TYPE); put("source", "phone_retry")
+                if (crmId.isNotEmpty()) put("crm_id", crmId)
             })
             prefs.edit().putString(PENDING_SYNCS_KEY, arr.toString()).apply()
         }
 
+        // v4.17: 补推并发保护——两次重连同时触发补推时，旧快照写回会永久滞留/覆盖新记录
+        private val flushInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
         /**
          * 云端 WebSocket 重连后调用，补推积压的登记记录。
+         * v4.17 重写: 每次循环重读队列、成功一条原子删除一条——
+         * 补推期间新保存的记录不再被整体覆写丢失；重发靠 crm_id 云端去重。
          */
         fun flushPendingSyncs(context: Context) {
             val prefs = context.applicationContext.getSharedPreferences("autodial", Context.MODE_PRIVATE)
             val serverUrl = prefs.getString("cloud_server", "") ?: ""
             if (serverUrl.isEmpty()) return
-
-            val json = prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]"
-            if (json == "[]") return
-            val arr = org.json.JSONArray(json)
-            val remaining = org.json.JSONArray()
+            if (!flushInFlight.compareAndSet(false, true)) return  // 已有补推在跑，跳过
 
             val baseUrl = toHttpBase(serverUrl)
             // E5修复: 每次云重连新建的单线程池此前从不 shutdown，线程泄漏；任务结束后关闭
             val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
             executor.execute {
                 try {
-                    for (i in 0 until arr.length()) {
-                        val item = arr.getJSONObject(i)
-                        try {
+                    while (true) {
+                        // 每条都重读最新队列（期间新失败的登记会被 savePendingVisit 追加进来）
+                        val json = prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]"
+                        if (json == "[]") break
+                        val arr = org.json.JSONArray(json)
+                        if (arr.length() == 0) { prefs.edit().remove(PENDING_SYNCS_KEY).apply(); break }
+                        val item = arr.getJSONObject(0)
+                        val crmId = item.optString("crm_id", "")
+                        val ok = try {
                             val params = "name=${URLEncoder.encode(item.optString("name"), "UTF-8")}" +
                                     "&mobile=${URLEncoder.encode(item.optString("mobile"), "UTF-8")}" +
                                     "&kefu_tel=${URLEncoder.encode(item.optString("kefu_tel"), "UTF-8")}" +
                                     "&visit_type=${URLEncoder.encode(item.optString("visit_type"), "UTF-8")}" +
-                                    "&source=${URLEncoder.encode(item.optString("source"), "UTF-8")}"
+                                    "&source=${URLEncoder.encode(item.optString("source"), "UTF-8")}" +
+                                    (if (crmId.isNotEmpty()) "&crm_id=${URLEncoder.encode(crmId, "UTF-8")}" else "")
                             val url = java.net.URL("$baseUrl/api/v1/visit?$params")
                             val conn = url.openConnection() as java.net.HttpURLConnection
                             conn.requestMethod = "GET"
                             conn.connectTimeout = 8000
                             conn.readTimeout = 8000
                             conn.setRequestProperty("X-AutoDial-PIN", item.optString("pin"))
-                            if (conn.responseCode in 200..299) continue // 成功，不加入 remaining
+                            val code = conn.responseCode
+                            var bodyOk = false
+                            if (code in 200..299) {
+                                try {
+                                    val body = conn.inputStream.bufferedReader().readText()
+                                    bodyOk = org.json.JSONObject(body).optBoolean("ok", false)
+                                } catch (_: Exception) { bodyOk = true }
+                            }
                             conn.disconnect()
-                        } catch (_: Exception) {}
-                        remaining.put(item) // 失败，保留
-                    }
-                    if (remaining.length() > 0) {
-                        prefs.edit().putString(PENDING_SYNCS_KEY, remaining.toString()).apply()
-                    } else {
-                        prefs.edit().remove(PENDING_SYNCS_KEY).apply()
+                            bodyOk
+                        } catch (_: Exception) { false }
+                        if (ok) {
+                            // 成功（含云端 skipped 重复）：按 crm_id 精确移除该条，不影响期间新增的记录
+                            val cur = org.json.JSONArray(prefs.getString(PENDING_SYNCS_KEY, "[]") ?: "[]")
+                            val out = org.json.JSONArray()
+                            var removed = false
+                            for (j in 0 until cur.length()) {
+                                val o = cur.getJSONObject(j)
+                                if (!removed && crmId.isNotEmpty() && o.optString("crm_id", "") == crmId) {
+                                    removed = true; continue
+                                }
+                                if (!removed && crmId.isEmpty() && j == 0) { removed = true; continue }
+                                out.put(o)
+                            }
+                            if (out.length() == 0) prefs.edit().remove(PENDING_SYNCS_KEY).apply()
+                            else prefs.edit().putString(PENDING_SYNCS_KEY, out.toString()).apply()
+                        } else {
+                            // 服务器不可达：停止本轮，等下次重连再试（避免 8 秒 × N 条空转）
+                            break
+                        }
                     }
                 } finally {
                     executor.shutdown()
+                    flushInFlight.set(false)
                 }
             }
         }
@@ -255,7 +310,7 @@ class RegisterFragment : Fragment() {
     /**
      * 从 CRM 拉取全部顾问姓名列表，缓存到 advisorList。
      */
-    private fun fetchAdvisorListFromCrm() {
+    private fun fetchAdvisorListFromCrm(): Boolean {
         var connection: HttpURLConnection? = null
         try {
             val url = URL("https://guwen.zhudaicms.com/bserve/search")
@@ -275,34 +330,51 @@ class RegisterFragment : Fragment() {
             writer.flush()
             writer.close()
 
-            if (connection.responseCode != 200) return
+            if (connection.responseCode != 200) return false
             val respBody = connection.inputStream.bufferedReader().readText()
             val json = org.json.JSONObject(respBody)
-            if (json.optInt("code", -1) != 1) return
+            if (json.optInt("code", -1) != 1) return false
 
-            val data = json.optJSONArray("data") ?: return
-            advisorList.clear()
+            val data = json.optJSONArray("data") ?: return false
+            val loaded = mutableListOf<Pair<String, String>>()
             for (i in 0 until data.length()) {
                 val item = data.getJSONObject(i)
                 val name = item.optString("name", "")
                 val kid = item.optString("id", "")
                 if (name.isNotEmpty()) {
-                    advisorList.add(Pair(name, kid))
+                    loaded.add(Pair(name, kid))
                 }
             }
-        } catch (_: Exception) {} finally {
+            synchronized(advisorList) {
+                advisorList.clear()
+                advisorList.addAll(loaded)
+            }
+            advisorLoadFailedAt = 0L
+            return loaded.isNotEmpty()
+        } catch (_: Exception) {
+            return false
+        } finally {
             connection?.disconnect()
         }
     }
 
     /**
      * 弹出顾问姓名选择器。
+     * v4.17: 列表为空时区分"加载中"与"加载失败"，不再无限"正在加载"假死。
      */
     private fun showAdvisorPicker() {
         if (!isAdded) return
         if (advisorList.isEmpty()) {
-            Toast.makeText(requireContext(), "正在加载顾问列表，请稍后再试...", Toast.LENGTH_SHORT).show()
-            executor.execute { fetchAdvisorListFromCrm() }
+            val now = System.currentTimeMillis()
+            if (advisorLoadFailedAt > 0 && now - advisorLoadFailedAt < 15000) {
+                Toast.makeText(requireContext(), "顾问列表加载失败，请检查网络或 CRM 登录状态后重试", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(requireContext(), "正在加载顾问列表，请稍后再试...", Toast.LENGTH_SHORT).show()
+            }
+            executor.execute {
+                val ok = fetchAdvisorListFromCrm()
+                if (!ok) advisorLoadFailedAt = System.currentTimeMillis()
+            }
             return
         }
 
@@ -554,32 +626,23 @@ class RegisterFragment : Fragment() {
             btnSubmit.setBackgroundColor(Color.parseColor(ThemeManager.ACCENT_SUCCESS_GREEN))
             btnSubmit.setTextColor(Color.WHITE)
 
-            // 保存登记时间戳（保留最近66天）
+            // v4.17: 不再写 registration_timestamps（双数据源毫秒差去重失效导致统计翻倍），
+            // 统计页只读 visit_records 单一数据源
             val prefs = requireContext().getSharedPreferences("autodial", Context.MODE_PRIVATE)
-            val existing = prefs.getString("registration_timestamps", "") ?: ""
             val now = System.currentTimeMillis()
-            val cutoff = now - 66L * 24 * 3600_000L
-
-            // 过滤旧记录 + 追加新记录
-            val recent = if (existing.isEmpty()) {
-                listOf(now.toString())
-            } else {
-                existing.split(",")
-                    .mapNotNull { it.toLongOrNull() }
-                    .filter { it >= cutoff }
-                    .map { it.toString() }
-                    .plus(now.toString())
-            }
-            prefs.edit().putString("registration_timestamps", recent.joinToString(",")).apply()
 
             // 同步到云中继（在清空输入前读取）
             val visitorName = etCustomerName.text.toString().trim()
             val visitorMobile = etCustomerMobile.text.toString().trim()
 
-            // 也写入 visit_records JSON，供统计页详情弹窗使用
-            saveVisitRecord(visitorName, visitorMobile, prefs)
+            // v4.17: 唯一 id——云端按 crm_id 去重；本机先记住，云端回推同一 id 时跳过（防双计）
+            val crmId = "ph-" + pin + "-" + now
+            rememberCrmId(crmId, prefs)
 
-            syncToCloudRelay(visitorName, visitorMobile)
+            // 也写入 visit_records JSON，供统计页详情弹窗使用
+            saveVisitRecord(visitorName, visitorMobile, prefs, crmId)
+
+            syncToCloudRelay(visitorName, visitorMobile, crmId)
 
             // 清空输入
             etCustomerName.text?.clear()
@@ -661,7 +724,7 @@ class RegisterFragment : Fragment() {
      * 将本地登记同步到云中继的 /api/v1/visit 接口，确保云端也存一份。
      * 失败时存入待同步队列，等云端重连后自动补推。
      */
-    private fun syncToCloudRelay(name: String, mobile: String) {
+    private fun syncToCloudRelay(name: String, mobile: String, crmId: String) {
         // C1修复: 主线程预取 context，后台线程不再调用 requireContext()
         if (!isAdded) return
         val appCtx = requireContext().applicationContext
@@ -676,7 +739,8 @@ class RegisterFragment : Fragment() {
                         "&mobile=${URLEncoder.encode(mobile, "UTF-8")}" +
                         "&kefu_tel=${URLEncoder.encode(managerName, "UTF-8")}" +
                         "&visit_type=${URLEncoder.encode("贷款咨询", "UTF-8")}" +
-                        "&source=phone"
+                        "&source=phone" +
+                        (if (crmId.isNotEmpty()) "&crm_id=${URLEncoder.encode(crmId, "UTF-8")}" else "")
                 val fullUrl = "$baseUrl/api/v1/visit?$params"
 
                 val url = URL(fullUrl)
@@ -695,8 +759,8 @@ class RegisterFragment : Fragment() {
                     conn.disconnect()
                 }
             } catch (_: Exception) {}
-            // 同步失败 → 存入队列，等云端重连后补推
-            savePendingVisit(name, mobile, managerName, pin, appCtx)
+            // 同步失败 → 存入队列，等云端重连后补推（带同一 crm_id，云端去重）
+            savePendingVisit(name, mobile, managerName, pin, appCtx, crmId)
         }
     }
 

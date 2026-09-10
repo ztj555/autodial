@@ -239,8 +239,9 @@ class StatsFragment : Fragment() {
             totalCount.text = "${weeklyCount}次"
             totalDuration.text = formatMinutes(weeklySec)
 
-            // 一周接通
+            // 一周接通（v4.17: 先设周一起点，修复周日 set(DAY_OF_WEEK,MONDAY) 滚到下周导致"本周"归零）
             val weekStart = Calendar.getInstance().apply {
+                firstDayOfWeek = Calendar.MONDAY
                 set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -313,8 +314,9 @@ class StatsFragment : Fragment() {
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         val todayStart = cal.timeInMillis
 
-        // 本周一 00:00
+        // 本周一 00:00（v4.17: 先设周一起点，修复周日归零）
         cal.timeInMillis = now
+        cal.firstDayOfWeek = Calendar.MONDAY
         cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
@@ -341,7 +343,9 @@ class StatsFragment : Fragment() {
         val oldTimestamps = (prefs.getString("registration_timestamps", "") ?: "")
             .split(",").mapNotNull { it.toLongOrNull() }
 
-        val allTimestamps = (visitRecords.map { it.timestamp } + oldTimestamps).distinct()
+        // v4.17: 2 秒簇合并去重——同一登记在 visit_records 与 registration_timestamps
+        // 里的时间戳相差毫秒级，此前 distinct() 判为两条导致"今日上门"翻倍
+        val allTimestamps = dedupeClusters(visitRecords.map { it.timestamp } + oldTimestamps)
 
         visitToday.text = allTimestamps.count { it >= todayStart }.toString()
         visitWeek.text = allTimestamps.count { it >= weekStart }.toString()
@@ -349,6 +353,17 @@ class StatsFragment : Fragment() {
         visitMonth.text = allTimestamps.count { it >= monthStart }.toString()
         visitLastMonth.text = allTimestamps.count { it in lastMonthStart until monthStart }.toString()
         visit30Days.text = allTimestamps.count { it >= thirtyDaysAgo }.toString()
+    }
+
+    /** v4.17: 时间戳 2 秒簇合并（同一登记多源写入时只计一条） */
+    private fun dedupeClusters(ts: List<Long>): List<Long> {
+        if (ts.size <= 1) return ts
+        val sorted = ts.sorted()
+        val out = mutableListOf<Long>()
+        for (t in sorted) {
+            if (out.isEmpty() || t - out.last() > 2000) out.add(t)
+        }
+        return out
     }
 
     // ===== 点击统计数字弹出详情 =====
@@ -382,6 +397,7 @@ class StatsFragment : Fragment() {
 
     private fun weekStart(): Long {
         val cal = Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.MONDAY
             set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
