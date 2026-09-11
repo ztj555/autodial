@@ -865,7 +865,7 @@ async def handle_connection(ws, path=None):
                 # Fix ⏳5: 如果非首设备加入已有组，广播通知给已有成员
                 if not is_first_device:
                     existing_devices = []
-                    for w in list(group.pcs) | list(group.phones):
+                    for w in list(group.pcs | group.phones):
                         if w != ws:
                             wm = ws_meta.get(w, {})
                             existing_devices.append(wm.get('device_name', '?'))
@@ -2845,6 +2845,96 @@ async def health_check_handler(path, request_headers):
         finally:
             if conn:
                 conn.close()
+
+    # v4.19: 通话记录 CSV 导出（导出当前筛选条件下的完整结果集，不再只导当前页 50 行）
+    # GET /api/v1/calls/export?token=xxx[&device_id=][&pin=][&date_from=][&date_to=][&number=]
+    if path == '/api/v1/calls/export':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        e_device_id = qs.get('device_id', [''])[0]
+        e_pin = qs.get('pin', [''])[0]
+        e_date_from = qs.get('date_from', [''])[0]
+        e_date_to = qs.get('date_to', [''])[0]
+        e_number = qs.get('number', [''])[0]
+        conn = None
+        try:
+            conn = _connect_db()
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            where = []
+            params = []
+            if e_device_id:
+                where.append('cr.device_id = ?'); params.append(e_device_id)
+            if e_pin:
+                where.append('p.last_pin = ?'); params.append(e_pin)
+            if e_number:
+                where.append('cr.number LIKE ?'); params.append(f'%{e_number}%')
+            if e_date_from:
+                try:
+                    d = datetime.strptime(e_date_from, '%Y-%m-%d')
+                    where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
+                except Exception:
+                    pass
+            if e_date_to:
+                try:
+                    d = datetime.strptime(e_date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
+                    where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
+                except Exception:
+                    pass
+            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+            c.execute(f'''SELECT cr.*, p.device_model, p.app_version
+                         FROM call_records_raw cr
+                         LEFT JOIN phones p ON cr.device_id = p.device_id
+                         {wsql} ORDER BY cr.dial_time DESC LIMIT 200000''', params)
+            rows = [dict(r) for r in c.fetchall()]
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+        import csv as _csv
+        import io as _io
+        _CALL_TYPES = {0: '未知', 1: '呼入', 2: '呼出', 3: '未接'}
+        buf = _io.StringIO()
+        buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
+        _cw = _csv.writer(buf)
+        _cw.writerow(['设备ID', '号码', '通话时间', '时长(秒)', '类型', 'SIM卡', '机型', '版本'])
+        for r in rows:
+            ts = r.get('dial_time')
+            try:
+                tstr = datetime.fromtimestamp(int(ts) / 1000).strftime('%Y-%m-%d %H:%M:%S') if ts else ''
+            except (TypeError, ValueError, OSError):
+                tstr = str(ts if ts is not None else '')
+            try:
+                ct = int(r.get('call_type'))
+            except (TypeError, ValueError):
+                ct = -1
+            cells = [
+                r.get('device_id', ''),
+                r.get('number', ''),
+                tstr,
+                r.get('duration', 0),
+                _CALL_TYPES.get(ct, '未知'),
+                'SIM' + str((r.get('sim_slot') or 0) + 1),
+                r.get('device_model', ''),
+                r.get('app_version', ''),
+            ]
+            # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
+            safe_cells = []
+            for v in cells:
+                s = str(v if v is not None else '')
+                if s[:1] in ('=', '+', '-', '@'):
+                    s = "'" + s
+                safe_cells.append(s)
+            _cw.writerow(safe_cells)
+        filename = 'calls_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+        return (200, [
+            ('Content-Type', 'text/csv; charset=utf-8'),
+            ('Content-Disposition', f'attachment; filename={filename}'),
+            ('Access-Control-Allow-Origin', '*'),
+        ], buf.getvalue().encode('utf-8'))
 
     # API: 踢出客户端 GET /api/v1/kick?pin=&role=
     if path == '/api/v1/kick':

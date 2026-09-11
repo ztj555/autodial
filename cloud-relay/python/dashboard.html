@@ -125,7 +125,12 @@
             font-size: 11px; font-weight: 600; color: var(--green);
             background: rgba(64,192,87,.12);
             border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap;
+            border: 1px solid transparent; cursor: pointer; font-family: inherit;
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
         }
+        .auto-badge:hover { border-color: rgba(64,192,87,.45); }
+        .auto-badge.paused { color: var(--orange, #e8a33d); background: rgba(232,163,61,.14); }
+        .auto-badge.paused:hover { border-color: rgba(232,163,61,.45); }
         .menu-btn { display: none; }
         .icon-btn {
             width: 34px; height: 34px; border-radius: var(--r-sm);
@@ -279,6 +284,22 @@
         .history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .history-table th, .history-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--divider); }
         .history-table th { color: var(--text-2); font-weight: 600; }
+        /* v4.19: 窄屏表格横向滚动，避免多列表格被挤压变形 */
+        .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .table-wrap::-webkit-scrollbar { height: 8px; }
+        .table-wrap::-webkit-scrollbar-thumb { background: var(--border-input); border-radius: 4px; }
+        .data-table td { white-space: nowrap; }
+        /* v4.19: 全局连接异常横幅——区分"真的没数据"与"请求失败/登录过期" */
+        .api-banner {
+            display: flex; align-items: center; gap: 10px;
+            margin: 0 0 12px; padding: 10px 14px;
+            border-radius: var(--r-md); font-size: 13px; font-weight: 500;
+            background: rgba(240,62,62,.08); border: 1px solid rgba(240,62,62,.28);
+            color: var(--red);
+        }
+        .api-banner .btn { margin-left: auto; flex-shrink: 0; }
+        .api-banner-ico { display: inline-flex; flex-shrink: 0; }
+        .api-banner-ico svg { width: 15px; height: 15px; }
 
         /* ===== 徽章（pill） ===== */
         .badge {
@@ -511,7 +532,7 @@
             </button>
             <h1 class="topbar-title" id="topbar-title">首页总览</h1>
             <div class="topbar-right">
-                <span class="auto-badge" id="refresh-label">自动刷新 · 每15秒</span>
+                <button class="auto-badge" id="refresh-label" onclick="toggleAutoRefresh()" title="点击暂停 / 恢复自动刷新（填写表格时自动跳过刷新）">自动刷新 · 每15秒</button>
                 <span class="topbar-muted">上次刷新 <span id="last-refresh">-</span></span>
                 <button class="icon-btn" onclick="refreshAll()" title="立即刷新">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
@@ -534,6 +555,7 @@
         </header>
 
         <main class="content">
+            <div class="api-banner" id="api-banner" style="display:none;"></div>
             <!-- ==================== 首页总览 ==================== -->
             <div id="page-dashboard" class="page active">
                 <div class="hero-card">
@@ -599,7 +621,7 @@
                     </div>
                     <div class="filters">
                         <div class="filter-group"><label>状态筛选</label><select class="input" id="phone-status-filter" onchange="loadPhones()"><option value="">全部</option><option value="online">在线</option><option value="offline">离线</option></select></div>
-                        <div class="filter-group"><label>搜索</label><input type="text" class="input" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="loadPhones()" style="min-width:220px;"></div>
+                        <div class="filter-group"><label>搜索</label><input type="text" class="input" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="phoneSearchDebounce()" style="min-width:220px;"></div>
                         <button class="icon-btn" onclick="loadPhones()" title="刷新">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
                         </button>
@@ -706,7 +728,7 @@
                     </div>
                     <div class="tool-row" style="margin-bottom:16px;">
                         <div class="filter-group"><label>账号</label><input type="text" class="input" id="new-admin-user" placeholder="输入新账号" style="width:150px;"></div>
-                        <div class="filter-group"><label>密码</label><input type="text" class="input" id="new-admin-pass" placeholder="输入新密码" style="width:150px;"></div>
+                        <div class="filter-group"><label>密码</label><input type="password" class="input" id="new-admin-pass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:150px;"></div>
                         <button class="btn btn-primary" onclick="addAdminAccount()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             添加账号
@@ -719,7 +741,7 @@
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>修改密码</div>
                     <div class="tool-row">
                         <div class="filter-group"><label>账号ID</label><input type="number" class="input" id="chpwd-id" placeholder="账号ID" style="width:100px;"></div>
-                        <div class="filter-group"><label>新密码</label><input type="text" class="input" id="chpwd-newpass" placeholder="输入新密码（至少4位）" style="width:190px;"></div>
+                        <div class="filter-group"><label>新密码</label><input type="password" class="input" id="chpwd-newpass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:190px;"></div>
                         <button class="btn btn-primary" onclick="chpwdAdminAccount()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
                             修改密码
@@ -736,7 +758,7 @@
                         <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/></svg></div>系统日志</div>
                     </div>
                     <div class="filters">
-                        <div class="filter-group" style="flex:1;min-width:200px;"><label>关键词搜索</label><input type="text" class="input" id="log-search" placeholder="搜索日志关键词..." oninput="loadLogs()" style="width:100%;"></div>
+                        <div class="filter-group" style="flex:1;min-width:200px;"><label>关键词搜索</label><input type="text" class="input" id="log-search" placeholder="搜索日志关键词..." oninput="logSearchDebounce()" style="width:100%;"></div>
                         <div class="filter-group"><label>条数</label><select class="input" id="log-lines" onchange="loadLogs()"><option value="100">最近100条</option><option value="200">最近200条</option><option value="500">最近500条</option><option value="1000">最近1000条</option></select></div>
                     </div>
                     <div class="log-container" id="log-container"><div class="empty-state"><span class="spin"></span>加载中...</div></div>
@@ -777,13 +799,11 @@
             <div id="page-settings" class="page">
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><circle cx="9.5" cy="6.5" r="2.2"/><path d="M4 12.5h16"/><circle cx="14.5" cy="12.5" r="2.2"/><path d="M4 18.5h16"/><circle cx="9.5" cy="18.5" r="2.2"/></svg></div>服务器设置</div>
-                    <div class="form-group"><label>服务器端口（需重启）</label><input type="number" class="input" id="setting-port" value="35430" min="1024" max="65535" style="max-width:200px;"></div>
-                    <div class="form-group"><label>日志级别（需重启）</label><select class="input" id="setting-log-level" style="max-width:200px;"><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="ERROR">ERROR</option></select></div>
-                    <button class="btn btn-primary" onclick="saveSettings()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
-                        保存设置
-                    </button>
-                    <div class="form-msg" id="settings-msg"></div>
+                    <div class="form-group"><label>服务器端口（只读）</label><input type="text" class="input" id="setting-port" value="读取中..." readonly style="max-width:200px;opacity:.75;cursor:not-allowed;"></div>
+                    <div class="form-group"><label>日志级别（只读）</label><input type="text" class="input" id="setting-log-level" value="由服务器启动参数决定" readonly style="max-width:320px;opacity:.75;cursor:not-allowed;"></div>
+                    <div class="form-msg" style="color:var(--text-2);font-size:12px;line-height:1.8;max-width:580px;">
+                        端口与日志级别需在服务器端修改（Supervisor 启动参数 / 代码配置）后重启服务生效。面板不提供在线修改，以免显示值与进程实际状态不一致。
+                    </div>
                 </div>
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg></div>系统信息</div>
@@ -872,6 +892,7 @@
         const REFRESH_INTERVAL = 15000;
         let refreshTimer = null;
         let lastRefresh = null;
+        let refreshPaused = false;   // v4.20: 自动刷新暂停开关（供长时间填写表格时使用）
 
         // ==================== SVG 图标（Phosphor 风格：24 viewBox / stroke 1.8 / round） ====================
         const ICONS = {
@@ -1131,6 +1152,7 @@
             else if (id === 'pins') loadPins();
             else if (id === 'admin-accounts') loadAdminAccounts();
             else if (id === 'logs') { loadLogs(); loadLogStats(); }
+            else if (id === 'settings') refreshSettingsInfo();
             document.getElementById('api-url').textContent = VISIT_API_BASE;
             closeSidebarMobile();
         }
@@ -1227,12 +1249,50 @@
         }
 
         // ==================== Helpers ====================
+        // v4.19: 统一请求层——请求失败 / 限流 / 登录过期不再被静默吞掉，
+        // 改为顶部横幅明确告知，避免"请求失败"被渲染成"暂无数据"造成误判。
+        let apiBannerShown = false;
+        function setApiBanner(msg, isAuthError) {
+            const el = document.getElementById('api-banner');
+            if (!el) return;
+            if (!msg) {
+                if (apiBannerShown) { el.style.display = 'none'; el.innerHTML = ''; }
+                apiBannerShown = false;
+                return;
+            }
+            const btn = isAuthError
+                ? '<button class="btn btn-outline btn-sm" onclick="showLogin()">重新登录</button>'
+                : '<button class="btn btn-outline btn-sm" onclick="refreshAll()">重试</button>';
+            el.innerHTML = '<span class="api-banner-ico">' + ic('warning', 15) + '</span><span>' + msg + '</span>' + btn;
+            el.style.display = 'flex';
+            apiBannerShown = true;
+        }
+
         async function apiGet(url) {
             const token = getSessionToken();
             const sep = url.includes('?') ? '&' : '?';
             const tokenUrl = token ? url + sep + 'token=' + encodeURIComponent(token) : url;
-            try { const r = await fetch(API_BASE + tokenUrl); return await r.json(); }
-            catch(e) { return null; }
+            try {
+                const r = await fetch(API_BASE + tokenUrl);
+                if (r.status === 401) {
+                    clearSessionToken();
+                    setApiBanner('登录已过期，请重新登录后再查看数据（当前列表内容可能不是最新的）。', true);
+                    return null;
+                }
+                if (r.status === 429) {
+                    setApiBanner('请求过于频繁，已被服务端限流（HTTP 429），稍后会自动重试。', false);
+                    return null;
+                }
+                if (!r.ok) {
+                    setApiBanner('服务端返回异常（HTTP ' + r.status + '），当前显示的数据可能不是最新的。', false);
+                    return null;
+                }
+                setApiBanner('');
+                return await r.json();
+            } catch(e) {
+                setApiBanner('无法连接到服务器，请检查网络或服务进程；当前显示的数据可能已过期。', false);
+                return null;
+            }
         }
 
         /** 为 URL 附加管理 token（供直接 fetch 调用的 endpoint 使用） */
@@ -1386,6 +1446,11 @@
         }
 
         // ==================== 手机管理 ====================
+        // v4.19: 手机搜索原来每按一个键就全量请求一次（与通话页的防抖不一致），
+        // 统一改为 400ms 防抖，既省服务端压力也避免限流误伤。
+        let phoneSearchTimer = null;
+        function phoneSearchDebounce() { clearTimeout(phoneSearchTimer); phoneSearchTimer = setTimeout(loadPhones, 400); }
+
         async function loadPhones() {
             const d = await apiGet('/api/v1/devices');
             const statusFilter = document.getElementById('phone-status-filter')?.value || '';
@@ -1506,9 +1571,10 @@
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/device-set-default-pin?device_id=' +
                     encodeURIComponent(deviceId) + '&default_pin=' + encodeURIComponent(dp)));
                 const d = await r.json();
-                if (!d.ok) toast('设置失败: ' + (d.message || '未知错误'), 'error');
+                if (!d.ok) { toast('设置失败: ' + (d.message || '未知错误'), 'error'); return; }
+                toast('默认PIN已保存', 'success');
             } catch(e) {
-                toast('设置失败: 网络错误', 'error');
+                toast('设置失败：网络错误，请重试', 'error');
             }
         }
 
@@ -1517,8 +1583,9 @@
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/device/update?device_id=' +
                     encodeURIComponent(deviceId) + '&label=' + encodeURIComponent((label||'').trim())));
                 const d = await r.json();
-                if (!d.ok) toast('设置别名失败: ' + (d.message || '未知错误'), 'error');
-            } catch(e) { /* 静默失败，刷新时自动同步 */ }
+                if (!d.ok) { toast('设置别名失败: ' + (d.message || '未知错误'), 'error'); return; }
+                toast('设备别名已保存', 'success');
+            } catch(e) { toast('设置别名失败：网络错误，请重试', 'error'); }
         }
 
         // ==================== 通话记录 ====================
@@ -1580,20 +1647,27 @@
         }
 
         function exportCallsCSV() {
-            const rows = document.querySelectorAll('#calls-list tr');
-            if (rows.length===0 || rows[0].querySelectorAll('td').length < 7) { toast('无数据可导出', 'error'); return; }
-            let csv = '\uFEFF设备ID,号码,通话时间,时长(秒),类型,SIM卡,模型,版本\n';
-            rows.forEach(function(row) {
-                const cells = row.querySelectorAll('td');
-                if (cells.length < 8) return;
-                csv += Array.from(cells).slice(0,8).map(function(c) { return '"'+c.textContent.replace(/"/g,'""')+'"'; }).join(',') + '\n';
-            });
-            const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = 'calls_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+            // v4.19: 改为服务端导出——导出"当前筛选条件下的全部匹配记录"，
+            // 不再只导屏幕上这一页 50 行（此前对账会静默少数据，且无任何提示）
+            const params = [];
+            const device_id = document.getElementById('call-device-filter')?.value || '';
+            const date_from = document.getElementById('call-date-from')?.value || '';
+            const date_to = document.getElementById('call-date-to')?.value || '';
+            const number = document.getElementById('call-number')?.value || '';
+            if (device_id) params.push('device_id=' + encodeURIComponent(device_id));
+            if (date_from) params.push('date_from=' + encodeURIComponent(date_from));
+            if (date_to) params.push('date_to=' + encodeURIComponent(date_to));
+            if (number) params.push('number=' + encodeURIComponent(number));
+            const url = VISIT_API_BASE + '/api/v1/calls/export' + (params.length ? '?' + params.join('&') : '');
+            window.open(withToken(url), '_blank');
+            toast('已按当前筛选条件导出全部匹配记录', 'success');
         }
 
         // ==================== 系统日志 ====================
+        // v4.20: 关键词搜索加 400ms 防抖——原先每按一键就请求一次（可拉 1000 行日志）
+        let logSearchTimer = null;
+        function logSearchDebounce() { clearTimeout(logSearchTimer); logSearchTimer = setTimeout(loadLogs, 400); }
+
         async function loadLogs() {
             const n = document.getElementById('log-lines')?.value || '100';
             const q = document.getElementById('log-search')?.value || '';
@@ -1714,7 +1788,13 @@
             // S4修复: 按单 PIN 筛选是手机端同步用法（无需登录）；无筛选/按分组/占位符均需管理员 token
             if (!pinFilter || groupFilter || pinFilter === '__group__') url = withToken(url);
             try {
-                const res = await fetch(url); const data = await res.json();
+                const res = await fetch(url);
+                if (res.status === 401) {
+                    setApiBanner('登录已过期，请重新登录后再查看上门登记数据。', true);
+                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">登录已过期，请重新登录</td></tr>';
+                    return;
+                }
+                const data = await res.json();
                 if (Array.isArray(data)) {
                     // 兼容旧版服务端：返回数组时退回全量渲染（无分页）
                     visitTotal = data.length;
@@ -2027,10 +2107,16 @@
         async function loadPins() {
             const tbody = document.getElementById('pins-list');
             try {
-                const [pr, gr] = await Promise.all([
-                    fetch(withToken(VISIT_API_BASE+'/api/v1/pins')).then(function(r){return r.json()}),
-                    fetch(withToken(VISIT_API_BASE+'/api/v1/groups')).then(function(r){return r.json()})
+                const [prRes, grRes] = await Promise.all([
+                    fetch(withToken(VISIT_API_BASE+'/api/v1/pins')),
+                    fetch(withToken(VISIT_API_BASE+'/api/v1/groups'))
                 ]);
+                if (prRes.status === 401 || grRes.status === 401) {
+                    setApiBanner('登录已过期，请重新登录后再查看人员数据。', true);
+                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">登录已过期，请重新登录</td></tr>';
+                    return;
+                }
+                const pr = await prRes.json(), gr = await grRes.json();
                 if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">无数据</td></tr>'; return; }
                 const sel = document.getElementById('pin-group-filter');
                 sel.innerHTML = '<option value="">全部</option>';
@@ -2059,16 +2145,18 @@
             try {
                 const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/pin/set_group?pin='+encodeURIComponent(pin)+'&group_id='+encodeURIComponent(gid)));
                 const d = await r.json();
-                if (!d.ok) toast('设置分组失败: ' + (d.message || '未知错误'), 'error');
-            } catch(e) { /* 静默失败 */ }
+                if (!d.ok) { toast('设置分组失败: ' + (d.message || '未知错误'), 'error'); loadPins(); return; }
+                toast('分组已更新', 'success');
+            } catch(e) { toast('设置分组失败：网络错误，请重试', 'error'); loadPins(); }
         }
 
         async function setAdvisorName(pin, name) {
             try {
                 const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/advisor/update?pin='+encodeURIComponent(pin)+'&name='+encodeURIComponent((name||'').trim())));
                 const d = await r.json();
-                if (!d.ok) toast('更新姓名失败: ' + (d.message || '未知错误'), 'error');
-            } catch(e) { /* 静默失败 */ }
+                if (!d.ok) { toast('更新姓名失败: ' + (d.message || '未知错误'), 'error'); loadPins(); return; }
+                toast('姓名已保存', 'success');
+            } catch(e) { toast('更新姓名失败：网络错误，请重试', 'error'); loadPins(); }
         }
 
         async function addGroup() {
@@ -2098,28 +2186,95 @@
         }
 
         // ==================== 设置 ====================
-        function saveSettings() {
-            document.getElementById('settings-msg').innerHTML = '<span class="msg-info">设置已保存提示（端口和日志级别需重启服务生效）</span>';
-            setTimeout(function() { document.getElementById('settings-msg').innerHTML = ''; }, 4000);
+        // v4.19: 原"保存设置"是空操作（不发任何请求，却提示"已保存"）——已移除，
+        // 改为只读展示 + 明确指引，避免用户误以为端口/日志级别已改、实际进程仍按旧参数运行。
+        async function refreshSettingsInfo() {
+            const d = await apiGet('/api/status');
+            const pEl = document.getElementById('setting-port');
+            if (pEl) pEl.value = (d && d.port) ? d.port : '读取失败';
+        }
+
+        // ==================== 表格溢出容器 ====================
+        // v4.19: 多列表格在窄屏下被挤压变形——自动包裹横向滚动容器，
+        // 并按列数给出最小宽度，保证列内容不被压成两行。
+        function wrapDataTables() {
+            document.querySelectorAll('table.data-table').forEach(function(t) {
+                if (t.parentNode && t.parentNode.classList.contains('table-wrap')) return;
+                const cols = t.querySelectorAll('thead th').length || 6;
+                t.style.minWidth = (cols * 92) + 'px';
+                const wrap = document.createElement('div');
+                wrap.className = 'table-wrap';
+                t.parentNode.insertBefore(wrap, t);
+                wrap.appendChild(t);
+            });
         }
 
         // ==================== Auto-refresh ====================
-        function refreshAll() {
+        // v4.20: 1) 用户正在表格内联编辑 / 弹窗填写时，跳过定时刷新，避免冲掉未提交的输入；
+        //        2) 提供暂停开关（点顶部"自动刷新"徽标），长时间录入时不再被动打断。
+        function isBusyEditing() {
+            const el = document.activeElement;
+            if (!el) return false;
+            const tag = (el.tagName || '').toLowerCase();
+            if (tag !== 'input' && tag !== 'textarea' && tag !== 'select') {
+                return !!(el.isContentEditable);
+            }
+            if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'button') return false;
+            // 表格内联输入（设备别名 / 默认PIN / 顾问姓名）或弹窗内的输入
+            return !!(el.closest && el.closest('table, .modal-overlay, .modal'));
+        }
+
+        function updateRefreshLabel() {
+            const el = document.getElementById('refresh-label');
+            if (!el) return;
+            if (refreshPaused) {
+                el.textContent = '自动刷新已暂停 · 点击恢复';
+                el.classList.add('paused');
+            } else {
+                el.textContent = '自动刷新 · 每15秒';
+                el.classList.remove('paused');
+            }
+        }
+
+        function toggleAutoRefresh() {
+            refreshPaused = !refreshPaused;
+            updateRefreshLabel();
+            if (refreshPaused) {
+                toast('已暂停自动刷新（手动刷新仍可用）', 'info');
+            } else {
+                toast('已恢复自动刷新', 'success');
+                refreshAll(false);
+            }
+        }
+
+        function markRefreshSkipped(reason) {
+            const el = document.getElementById('last-refresh');
+            if (el) el.textContent = reason;
+        }
+
+        function refreshAll(fromTimer) {
             const page = document.querySelector('.page.active');
             if (!page) return;
+            if (fromTimer && refreshPaused) return;
+            if (fromTimer && isBusyEditing()) {
+                markRefreshSkipped('已跳过（正在填写）');
+                return;
+            }
             const id = page.id.replace('page-', '');
             showPage(id);
         }
 
         function startAutoRefresh() {
             if (refreshTimer) clearInterval(refreshTimer);
-            refreshTimer = setInterval(refreshAll, REFRESH_INTERVAL);
+            refreshTimer = setInterval(function() { refreshAll(true); }, REFRESH_INTERVAL);
+            updateRefreshLabel();
         }
 
         // ==================== Init ====================
         chartDefaults();
         buildThemeMenu();
         applyTheme(getThemeId());
+        wrapDataTables();
         loadDashboard();
         loadCallDeviceOptions();
         startAutoRefresh();
