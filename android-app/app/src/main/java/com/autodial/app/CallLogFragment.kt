@@ -341,11 +341,13 @@ class CallLogFragment : Fragment() {
             if (!isAdded) return@setOnClickListener
             DialPadSheet.show(requireActivity()) { number ->
                 try {
-                    val intent = Intent(Intent.ACTION_CALL).apply {
-                        data = Uri.parse("tel:$number")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // v4.23: 走 DialService 主拨号链路（选卡弹层/本地记录/PC 回执齐全），
+                    // 不再裸 ACTION_CALL 绕过 DialEngine
+                    val intent = Intent(requireContext(), DialService::class.java).apply {
+                        action = "DIAL"
+                        putExtra("number", number)
                     }
-                    startActivity(intent)
+                    ContextCompat.startForegroundService(requireContext(), intent)
                 } catch (e: Exception) {
                     Toast.makeText(requireContext(), "拨号失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }

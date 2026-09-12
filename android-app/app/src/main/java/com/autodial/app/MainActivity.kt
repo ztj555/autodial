@@ -83,8 +83,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        getSharedPreferences("autodial", MODE_PRIVATE).edit()
-            .putBoolean("manual_disconnect", false).apply()
+        // v4.23: 不再无条件清除 manual_disconnect。
+        // 该标志 = 「用户手动断开，暂停自动重连」。清零只应发生在用户显式动作上
+        // （ConnectFragment 的连接/重连按钮已各自清除）。之前每次 Activity 重建都清零，
+        // 导致「手动断开」形同虚设：用户断开后旋转屏幕/应用被回收重建，自动重连悄悄复活。
 
         viewPager = findViewById(R.id.viewPager)
         bottomNavContainer = findViewById(R.id.bottomNavContainer)

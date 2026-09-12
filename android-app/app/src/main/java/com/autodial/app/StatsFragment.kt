@@ -1,9 +1,11 @@
 package com.autodial.app
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -89,6 +91,54 @@ class StatsFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_stats, container, false)
     }
 
+    // ==================== v4.23 通话记录权限引导 ====================
+
+    private fun maybeShowCallLogPermissionBanner(view: View) {
+        val granted = ContextCompat.checkSelfPermission(
+            requireContext(), Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        try {
+            val root = view as? ViewGroup ?: return
+            val banner = TextView(requireContext()).apply {
+                tag = "call_log_perm_banner"
+                text = "⚠️ 通话记录权限未授予，统计与云同步不可用 —— 点此去授权"
+                textSize = 13f
+                setTextColor(Color.WHITE)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(Color.parseColor("#E67E22"))
+                    cornerRadius = 8 * resources.displayMetrics.density
+                }
+                val dp = resources.displayMetrics.density
+                setPadding((12 * dp).toInt(), (10 * dp).toInt(), (12 * dp).toInt(), (10 * dp).toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    val m = (8 * dp).toInt()
+                    setMargins(m, m, m, 0)
+                }
+                setOnClickListener {
+                    @Suppress("DEPRECATION")
+                    requestPermissions(arrayOf(Manifest.permission.READ_CALL_LOG), 3001)
+                }
+            }
+            // 插到顶栏之后（index 1），不遮挡内容
+            root.addView(banner, 1)
+        } catch (_: Exception) {}
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == 3001 && grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            // 授权成功：撤掉横幅并刷新统计
+            (view as? ViewGroup)?.let { root ->
+                for (i in 0 until root.childCount) {
+                    val child = root.getChildAt(i)
+                    if (child.tag == "call_log_perm_banner") { root.removeView(child); break }
+                }
+            }
+            loadStats()
+        }
+    }
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         todayCount = view.findViewById(R.id.statsTodayCount)
@@ -136,6 +186,10 @@ class StatsFragment : Fragment() {
 
         // 点击统计数字弹出详情
         setupVisitClickListeners()
+
+        // v4.23: READ_CALL_LOG 被拒时，在页面顶部给出可操作的「去授权」入口
+        // （此前权限缺失只在服务里打一行日志，用户完全无感知，云端 calls=0 无从排查）
+        maybeShowCallLogPermissionBanner(view)
 
         // 注册新拨号广播
         try {
@@ -537,6 +591,19 @@ class StatsFragment : Fragment() {
                 conn.disconnect()
 
                 val arr = JSONArray(body)
+
+                // v4.23: 云端返回空数组时不清空本地记录。
+                // "空"通常意味着云端刚部署/该账号还没录过数据，而不是"记录被删了"；
+                // 旧逻辑直接整体覆写，一次空响应就能把手机上缓存的上门记录全清掉。
+                if (arr.length() == 0) {
+                    refreshHandler.post {
+                        if (isAdded) {
+                            Toast.makeText(requireContext(), "📋 云端暂无上门记录（本地记录已保留）", Toast.LENGTH_SHORT).show()
+                            resetSyncBtn()
+                        }
+                    }
+                    return@execute
+                }
 
                 // 以云端为准：直接用云端数据替换本地记录
                 val newRecords = JSONArray()

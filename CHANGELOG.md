@@ -1,5 +1,51 @@
 # AutoDial 更新日志
 
+## 2026-09-12（第四批 · 场景化复核修复 v4.23）
+
+> 依据《场景化复核报告-2026-09-12.md》按「内部 20 人 + 手机流量可用 + 机型不统一 + 文件夹版 PC」的真实使用场景重新定级后，修复 P0/P1 中确认的体验与安全条目。PC Go 端确认为废弃实验版（`go build` 不可用），其 9 条全部不修；Electron「便携版自启失效」经确认为误报（文件夹版 `getPath('exe')` 行为正确），不修。
+> 验证情况：云端 `py_compile` + 本地隔离实例 8+4 项接口实测（含越权 401、正常同步 200、幂等不重复）；PC Electron `node --check` + settings 原子写行为测试；扩展/面板 JS `node --check`；Android 侧随本次提交推送 GitHub Actions 编译验证（`.github/workflows/android-build.yml`，push 自动触发）。
+
+### 云中继 `cloud_relay_v2.py`（安全，按场景定为必修）
+
+- **[P0] 越权读整组客户数据**：`GET /api/v1/visits?pin=随便填&group=1` 无需管理员令牌即可读出整个分组的客户姓名/手机号/来访事由。根因：鉴权只在 `pin` 为空时校验，而分组分支优先级更高。现按分组或无筛选访问一律要求管理员令牌；单 PIN 精确查询（手机端同步路径）保持免鉴权
+- **[P0] 上报接口无鉴权**：`/api/v1/calls/batch`、`/api/v1/events/log` 任意伪造 `device_id` 即可写入/伪造数据。现要求设备已注册（phones 表存在）且 `pin` 与该设备登记的 `last_pin` 一致，否则 403
+- **[P1] 上报通道支持 POST body**：`calls/batch`、`events/log` 同时接受 JSON body（`{device_id, pin, data|event_type, detail}`），GET query 通道保留向后兼容；新版 App 优先 POST，PIN 与记录不再出现在 URL
+- **[P1] 关闭登录/登出的 GET query 通道**：`/api/v1/login` 仅接受 POST body（口令不进网址/访问日志）；`/api/v1/logout` 令牌从 Authorization 头读取
+- **[P1] 压测脚本防误伤生产**：`test_stress_live.py` 不再硬编码生产地址；新增 `--host/--port/--dry-run/preflight`，默认拒绝公网地址（仅允许私网/localhost），preflight 缺 `--host` 直接退出
+
+### PC Electron
+
+- **[P0] 短信失败/超时窗口永久卡死**：手机 ACK 超时/发送失败不回 `sms-result`，短信窗口停在"等待手机确认" → 失败与超时都会给窗口回执
+- **[P0] 配置静默损坏即全丢**：`settings.json` 一旦写入中断/损坏，加载失败回退默认并立即写回，用户配置无痕清空 → 读写改原子写（tmp + rename）；加载失败自动备份现场为 `settings.json.corrupt-*`，且不再用默认值覆盖原文件
+- **[P0] 云端重连 30 次后彻底放弃**：夜间网络抖动，白天回来不自愈 → 30 次快速重试后转入 5 分钟一次的低频重试，连上即恢复
+- **[P1] `removeDevice` 无连接归属校验**：旧连接的 close 事件能把刚重连的新设备状态清掉（"显示在线却拨不出去"）→ 只有当注册表里的连接就是触发者本人时才清理；stale 设备清理同步收紧
+- **[P1] LAN 重连覆盖 `isCloud` 标志**：云端模式手机走 LAN hello 重连会被登记成局域网设备，后续按局域网发消息发不出去 → LAN 重连保留原有 `isCloud` 状态
+- **[P2] "关闭即退出"残留进程**：主窗口走 exit 分支时悬浮条窗口未销毁 → 退出前统一关闭
+- **[P2] 每次拨号无条件覆写剪贴板**：现在号码已在剪贴板（内容相同）时不重复写，尊重用户复制内容
+
+### Android
+
+- **[P0] 进程被杀后不自愈**（A-14）：`START_STICKY` 在国产 ROM 杀后台后可能迟迟不重启 → 新增 `KeepAliveReceiver`：15 分钟周期自查（`setExactAndAllowWhileIdle`），服务不在且用户未手动断开时 `startForegroundService` 复活；系统拦截后台启动时退化为原行为，无副作用
+- **[P0] `simHandleCache` 永不失效**（A-5）：换卡/热插拔后一直拿旧卡 handle，拨错卡 → 缓存绑定 subscriptionId，subId 变化自动失效重建
+- **[P0] 自动选卡只认小米**（A-11）：机型不统一 → 预布防扩展到全部厂商；非小米启用严格模式（仅响应"新窗口弹出"事件），避免在通话界面上误点；小米保持原行为
+- **[P1] 手动断开形同虚设**（A-7）：`MainActivity.onCreate` 无条件清 `manual_disconnect`，Activity 重建即悄悄恢复自动重连 → 清零只保留在连接/重连按钮两处显式动作
+- **[P1] 通话记录/拨号盘绕过主拨号链路**（A-6）：拨号盘与通话详情"立即拨号"裸走 `ACTION_CALL`——不走选卡弹层、不写本地记录、不给 PC 回执 → 新增 DialService `"DIAL"` action，统一走 `DialEngine.dialNumber`
+- **[P1] `onCreate` 异常恢复路径漏 `startDataSync`**（A-4）：补上；`startDataSync` 加幂等保护防重复调度
+- **[P1] READ_CALL_LOG 被拒无感知**（A-2）：统计页顶部新增"去授权"横幅（点击发起授权，成功自动消失并刷新）
+- **[P1] 云端空响应清空本地上门记录**（A-8）：同步返回空数组不再覆写本地，提示"本地记录已保留"
+- **[P2] 通话记录上报改 POST**：配合云端新增的 POST 通道，PIN 与记录不再进 URL；旧版云端自动回退 GET，两种部署顺序都兼容
+
+### Chrome 扩展
+
+- **[P0] "点击拨打"闭包固化旧号码**（E-1）：SPA 复用 `<a>` 节点时闭包里是首次拦截的旧号码，换客户后拨错人 → 点击时从 href/文本实时读取号码，闭包值仅作兜底
+- **[P1] 浮窗连点双拨**（E-4）：2 秒窗口去重
+- **[P1] 两处 fetch 无超时**（E-3）：「测试连接」加 8 秒超时（地址填错不再永久停在"测试中"）；`uploadAdvisorName` 改用已有 `fetchWithTimeout`
+
+### 管理面板 `dashboard.html`
+
+- **[P1] `recent-clients` 的 PIN/IP 未转义**（M-1）→ 补 `esc()`
+- **[P2] 通话记录设备筛选只在启动时加载一次**（M-9）：新登记的手机要重启面板才出现在筛选里 → 每次切到通话记录页刷新选项，且保留用户已选中的筛选值
+
 ## 2026-09-12（第三批 · 外部复核结论修复 v4.22）
 
 > 依据一份外部源码核查结论（逐条回源核实后确认全部属实），修复了 4 个端"文档声称已修、实际未生效"与"半落地"的问题。

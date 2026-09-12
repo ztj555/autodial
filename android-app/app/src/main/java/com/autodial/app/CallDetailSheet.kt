@@ -91,11 +91,12 @@ class CallDetailSheet(
             }
             setOnClickListener {
                 try {
-                    val intent = Intent(Intent.ACTION_CALL).apply {
-                        data = Uri.parse("tel:${record.number}")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // v4.23: 走 DialService 主拨号链路（选卡/记录/回执），不再裸 ACTION_CALL
+                    val intent = Intent(activity, DialService::class.java).apply {
+                        action = "DIAL"
+                        putExtra("number", record.number)
                     }
-                    activity.startActivity(intent)
+                    androidx.core.content.ContextCompat.startForegroundService(activity, intent)
                 } catch (e: Exception) {
                     Toast.makeText(activity, "拨号失败: ${e.message}", Toast.LENGTH_SHORT).show()
                 }

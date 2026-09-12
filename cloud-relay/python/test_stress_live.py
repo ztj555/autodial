@@ -40,13 +40,33 @@ except ImportError:
     sys.exit(1)
 
 # ==================== 目标 ====================
-HOST = "101.34.65.254"
-PORT = 35430
-BASE = f"http://{HOST}:{PORT}"
-WS_URL = f"ws://{HOST}:{PORT}"
+# Y-13 修复（v4.23）：不再硬编码生产地址。
+#   原问题：import 后目标即为生产机，误跑会把合成 PIN / 设备 / 来访记录写进正式库，
+#   而脚本自身没有 DB 访问、删不掉，只能人工善后。
+#   现在：必须由命令行显式 --host 指定目标；--dry-run 只打印计划、不发起任何请求。
+DEFAULT_PORT = 35430
+HOST = ""
+PORT = DEFAULT_PORT
+BASE = ""
+WS_URL = ""
+
+
+def configure_target(host, port=DEFAULT_PORT):
+    """设置本次压测目标（仅在 main 中调用一次）。"""
+    global HOST, PORT, BASE, WS_URL
+    HOST = host
+    PORT = port
+    BASE = f"http://{host}:{port}"
+    WS_URL = f"ws://{host}:{port}"
+
 
 # 测试用 PIN：11 位、199 开头，明显为合成号，避免与真实员工手机号撞号
 PIN_PREFIX = "19900000"
+
+TEST_DATA_WARNING = (
+    "注意：本脚本会向目标写入合成数据（PIN 前缀 19900000 / 设备名 ZZLOADTEST-*）。\n"
+    "      脚本自身无法删除这些数据；压测后需在目标库手工清理，或把 --host 指向隔离测试实例。"
+)
 
 
 def tpin(i):
@@ -458,10 +478,33 @@ async def main():
     ap.add_argument("--levels", default="20,50,100")
     ap.add_argument("--count", type=int, default=120)
     ap.add_argument("--users", type=int, default=20)
+    # Y-13: 目标必须显式指定，杜绝误打生产
+    ap.add_argument("--host", default="",
+                    help="压测目标主机（必填，例如 127.0.0.1 或测试实例 IP）。不填则拒绝运行。")
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="只打印将要执行的动作，不发起任何网络请求、不写任何数据。")
     args = ap.parse_args()
+
+    if args.dry_run:
+        print("=== DRY-RUN：不会发起任何请求、不会写入任何数据 ===")
+        print(f"  stage  : {args.stage}")
+        print(f"  target : {args.host or '(未指定 --host)'}:{args.port}")
+        print(f"  levels : {args.levels} | count: {args.count} | users: {args.users}")
+        print(TEST_DATA_WARNING)
+        return
+
+    if not args.host:
+        print("错误：必须用 --host 显式指定压测目标（已不再默认指向生产地址）。")
+        print("      先看计划：python test_stress_live.py preflight --dry-run")
+        print("      再执行  ：python test_stress_live.py preflight --host 127.0.0.1")
+        sys.exit(2)
+
+    configure_target(args.host, args.port)
 
     print(f"AutoDial 线上压测 | 目标 {HOST}:{PORT} | {datetime.now():%Y-%m-%d %H:%M:%S}")
     print(f"出口 IP 由服务端观测（本机所有请求共享同一 NAT 出口）")
+    print(TEST_DATA_WARNING)
 
     if args.stage == "preflight":
         await preflight()

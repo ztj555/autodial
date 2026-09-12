@@ -31,15 +31,26 @@ class DialEngine(
     }
 
     fun getPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
-        // 缓存：同 simSlot 的 handle 几乎不变，避免每次拨号查 SubscriptionManager
+        // v4.23: 缓存有效期绑定 subscriptionId——换卡/热插拔后 subId 会变，
+        // 旧实现（缓存永不过期）会一直拿旧卡的 handle，导致拨错卡。
+        // 只做轻量校验（查一次 SubscriptionInfo 列表），仍远比完整解析便宜。
+        val currentSub = currentSubscriptionId(simSlot)
         val cached = simHandleCache[simSlot]
-        if (cached != null) return cached
+        if (cached != null && cached.first == currentSub) return cached.second
         val result = queryPhoneAccountHandle(simSlot)
-        if (result != null) simHandleCache[simSlot] = result
+        if (currentSub >= 0) simHandleCache[simSlot] = Pair(currentSub, result)
         return result
     }
 
-    private val simHandleCache = mutableMapOf<Int, PhoneAccountHandle?>()
+    // simSlot -> (subscriptionId, handle)；subId 不一致即视为失效
+    private val simHandleCache = mutableMapOf<Int, Pair<Int, PhoneAccountHandle?>>()
+
+    /** 当前 simSlot 对应的 subscriptionId；查不到（无卡/异常）返回 -1 */
+    private fun currentSubscriptionId(simSlot: Int): Int {
+        return try {
+            getSimInfoList().find { it.simSlotIndex == simSlot }?.subscriptionId ?: -1
+        } catch (_: Exception) { -1 }
+    }
 
     private fun queryPhoneAccountHandle(simSlot: Int): PhoneAccountHandle? {
         return try {
@@ -173,9 +184,12 @@ class DialEngine(
             val handle = getPhoneAccountHandle(simSlot)
             val uri = Uri.fromParts("tel", number, null)
 
-            // On Xiaomi, pre-arm accessibility service for possible SIM picker popup
+            // v4.23: 预布防不再只认小米——三星/OPPO/vivo/荣耀等双卡机型同样可能弹系统 SIM 选择器。
+            // 防误触边界由 DialAccessibilityService 保守触发条件保证（8 秒窗口 + 只认系统电话包名 +
+            // 必须命中「卡1/卡2/SIM」文字特征）；非小米机型额外启用严格模式（仅响应"新窗口弹出"事件，
+            // 不响应通话界面内容刷新），避免在 InCallUI 上误点。
             val isXiaomi = Build.MANUFACTURER.equals("Xiaomi", ignoreCase = true)
-            if (isXiaomi) DialAccessibilityService.expectSimPicker(simSlot)
+            DialAccessibilityService.expectSimPicker(simSlot, windowStateOnly = !isXiaomi)
 
             // Always try placeCall first - works from foreground service in background
             try {

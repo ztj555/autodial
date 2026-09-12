@@ -27,21 +27,28 @@ class DialAccessibilityService : AccessibilityService() {
         @Volatile
         var pendingSimSlot: Int = -1
 
+        /** v4.23 严格模式（非小米机型）：仅响应"新窗口弹出"事件，不响应通话界面内容刷新，
+         *  进一步降低在 InCallUI 上误点的可能。小米保持原全量行为。 */
+        @Volatile
+        private var pendingWindowStateOnly: Boolean = false
+
         /** 超时自动清除 (8秒) */
         private val timeoutHandler = Handler(Looper.getMainLooper())
         private val timeoutRunnable = Runnable {
             if (pendingSimSlot >= 0) {
                 Log.w(TAG, "自动点击超时, 清除 pendingSimSlot=$pendingSimSlot")
                 pendingSimSlot = -1
+                pendingWindowStateOnly = false
             }
         }
 
         /** DialService 调用此方法通知本服务: 即将弹系统SIM选择器 */
-        fun expectSimPicker(simSlot: Int) {
+        fun expectSimPicker(simSlot: Int, windowStateOnly: Boolean = false) {
             pendingSimSlot = simSlot
+            pendingWindowStateOnly = windowStateOnly
             timeoutHandler.removeCallbacks(timeoutRunnable)
             timeoutHandler.postDelayed(timeoutRunnable, 8000)
-            Log.d(TAG, "等待SIM选择器弹出, simSlot=$simSlot")
+            Log.d(TAG, "等待SIM选择器弹出, simSlot=$simSlot, strict=$windowStateOnly")
         }
     }
 
@@ -60,6 +67,11 @@ class DialAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (pendingSimSlot < 0) return
+
+        // v4.23 严格模式：只认「新窗口弹出」（SIM 选择器弹出的形态），
+        // 忽略通话界面频繁的内容刷新事件
+        if (pendingWindowStateOnly &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val pkg = event.packageName?.toString() ?: return
 

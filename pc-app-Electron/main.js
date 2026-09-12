@@ -495,18 +495,43 @@ ipcMain.on('close-settings', () => {
 });
 
 // 发送短信
+// P-5 修复：原先「没有可用手机」「ACK 超时」「发送异常」三种情况都只写日志、不回
+//   'sms-result'，而前端 renderer/sms.html 只靠该事件复位按钮 → 窗口永久停在
+//   "等待手机确认..."，按钮不可再点，用户只能关窗重开。这些是常态而非边缘情况，必须回执。
 ipcMain.on('send-sms', (event, { number, content }) => {
-  if (!number || !content) return;
-  const active = getActivePhone();
-  if (active) {
-    PhoneConnectionManager.sendToPhoneWithAck(active.pin, {
-      type: 'sms',
-      number: number,
-      content: content
-    }).then(acked => {
-      fileLog('I', 'SMS', active.pin, `发送短信 ${number} ${acked ? 'ACK已确认' : 'ACK超时'}`);
+  const notifySmsResult = (payload) => {
+    [smsWindow, mainWindow, floatBarWindow].forEach(w => {
+      if (w && !w.isDestroyed()) {
+        try { w.webContents.send('sms-result', payload); } catch (e) {}
+      }
     });
+  };
+
+  if (!number || !content) {
+    notifySmsResult({ status: 'failed', reason: '号码或内容为空' });
+    return;
   }
+  const active = getActivePhone();
+  if (!active) {
+    fileLog('W', 'SMS', null, `发送短信失败: 当前没有可用手机 (${number})`);
+    notifySmsResult({ status: 'failed', reason: '当前没有已连接的手机' });
+    return;
+  }
+  PhoneConnectionManager.sendToPhoneWithAck(active.pin, {
+    type: 'sms',
+    number: number,
+    content: content
+  }).then(acked => {
+    fileLog('I', 'SMS', active.pin, `发送短信 ${number} ${acked ? 'ACK已确认' : 'ACK超时'}`);
+    if (!acked) {
+      // ACK 超时：手机未确认收到（中途离线 / 短信被取消）。回失败让界面复位。
+      notifySmsResult({ status: 'failed', reason: '手机未确认（超时或离线）' });
+    }
+    // acked === true 时不发：等手机真正的 sms_result 回执复位（保持原有语义）
+  }).catch(err => {
+    fileLog('W', 'SMS', active.pin, `发送短信异常: ${err && err.message}`);
+    notifySmsResult({ status: 'failed', reason: '发送异常: ' + ((err && err.message) || 'unknown') });
+  });
 });
 
 // 更新云端配置
@@ -866,7 +891,18 @@ app.whenReady().then(() => {
     mainWindow.on('close', (e) => {
       if (!app.isQuitting) {
         if (appSettings.closeAction === 'exit') {
+          // P-6 修复：原逻辑只销毁托盘，悬浮条（以及可能开着的短信/设置窗口）仍然存活，
+          //   于是 'window-all-closed' 永不触发 → 用户以为"关闭即退出"，实际进程还在、
+          //   悬浮条还留在桌面上，而托盘图标已消失，只能任务管理器杀进程。
+          //   这里把所有窗口一并关闭，让退出真正完成。
           if (tray) { tray.destroy(); tray = null; }
+          [floatBarWindow, settingsWindow, smsWindow].forEach(w => {
+            if (w && !w.isDestroyed()) { try { w.destroy(); } catch (err) {} }
+          });
+          floatBarWindow = null;
+          settingsWindow = null;
+          smsWindow = null;
+          console.log('[退出] 关闭即退出：已关闭全部窗口');
           return;
         }
         e.preventDefault();

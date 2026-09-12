@@ -9,7 +9,9 @@ async def test_all():
         nonlocal _admin_token
         async with aiohttp.ClientSession() as s:
             if _admin_token is None:
-                async with s.get('http://127.0.0.1:35430/api/v1/login?user=18335162275&pass=123456') as r:
+                # Y-7(v4.23): 服务端已关闭 GET query 登录通道，改用 POST body
+                async with s.post('http://127.0.0.1:35430/api/v1/login',
+                                  json={'user': '18335162275', 'pass': '123456'}) as r:
                     d = await r.json()
                     _admin_token = d.get('token', '')
             url = f'http://127.0.0.1:35430/api/v1/device-set-default-pin?device_id={device_id}&default_pin={dpin}&token={_admin_token}'

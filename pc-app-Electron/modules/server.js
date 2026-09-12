@@ -94,6 +94,26 @@ function createServer(deps) {
   // v4.21: DUPLICATE_DIAL 状态（number -> 上次拨号时间戳），5 秒窗口同号去重
   const _lastDialByNumber = new Map();
 
+  // P-2 修复：记录"本程序上一次自动写入剪贴板的内容"。
+  //   原逻辑每次拨号都无条件 clipboard.writeText(number)，会把坐席刚复制的其它资料冲掉。
+  //   现在只在剪贴板为空、或内容仍是本程序上次写入的值时才写——
+  //   既保留"拨号后号码自动进剪贴板/号码框"的既有联动，又不会覆盖用户自己的复制内容。
+  let _lastAutoClipboard = '';
+
+  function _writeClipboardIfSafe(text) {
+    try {
+      const cur = clipboard.readText();
+      if (cur && cur !== _lastAutoClipboard) {
+        return false;   // 剪贴板里是用户自己的东西，不覆盖
+      }
+      clipboard.writeText(text);
+      _lastAutoClipboard = text;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ==================== HTTP 服务器 ====================
   const server = http.createServer((req, res) => {
     if (!isTrustedHttpRequest(req)) {
@@ -166,11 +186,11 @@ function createServer(deps) {
           fileLog('I', 'HTTP', pin, `拨号 ${cleanNumber} ${acked ? 'ACK已确认' : 'ACK超时'}`);
         });
 
-        try { clipboard.writeText(number); } catch (e) {}
+        _writeClipboardIfSafe(number);
 
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ success: true, number: number }));
-        console.log('[HTTP拨号] ' + number + ' (来自浏览器插件，已写入剪贴板)');
+        console.log('[HTTP拨号] ' + number + ' (来自浏览器插件)');
         return;
       }
 
@@ -192,7 +212,7 @@ function createServer(deps) {
       const cleanNumber = number.replace(/[\s\-\(\)]/g, '');
       fileLog('I', 'HTTP', targetPin, `手机不在线，触发唤醒 → 排队拨号: ${cleanNumber}`);
       const wakeSent = _tryWakePhone(targetPin);
-      try { clipboard.writeText(number); } catch (e) {}
+      _writeClipboardIfSafe(number);
 
       PhoneConnectionManager.queueDial(targetPin, cleanNumber).then(acked => {
         fileLog('I', 'HTTP', targetPin, `排队拨号 ${cleanNumber} ${acked ? '已补发' : '超时'}`);
@@ -343,12 +363,15 @@ function createServer(deps) {
           ws.isPhone = true;
           ws.devicePin = pin;
 
+          // P-8 修复③：不再固定传 isCloud:false。LAN 握手不应改变"云通道是否可用"这一状态——
+          //   原写法会把刚"从云端切到 LAN"的设备的 isCloud 冲成 false，而 getActiveDevice
+          //   要求 isCloud 才算云通道可用 → 云通道其实还活着却被判为不可用。
+          //   不传该字段时 registerDevice 保留既有值（新设备则默认 false）。
           PhoneConnectionManager.registerDevice(pin, {
             ip: clientIP,
             name: deviceName,
             alias: savedAlias,
-            ws,
-            isCloud: false
+            ws
           });
 
           activePhoneIdRef.current = PhoneConnectionManager.activePin;
@@ -477,7 +500,9 @@ function createServer(deps) {
 
     ws.on('close', () => {
       if (ws.isPhone && ws.devicePin) {
-        PhoneConnectionManager.removeDevice(ws.devicePin, 'lan');
+        // P-8 修复①：把这条连接本身传进去做归属校验，
+        // 避免"旧连接的断开回调把刚建好的新连接一起清掉"。
+        PhoneConnectionManager.removeDevice(ws.devicePin, 'lan', ws);
         activePhoneIdRef.current = PhoneConnectionManager.activePin;
         fileLog('I', 'LAN', ws.devicePin, 'LAN 连接关闭');
       }

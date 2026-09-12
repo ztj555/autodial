@@ -69,6 +69,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- v4.23 保活自查：进程被杀（未重启）场景下每 15 分钟尝试复活服务。
+             无 intent-filter，仅由 DialService/自身以显式 Intent 触发。 -->
+        <receiver
+            android:name=".KeepAliveReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

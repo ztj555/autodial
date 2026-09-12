@@ -229,7 +229,8 @@ async function uploadAdvisorName(pin, name) {
     const apiUrl = await getCloudApi();
     const encodedName = encodeURIComponent(name);
     const encodedPin = encodeURIComponent(pin);
-    const res = await fetch(`${apiUrl}/api/v1/advisor/register?pin=${encodedPin}&name=${encodedName}`);
+    // v4.23: 加 8 秒超时（fetchWithTimeout 已有），云端不可达时不再挂起调用链
+    const res = await fetchWithTimeout(`${apiUrl}/api/v1/advisor/register?pin=${encodedPin}&name=${encodedName}`, {}, 8000);
     const data = await res.json();
     if (data.ok) {
       console.log('[AutoDial BG] 顾问姓名已上传云端:', pin, '→', name);

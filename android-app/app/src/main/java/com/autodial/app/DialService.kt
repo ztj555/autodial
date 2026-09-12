@@ -388,6 +388,9 @@ class DialService : Service() {
 
             connectionManager.loadSavedConfig()
 
+            // v4.23: 保活自查——进程被杀（未重启）后由闹钟按 15 分钟周期尝试复活
+            scheduleKeepAliveWatchdog()
+
         } catch (e: Exception) {
             Log.e(TAG, "Service onCreate error: ${e.message}", e)
             isRunning = true
@@ -414,6 +417,9 @@ class DialService : Service() {
             try { registerScreenOnReceiver() } catch (_: Exception) {}
             try { registerSimSelectFallbackReceiver() } catch (_: Exception) {}
             try { connectionManager.loadSavedConfig() } catch (_: Exception) {}
+            // v4.23: 异常恢复路径补上数据同步（正常路径在 try 内已调用，此处幂等）
+            try { startDataSync() } catch (_: Exception) {}
+            try { scheduleKeepAliveWatchdog() } catch (_: Exception) {}
         }
     }
 
@@ -480,6 +486,14 @@ class DialService : Service() {
                     val number = intent.getStringExtra("number") ?: return START_STICKY
                     _sendResultToPC(number, "cancelled")
                 }
+                "DIAL" -> {
+                    // v4.23: App 内手动拨号（拨号盘/通话详情"立即拨号"）统一走 DialEngine——
+                    // 具备选卡弹层、本地记录、PC 回执，不再绕过主拨号链路
+                    val number = intent.getStringExtra("number") ?: ""
+                    if (number.isNotEmpty() && ::dialEngine.isInitialized) {
+                        dialEngine.dialNumber(number)
+                    }
+                }
             }
         } catch (e: Exception) { e.printStackTrace() }
         return START_STICKY
@@ -503,6 +517,13 @@ class DialService : Service() {
             FileLogger.shutdown()
             isRunning = false
             wakeLock?.release(); wakeLock = null
+            // v4.23: 服务正常销毁时撤销保活闹钟（由下次 onCreate 重新调度）
+            try {
+                val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                am.cancel(android.app.PendingIntent.getBroadcast(this, 2001,
+                    Intent(this, KeepAliveReceiver::class.java),
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE))
+            } catch (_: Exception) {}
             syncRunnable?.let { handler.removeCallbacks(it) }
             syncRunnable = null
             executor.shutdown()
@@ -842,6 +863,8 @@ class DialService : Service() {
     // ==================== 云中转数据同步 ====================
 
     private fun startDataSync() {
+        // v4.23: 幂等保护——异常恢复路径也会调用，避免重复 post 导致同步链路翻倍
+        if (syncRunnable != null) return
         lastSyncedCallId = getSharedPreferences("autodial", MODE_PRIVATE).getLong("last_synced_call_id", 0)
         syncRunnable = object : Runnable {
             override fun run() {
@@ -972,9 +995,36 @@ class DialService : Service() {
         return Pair(records, boundary)
     }
 
-    /** 上报一批通话记录，成功返回 true（失败保留水位线，下轮重试） */
+    /**
+     * 上报一批通话记录，成功返回 true（失败保留水位线，下轮重试）。
+     * v4.23: 优先 POST body——device_id/pin/记录不再进 URL（访问日志、代理都会记录 URL）。
+     * 若云端尚未升级到支持 POST 的版本，自动回退一次 GET，两种部署顺序下都能工作。
+     */
     private fun uploadCallBatch(baseUrl: String, deviceId: String, pin: String, records: JSONArray): Boolean {
         if (records.length() == 0) return true
+        return try {
+            val body = JSONObject().apply {
+                put("device_id", deviceId)
+                put("pin", pin)
+                put("data", records)
+            }.toString()
+            val conn = java.net.URL("$baseUrl/api/v1/calls/batch").openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 5000; conn.readTimeout = 5000
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val ok = conn.responseCode in 200..299
+            conn.disconnect()
+            if (ok) true else uploadCallBatchGet(baseUrl, deviceId, pin, records)
+        } catch (e: Exception) {
+            FileLogger.e("DialService", "syncCallRecords POST 上报异常: ${e.message}")
+            uploadCallBatchGet(baseUrl, deviceId, pin, records)
+        }
+    }
+
+    /** 旧版 GET 通道（兼容未升级的云端），仅作回退使用 */
+    private fun uploadCallBatchGet(baseUrl: String, deviceId: String, pin: String, records: JSONArray): Boolean {
         return try {
             val dataStr = java.net.URLEncoder.encode(records.toString(), "UTF-8")
             val urlStr = "$baseUrl/api/v1/calls/batch?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
@@ -991,6 +1041,36 @@ class DialService : Service() {
         } catch (e: Exception) {
             FileLogger.e("DialService", "syncCallRecords 上报异常: ${e.message}")
             false
+        }
+    }
+
+    // ==================== 保活自查（v4.23） ====================
+
+    /**
+     * 调度一次 15 分钟后的"保活自查"闹钟（由 KeepAliveReceiver 接力续期，自循环）。
+     * 场景：国产 ROM 杀后台后 START_STICKY 迟迟不重启服务，也无开机重启机会——
+     * 闹钟兜底拉起服务。即使系统策略拦截后台启动（Android 12+ 限制），也只退化为
+     * 原有的"不自愈"，不会产生副作用。
+     */
+    private fun scheduleKeepAliveWatchdog() {
+        try {
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi = android.app.PendingIntent.getBroadcast(
+                this, 2001,
+                Intent(this, KeepAliveReceiver::class.java),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // exact + allow-idle：Android 12+ 后台启动 FGS 的豁免条件之一；doze 下每 15 分钟一次在其限流内
+                am.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    android.os.SystemClock.elapsedRealtime() + 15 * 60 * 1000L, pi)
+            } else {
+                am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    android.os.SystemClock.elapsedRealtime() + 15 * 60 * 1000L, pi)
+            }
+        } catch (e: Exception) {
+            FileLogger.w("DialService", "保活自查调度失败: ${e.message}")
         }
     }
 

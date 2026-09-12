@@ -1183,7 +1183,7 @@
 
             if (id === 'dashboard') loadDashboard();
             else if (id === 'phones') loadPhones();
-            else if (id === 'calls') loadCalls();
+            else if (id === 'calls') { loadCallDeviceOptions(); loadCalls(); }
             else if (id === 'visits') { loadVisits(); if (!_timerRefresh) loadPinDropdown(); setTimeout(renderVisitChart, 300); }
             else if (id === 'pins') loadPins();
             else if (id === 'admin-accounts') loadAdminAccounts();
@@ -1495,7 +1495,7 @@
                 tbody.innerHTML = c.clients.slice(0, 10).map(function(cl) { return '<tr>' +
                     '<td><strong>' + esc(cl.device_name) + '</strong></td>' +
                     '<td><span class="badge badge-' + cl.role + '">' + (cl.role==='pc'?'PC':'手机') + '</span></td>' +
-                    '<td>' + (cl.pin||'') + '</td><td>' + (cl.ip||'') + '</td>' +
+                    '<td>' + (cl.pin?esc(cl.pin):'') + '</td><td>' + (cl.ip?esc(cl.ip):'') + '</td>' +
                     '<td>' + new Date(cl.connected_at).toLocaleString('zh-CN') + '</td>' +
                 '</tr>'; }).join('');
             }
@@ -1787,10 +1787,16 @@
             const d = await apiGet('/api/v1/devices');
             if (!d || !d.devices) return;
             const sel = document.getElementById('call-device-filter');
+            // v4.23: 每次切到通话记录页都刷新设备选项（新登记的手机立即可筛），
+            // 但保留用户已选中的筛选值，不因刷新被重置回"全部设备"
+            const prev = sel.value;
             sel.innerHTML = '<option value="">全部设备</option>';
             d.devices.forEach(function(dev) {
                 sel.innerHTML += '<option value="' + escA(dev.device_id||'') + '">' + esc((dev.device_id||'').slice(0,20)) + ' (' + esc(dev.device_model||'未知') + ')</option>';
             });
+            if (prev && Array.prototype.some.call(sel.options, function(o) { return o.value === prev; })) {
+                sel.value = prev;
+            }
         }
 
         // v4.21.2 (D-8): 导出改 fetch + Authorization 头 + blob 下载——

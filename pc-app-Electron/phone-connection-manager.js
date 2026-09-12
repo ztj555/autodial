@@ -261,14 +261,23 @@ const PhoneConnectionManager = {
      * @param {string} pin
      * @param {string} transport - 'lan' | 'cloud' | 'all'
      */
-    removeDevice(pin, transport) {
+    removeDevice(pin, transport, wsRef) {
         const device = this.devices.get(pin);
         if (!device) return;
 
         if (transport === 'lan') {
+            // P-8 修复①：server.js 收到新的 phone_hello 时会先 close 旧 LAN 连接再注册新连接，
+            //   而旧连接随后触发的 close 回调会把"新"连接一起清掉 → 表现为
+            //   "手机明明显示在线，拨号却没反应"。这里校验连接归属：只有回调来自当前
+            //   记录的那条连接（或调用方未传引用）才允许清空。
+            if (wsRef && device.ws && device.ws !== wsRef) {
+                this._logI(pin, '忽略过期 LAN 连接的断开回调（已有更新的连接在服务）');
+                return;
+            }
             device.ws = null;
             device.lastHeartbeat = 0;
             device.stale = true;
+            device.staleAt = Date.now();   // P-8 修复②：记录 stale 起点，供 TTL 清理使用
             this._logW(pin, `LAN 通道已断开, 标记 stale`);
             if (device.cloudWs) {
                 device.state = CONNECTION_STATES.CONNECTED;
@@ -668,8 +677,12 @@ const PhoneConnectionManager = {
     cleanupStaleDevices() {
         const now = Date.now();
         this.devices.forEach((device, pin) => {
-            if (device.stale && device.lastHeartbeat > 0 &&
-                (now - device.lastHeartbeat) > NEIGHBOR_TTL) {
+            // P-8 修复②：原判定要求 lastHeartbeat > 0，而 removeDevice 恰好把它清零，
+            //   导致这类 stale 设备永远不会被回收，长期挂在设备列表里（幽灵设备）。
+            //   改用 staleAt（断开那一刻）作为 TTL 基准。
+            const since = device.staleAt || device.lastHeartbeat || 0;
+            if (device.stale && since > 0 &&
+                (now - since) > NEIGHBOR_TTL) {
                 this._logI(pin, 'stale 设备 TTL 超时，移除');
                 this.devices.delete(pin);
                 // v6 规范8.3: 禁止自动切换
@@ -705,8 +718,11 @@ const PhoneConnectionManager = {
     _purgeDeadZombies() {
         const now = Date.now();
         for (const [pin, device] of this.devices) {
+            // P-8 修复②：同 cleanupStaleDevices —— lastHeartbeat 被 removeDevice 清零后，
+            //   `now - 0` 会让刚断开的设备被立刻清理。改用 staleAt 计时，行为可预期。
+            const since = device.staleAt || device.lastHeartbeat || 0;
             if (device.stale && !device.ws && !device.cloudWs &&
-                (now - device.lastHeartbeat) > NEIGHBOR_TTL) {
+                since > 0 && (now - since) > NEIGHBOR_TTL) {
                 this._logI(pin, '清理僵尸设备（stale + TTL过期 + 无通道）');
                 this.devices.delete(pin);
                 if (this.activePin === pin) this.activePin = null; // v6: 不自动切换

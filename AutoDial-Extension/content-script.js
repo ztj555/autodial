@@ -432,6 +432,8 @@
       });
 
       // ─── 点击拨号 ────────────────────────────────
+      // v4.23: 防连点——2 秒窗口内只发一次，避免连点触发两次拨号指令
+      let lastFloatDialClick = 0;
       floatEl.addEventListener('click', (e) => {
         // 比较按下和抬起的位置，超过 5px 视为拖动，不触发拨号
         const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
@@ -440,6 +442,9 @@
           flashFloat('未检测到号码', false);
           return;
         }
+        const now = Date.now();
+        if (now - lastFloatDialClick < 2000) return;
+        lastFloatDialClick = now;
         // v4.15: 点击立即进入"拨号中"状态（清除旧失败提示），结果回来后刷新
         flashFloat('拨号中…', undefined);
         chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
@@ -1270,7 +1275,10 @@
         srvStatus.textContent = '测试中...'; srvStatus.style.color = t.text2;
         try {
           const start = Date.now();
-          const r = await fetch(addr + '/health');
+          // v4.23: 加 8 秒超时——服务器地址填错时 fetch 可能挂很久，状态一直停在"测试中..."
+          const ctrl = new AbortController();
+          setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(addr + '/health', { signal: ctrl.signal });
           const d = await r.json();
           const ms = Date.now() - start;
           if (d.service) {
@@ -1727,8 +1735,19 @@
         dialLink.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('[AutoDial v4] 点击拨打:', phone);
-          chrome.runtime.sendMessage({ type: 'dial', phone });
+          // v4.23: 点击那一刻重新读取号码。SPA 框架会复用 <a> 节点（只改 href/文本），
+          // 闭包里的 phone 是首次拦截时的旧值——换客户后点击会拨错人（旧号码）。
+          let current = phone;
+          const href = dialLink.getAttribute('href') || '';
+          const hrefMatch = href.match(/1[3-9]\d{9}/);
+          if (hrefMatch) {
+            current = hrefMatch[0];
+          } else {
+            const textMatch = (dialLink.textContent || '').match(/1[3-9]\d{9}/);
+            if (textMatch) current = textMatch[0];
+          }
+          console.log('[AutoDial v4] 点击拨打:', current);
+          chrome.runtime.sendMessage({ type: 'dial', phone: current });
         });
         dialLink.classList.add('__ad-dial-link');
         dialLink.style.cssText += `;color:${T().accent}!important;font-weight:bold;`;

@@ -82,7 +82,17 @@ function createCloudRelayManager(deps) {
 
     const MAX_CLOUD_RETRY = 30;
     if (cloudReconnectAttempt >= MAX_CLOUD_RETRY) {
-      fileLog('W', 'Cloud', null, `云端重连达到上限(${MAX_CLOUD_RETRY}次), 停止自动重连, 等待手动触发`);
+      // P-4 修复：原逻辑达到上限即"永久停止自动重连"。夜间断网 / 云端维护后，
+      //   第二天不会自愈，用户表现为"手机连不上（电脑端），点了拨号没反应"，
+      //   只能重启程序。改为转入低频保活重试：每 5 分钟试一次，网络恢复即自动接回。
+      //   一旦连上，成功回调会把计数归零，恢复正常阶梯退避节奏。
+      const IDLE_RETRY_MS = 5 * 60 * 1000;
+      fileLog('W', 'Cloud', null,
+        `云端重连已达上限(${MAX_CLOUD_RETRY}次)，转入低频保活重试（每 ${IDLE_RETRY_MS / 60000} 分钟一次）`);
+      cloudReconnectTimer = setTimeout(() => {
+        cloudReconnectAttempt = MAX_CLOUD_RETRY;   // 维持"已超限"，继续低频探测
+        connectToFirst();
+      }, IDLE_RETRY_MS);
       return;
     }
 

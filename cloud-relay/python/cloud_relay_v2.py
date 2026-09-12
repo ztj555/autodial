@@ -1508,6 +1508,39 @@ def _get_device_default_pin(device_name):
         if conn:
             conn.close()
 
+
+def _device_registered(device_id):
+    """Y-1 修复（v4.23）：判断 device_id 是否为"曾通过 WS 握手注册过"的真实设备。
+
+    背景：手机端上报接口（calls/batch、events/log）原先完全无鉴权，服务又在公网
+    0.0.0.0 监听，任何人都能凭空伪造 device_id 批量灌入假通话记录、假设备，
+    污染统计报表。
+
+    为什么用"是否已注册"而不是要求管理员 token：手机端没有管理凭据，不能要求它
+    带 token。但设备上报**必然发生在 WS 已连接之后**（DialService 的上报受
+    isConnected 门控），而这之前 phone_hello 已把该 device_id 写入 phones 表。
+    而 device_id 是 App 生成的随机 UUID，外部无从猜起 → 足以挡住凭空伪造，
+    且不会误伤正常流程。
+
+    注意：云端以共享内存库降级运行时不落盘，重启后设备需重新握手——这与降级模式
+    自身的语义一致（降级本就意味着重启即丢）。
+    """
+    if not device_id:
+        return False
+    conn = None
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        c.execute('SELECT 1 FROM phones WHERE device_id = ? LIMIT 1', (device_id,))
+        return c.fetchone() is not None
+    except Exception as e:
+        log.warning(f'DEVICE_REGISTERED check failed device={device_id}: {e}')
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
 def _set_device_default_pin(device_name, pin):
     """设置/更新设备的默认 PIN"""
     conn = None
@@ -1924,24 +1957,33 @@ async def health_check_handler(path, request_headers):
 
     # ===== 管理员标记 =====
 
-    # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
-    # v4.21.2 (D-8): 兼容 POST body（{"user":..., "pass":...}）——凭据不进网址
+    # 管理员登录（仅接受 POST body：{"user":..., "pass":...}）
+    # Y-7修复(v4.23): 关闭 GET query 通道。原 `?user=&pass=` 会把口令写进浏览器历史、
+    #   服务器访问日志与 Referer；而本服务在公网明文 HTTP 上监听，风险不可接受。
+    #   旧 GET 调用返回明确提示（不采信其值，也不把口令写进日志）。
     if path == '/api/v1/login':
         # S6修复 + S5加固: 登录失败限频（60 秒窗口内每 (username, client_ip) 最多 5 次），
         # 防口令爆破且不再因他人失败而锁死管理员登录
         now_ts = time.time()
-        qs = parse_qs(parsed.query)
-        user = qs.get('user', [''])[0].strip()
-        pwd = qs.get('pass', [''])[0].strip()
+        user = ''
+        pwd = ''
         body_raw = _request_body.get()
         if body_raw:
             try:
                 _body_obj = json.loads(body_raw)
                 if isinstance(_body_obj, dict):
-                    user = str(_body_obj.get('user', user)).strip()
-                    pwd = str(_body_obj.get('pass', pwd)).strip()
+                    user = str(_body_obj.get('user', '')).strip()
+                    pwd = str(_body_obj.get('pass', '')).strip()
             except json.JSONDecodeError:
                 pass
+        if not user or not pwd:
+            # 兼容诊断：若仍用 GET 传凭据，明确告知改用 POST（绝不采信、绝不记录口令本身）
+            qs_probe = parse_qs(parsed.query)
+            if qs_probe.get('user') or qs_probe.get('pass'):
+                log.warning(f'LOGIN_VIA_GET_REJECTED ip={_login_client_ip(hdrs)} —— 请改用 POST body 提交凭据')
+                return (401, JSON_HDR, _err_json(
+                    'LOGIN_FAILED', '登录方式已更新：请使用 POST 提交账号密码（不再支持网址传参）'))
+            return (401, JSON_HDR, _err_json('LOGIN_FAILED', '请输入账号和密码'))
         client_ip = _login_client_ip(hdrs)
         fail_key = (user, client_ip)
         if len(_login_failures) > 2000:
@@ -1950,8 +1992,6 @@ async def health_check_handler(path, request_headers):
         if len(cur_failures) >= 5:
             _login_failures[fail_key] = cur_failures
             return (429, JSON_HDR, _err_json('RATE_LIMITED', '尝试过于频繁，请60秒后再试'))
-        if not user or not pwd:
-            return (401, JSON_HDR, _err_json('LOGIN_FAILED', '请输入账号和密码'))
         conn = None
         try:
             conn = _connect_db()
@@ -1983,8 +2023,15 @@ async def health_check_handler(path, request_headers):
 
     # 登出: GET /api/v1/logout?token=xxx
     if path == '/api/v1/logout':
-        qs = parse_qs(parsed.query)
-        token = qs.get('token', [''])[0]
+        # Y-7修复(v4.23): 优先从 Authorization 头取 token（面板已改为请求头方式），
+        # query 通道保留仅为兼容旧客户端——token 用后即失效，风险远低于口令。
+        token = ''
+        auth = hdrs.get('authorization', '')
+        if auth.startswith('Bearer '):
+            token = auth[7:]
+        if not token:
+            qs = parse_qs(parsed.query)
+            token = qs.get('token', [''])[0]
         _admin_sessions.pop(token, None)
         return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
 
@@ -2345,19 +2392,41 @@ async def health_check_handler(path, request_headers):
 
     # ===== 手机端数据上报 API =====
 
-    # 批量上传通话记录: GET /api/v1/calls/batch?device_id=xxx&pin=xxx&data=<json>
+    # 批量上传通话记录
+    #   v4.21: 兼容 POST body（{"device_id":..,"pin":..,"data":[...]}）——大 JSON 不进 GET URL / 访问日志
+    #   GET  /api/v1/calls/batch?device_id=xxx&pin=xxx&data=<json>（旧版 App 兼容保留）
+    #   Y-1修复(v4.23): 增加设备注册校验，杜绝公网凭空伪造上报
     if path == '/api/v1/calls/batch':
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0].strip()
         pin = qs.get('pin', [''])[0].strip()
         data_str = qs.get('data', [''])[0]
-        if not device_id or not data_str:
+        records = data_str  # 默认取 GET 的 JSON 字符串，下面统一解析
+        body_raw = _request_body.get()
+        if body_raw:
+            try:
+                body_obj = json.loads(body_raw)
+            except json.JSONDecodeError as e:
+                return (400, JSON_HDR, _err_json('INVALID_JSON', f'请求体 JSON格式错误: {e}'))
+            if not isinstance(body_obj, dict):
+                return (400, JSON_HDR, _err_json('INVALID_JSON', '请求体须为 JSON 对象'))
+            device_id = str(body_obj.get('device_id', device_id) or '').strip()
+            pin = str(body_obj.get('pin', pin) or '').strip()
+            records = body_obj.get('data', None)
+        if not device_id or records is None or records == '':
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和data不能为空'))
+        if not _device_registered(device_id):
+            log.warning(f'CALLS_BATCH rejected: unregistered device={device_id}')
+            return (403, JSON_HDR, _err_json(
+                'DEVICE_NOT_REGISTERED', '设备未在云端注册，请先在 App 内重新连接后再同步'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         inserted, skipped = 0, 0
         conn = None
         try:
-            records = json.loads(data_str)
+            if isinstance(records, str):
+                records = json.loads(records)
+            if not isinstance(records, list):
+                return (400, JSON_HDR, _err_json('INVALID_JSON', 'data 必须为 JSON 数组'))
             conn = _connect_db()
             c = conn.cursor()
             c.execute('''INSERT OR IGNORE INTO phones (device_id, last_pin, first_seen, last_seen)
@@ -2388,6 +2457,7 @@ async def health_check_handler(path, request_headers):
                 conn.close()
 
     # 上报行为事件: GET /api/v1/events/log?device_id=xxx&event_type=login&pin=xxx&detail=xxx
+    # Y-1修复(v4.23): 增加设备注册校验（原先无任何鉴权，公网可伪造灌入假设备/假事件）
     if path == '/api/v1/events/log':
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0].strip()
@@ -2396,6 +2466,10 @@ async def health_check_handler(path, request_headers):
         detail = qs.get('detail', [''])[0].strip()
         if not device_id or not event_type:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id和event_type不能为空'))
+        if not _device_registered(device_id):
+            log.warning(f'EVENTS_LOG rejected: unregistered device={device_id}')
+            return (403, JSON_HDR, _err_json(
+                'DEVICE_NOT_REGISTERED', '设备未在云端注册，请先在 App 内重新连接'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         conn = None
         try:
@@ -2655,7 +2729,13 @@ async def health_check_handler(path, request_headers):
         d_from = qs.get('d_from', [''])[0].strip()[:10]
         d_to = qs.get('d_to', [''])[0].strip()[:10]
         # S3修复: 仅明确携带单 PIN（手机端同步）可不鉴权；无筛选/按分组均涉及客户数据，必须管理员
-        if not pin:
+        # Y-2修复(v4.23): group 分支在下方 where 构造中优先级高于 pin 分支，而原判定只检查
+        #   "pin 是否为空" → 构造 "?pin=任意非空值&group=N" 即可绕过鉴权，无需管理员身份
+        #   就能读出整组客服名下的客户数据。改为：只要带 group（必然涉及他人数据）就必须管理员。
+        if group_id:
+            if not _check_admin(hdrs, parsed.query):
+                return _AUTH_ERR
+        elif not pin:
             if not _check_admin(hdrs, parsed.query):
                 return _AUTH_ERR
         try:
