@@ -59,10 +59,20 @@ for i, arg in enumerate(args):
 # ==================== 日志 ====================
 log_file_path = None
 
+def _data_dir():
+    """数据目录：优先 AUTODIAL_DATA_DIR 环境变量。
+    Y-11修复(v4.23)：此前日志与 stats.json 固定写 APPDATA or ~，Docker 容器里
+    两者都指向容器内部路径，容器重建即丢。Docker 部署时应设置
+    AUTODIAL_DATA_DIR 指向挂载卷（见 docker-compose.yml）。"""
+    env_dir = os.environ.get('AUTODIAL_DATA_DIR')
+    if env_dir:
+        return env_dir
+    return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')),
+                        'autodial-cloud-relay')
+
 def setup_logging():
     global log_file_path
-    app_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')),
-                            'autodial-cloud-relay')
+    app_data = _data_dir()
     os.makedirs(app_data, exist_ok=True)
     log_file_path = os.path.join(app_data, 'cloud-relay.log')
 
@@ -485,8 +495,7 @@ def save_stats():
     """Persist daily_stats to a JSON file"""
     global STATS_FILE
     if STATS_FILE is None:
-        app_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')),
-                                'autodial-cloud-relay')
+        app_data = _data_dir()
         os.makedirs(app_data, exist_ok=True)
         STATS_FILE = os.path.join(app_data, 'stats.json')
     try:
@@ -505,8 +514,7 @@ def load_stats():
     """Restore persisted stats from JSON file"""
     global STATS_FILE, total_messages, total_bytes_sent, total_bytes_received
     if STATS_FILE is None:
-        app_data = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')),
-                                'autodial-cloud-relay')
+        app_data = _data_dir()
         STATS_FILE = os.path.join(app_data, 'stats.json')
     if not os.path.exists(STATS_FILE):
         return

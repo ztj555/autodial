@@ -1206,6 +1206,12 @@
             const lr = document.getElementById('last-refresh');
             if (lr) lr.textContent = '-';
 
+            // v4.23 (M-4): 搜索防抖定时器跨页存活——切页后仍会触发旧页面的搜索请求，
+            // 请求结果虽然渲染到隐藏页无大碍，但白白占用请求配额且可能与新页刷新交错
+            clearTimeout(phoneSearchTimer); phoneSearchTimer = null;
+            clearTimeout(callSearchTimer); callSearchTimer = null;
+            clearTimeout(logSearchTimer); logSearchTimer = null;
+
             if (id === 'dashboard') loadDashboard();
             else if (id === 'phones') loadPhones();
             else if (id === 'calls') { loadCallDeviceOptions(); loadCalls(); }
@@ -1665,12 +1671,20 @@
                 var arrow = document.getElementById(m.rowId + '-arrow');
                 var parentRow = document.getElementById(m.rowId);
                 if (detailRow) { detailRow.classList.add('show'); if (arrow) arrow.classList.add('open'); if (parentRow) parentRow.classList.add('expanded'); }
-                if (detailRow && phoneHistoryCache[did]) renderPhoneHistoryDetail(detailRow, phoneHistoryCache[did]);
+                var _hc = getFreshPhoneHistory(did);
+                if (detailRow && _hc) renderPhoneHistoryDetail(detailRow, _hc);
             });
         }
 
-        // 存储已加载的历史数据
+        // 存储已加载的历史数据。v4.23 (M-3): 值改为 {history, at}，60 秒 TTL——
+        // 设备历史可能刚被顶号/换 PIN 更新，永不过期的缓存会让展开行一直显示陈旧数据
         let phoneHistoryCache = {};
+        function getFreshPhoneHistory(did) {
+            var c = phoneHistoryCache[did];
+            if (c && Date.now() - c.at < 60000) return c.history;
+            delete phoneHistoryCache[did];
+            return null;
+        }
         // v4.21.2 (13): 记录已展开的设备，刷新后恢复展开状态（原先每 15s 刷新把展开行折叠）
         let phoneExpanded = new Set();
         let phoneRowMap = {};   // deviceId -> {rowId, detailId}
@@ -1693,14 +1707,15 @@
                 if (deviceId) phoneExpanded.add(deviceId);
 
                 if (!deviceId) return;
-                if (phoneHistoryCache[deviceId]) {
-                    renderPhoneHistoryDetail(detailRow, phoneHistoryCache[deviceId]);
+                var _fresh = getFreshPhoneHistory(deviceId);
+                if (_fresh) {
+                    renderPhoneHistoryDetail(detailRow, _fresh);
                 } else {
                     detailRow.cells[0].innerHTML = '<div class="text-muted" style="text-align:center;padding:12px;"><span class="spin"></span>加载中...</div>';
                     try {
                         const r = await apiGet('/api/v1/device-history?device_id=' + encodeURIComponent(deviceId));
                         if (r && r.ok && r.history) {
-                            phoneHistoryCache[deviceId] = r.history;
+                            phoneHistoryCache[deviceId] = { history: r.history, at: Date.now() };
                             renderPhoneHistoryDetail(detailRow, r.history);
                         } else {
                             detailRow.cells[0].innerHTML = '<div class="text-muted" style="text-align:center;padding:12px;">暂无历史记录</div>';

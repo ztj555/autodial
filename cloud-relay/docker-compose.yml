@@ -19,6 +19,8 @@ services:
       - AUTODIAL_ADMIN_PASS=${AUTODIAL_ADMIN_PASS:-}
       # 显式启用 headless 启动（无托盘 + 接管 SIGTERM 优雅退出）
       - AUTODIAL_HEADLESS=1
+      # v4.23 (Y-11): 日志与 stats.json 落到挂载卷，容器重建不再丢失
+      - AUTODIAL_DATA_DIR=/app/data
     # docker stop 默认发 SIGTERM，需给足优雅退出（落盘 + 断开连接）的时间
     stop_grace_period: 15s
     logging:

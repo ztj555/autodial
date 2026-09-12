@@ -51,6 +51,8 @@ class DialService : Service() {
 
         var isRunning = false
             private set
+        /** A-10(v4.23): 同号拨号时间窗（number -> 上次拨号 elapsedRealtime），防双拨兜底 */
+        internal val lastDialAtByNumber = mutableMapOf<String, Long>()
         @Volatile var isActivityVisible = false
         @Volatile var wasActivityVisibleBeforeDial = false // v4.59: 记录拨号前 App 是否在前台
         var pendingBackgroundDialNumber: String? = null
@@ -252,9 +254,25 @@ class DialService : Service() {
                         val number = msg.optString("number", "")
                         FileLogger.i("DialService", "\u6536\u5230\u62e8\u53f7\u8bf7\u6c42: $number")
                         if (number.isNotEmpty() && ::dialEngine.isInitialized) {
-                            Log.d(TAG, "\u62e8\u53f7\u8bf7\u6c42: $number")
-                            Companion.wasActivityVisibleBeforeDial = isActivityVisible // v4.59: 记住拨号前状态
-                            dialEngine.dialNumber(number)
+                            // A-10修复(v4.23): 同号时间窗兜底。messageId 去重依赖 PC 端每次带 id，
+                            // 但浮窗连点/插件重试可能产生两个不同 id 的同号请求 → 真拨两次（双份话费）。
+                            // 4 秒窗口内同号直接忽略；真正的"重拨"用户隔几秒再点即可。
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val last = Companion.lastDialAtByNumber[number]
+                            if (last != null && now - last < 4000L) {
+                                FileLogger.w("DialService", "同号 $number 在 4 秒窗口内已拨，忽略重复请求")
+                            } else {
+                                Companion.lastDialAtByNumber[number] = now
+                                if (Companion.lastDialAtByNumber.size > 32) {
+                                    val keep = Companion.lastDialAtByNumber.entries
+                                        .sortedByDescending { it.value }.take(32)
+                                    Companion.lastDialAtByNumber.clear()
+                                    keep.forEach { Companion.lastDialAtByNumber[it.key] = it.value }
+                                }
+                                Log.d(TAG, "\u62e8\u53f7\u8bf7\u6c42: $number")
+                                Companion.wasActivityVisibleBeforeDial = isActivityVisible // v4.59: 记住拨号前状态
+                                dialEngine.dialNumber(number)
+                            }
                         }
                     }
                     "reconnect_request" -> {

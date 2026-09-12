@@ -45,6 +45,11 @@ class DialEngine(
     // simSlot -> (subscriptionId, handle)；subId 不一致即视为失效
     private val simHandleCache = mutableMapOf<Int, Pair<Int, PhoneAccountHandle?>>()
 
+    /** A-13(v4.23): 通话记录查询专用线程（避免阻塞主线程/WS 线程） */
+    private val hintExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "autodial-hint").apply { isDaemon = true }
+    }
+
     /** 当前 simSlot 对应的 subscriptionId；查不到（无卡/异常）返回 -1 */
     private fun currentSubscriptionId(simSlot: Int): Int {
         return try {
@@ -135,7 +140,10 @@ class DialEngine(
 
     fun dialNumber(number: String) {
         try {
-            notifyLastCallHint(number)
+            // A-13修复(v4.23): notifyLastCallHint 里有 ContentResolver 查询（系统 CallLog），
+            // 此前在调用方线程同步执行——从 onStartCommand("DIAL") 进来时是主线程，
+            // 通话记录大时卡顿甚至 ANR。挪到专用单线程池，结果广播晚几百毫秒无感知。
+            hintExecutor.execute { notifyLastCallHint(number) }
             if (androidx.core.content.ContextCompat.checkSelfPermission(service, Manifest.permission.CALL_PHONE)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 Log.e(TAG, "no CALL_PHONE permission")

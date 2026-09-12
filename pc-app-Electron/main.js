@@ -53,6 +53,12 @@ if (appSettings.pinCode) {
 }
 
 // ==================== 控制台日志劫持（需在 window 引用之前设置） ====================
+// P-10(v4.23): 配对码即手机号，日志中一律脱敏（138****1234）
+function _maskPin(pin) {
+  if (!pin) return '(未设置)';
+  const s = String(pin);
+  return s.length >= 7 ? s.slice(0, 3) + '****' + s.slice(-2) : '****';
+}
 const _logBuffer = [];
 function _pushLog(level, text) {
   const entry = { level, text, ts: Date.now() };
@@ -341,7 +347,8 @@ ipcMain.on('set-pin', (event, pin) => {
   network.PIN_CODE = pin;
   appSettings.pinCode = pin;
   saveSettings(appSettings);
-  console.log('[PIN] 已更新: ' + pin);
+  // P-10(v4.23): 配对码即客服本人手机号，日志（含日志面板回显）不再明文打印
+  console.log('[PIN] 已更新: ' + _maskPin(pin));
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('info-push', { pin: pin });
   if (floatBarWindow && !floatBarWindow.isDestroyed()) floatBarWindow.webContents.send('info-push', { pin: pin });
   if (smsWindow && !smsWindow.isDestroyed()) smsWindow.webContents.send('info-push', { pin: pin });
@@ -470,11 +477,16 @@ ipcMain.on('set-topmost', (event, enabled) => {
 
 // 获取系统信息
 ipcMain.handle('get-info', async () => {
+  // P-1修复(v4.23): 渲染端启动时读 info.connected / info.firewall 做首屏状态与
+  // 防火墙提示，主进程一直没返回这两个字段——全是死代码。补齐：
+  // connected = 当前有已连接手机；firewall = 'warning'（netsh 添加规则失败，需管理员）
   return {
     ip: LOCAL_IP,
     ips: network.getLocalIPs(),
     pin: network.PIN_CODE,
     port: PORT,
+    connected: !!getActivePhone(),
+    firewall: firewall.hasFirewallWarning() ? 'warning' : 'ok',
     cloudEnabled: appSettings.cloudEnabled,
     cloudServer: appSettings.cloudServer,
     cloudConnected: cloudRelay.isConnected()
@@ -877,7 +889,7 @@ app.whenReady().then(() => {
     console.log('       AutoDial PC v6 已启动');
     console.log('========================================');
     console.log('  本机IP:   ' + LOCAL_IP);
-    console.log('  配对码:   ' + network.PIN_CODE);
+    console.log('  配对码:   ' + _maskPin(network.PIN_CODE));
     console.log('  端口:     ' + PORT);
     console.log('  连接上限: ' + PhoneConnectionManager.MAX_CONNECTIONS + ' 台手机');
     console.log('========================================');
