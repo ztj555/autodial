@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.SystemClock
+import androidx.core.content.ContextCompat
 
 /**
  * v4.23 保活自查接收器。
@@ -55,7 +56,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             if (!hasPin || manual) return
 
             // 4) 复活服务
-            android.content.ContextCompat.startForegroundService(
+            ContextCompat.startForegroundService(
                 context, Intent(context, DialService::class.java))
         } catch (_: Exception) {
             // 任何异常都不传播：保活是锦上添花，不能成为新的崩溃源
