@@ -68,7 +68,7 @@ Query: ?name=张三&mobile=13900139000&kefu_tel=13800138000&visit_type=贷款咨
 
 #### GET /api/v1/visits?pin=xxx[&group=N] — 查询登记列表
 
-返回登记记录 JSON 数组（非 `{ok}` 包裹），按 `created_at` 降序。`pin` 查单个顾问（手机端同步使用，走 `X-AutoDial-PIN` 场景免管理员）；`group` 查整组；两者均缺省时返回最近 500 条——**无 `pin` 的查询（含按分组）需管理员鉴权 🔐**。
+返回登记记录 JSON 数组（非 `{ok}` 包裹），按 `created_at` 降序。`pin` 查单个顾问（手机端同步使用，走 `X-AutoDial-PIN` 场景免管理员）。**鉴权（v4.23）**：携带单个 `pin` 的精确查询免管理员；**按 `group` 查询或两者均缺省（返回最近 500 条）必须管理员鉴权 🔐**——分组编号可枚举，免鉴权等于整组客户数据对公网开放。
 
 #### GET /api/v1/visit/update?id=N&name=...&mobile=...&kefu_tel=...&visit_type=... — 更新记录（🔐 管理员）
 
@@ -138,15 +138,15 @@ Header: X-AutoDial-PIN: 13800138000
 
 | 端点 | 说明 |
 |------|------|
-| GET `/api/v1/calls/batch?device_id=&pin=&data=<json>` | 批量上传通话记录 |
-| GET `/api/v1/events/log?device_id=&event_type=&pin=&detail=` | 上报行为事件 |
+| POST/GET `/api/v1/calls/batch?device_id=&pin=&data=<json>` | 批量上传通话记录。**POST body** `{"device_id","pin","data":[...]}`（v4.23 起，推荐）；要求设备已注册且 pin 与登记 PIN 一致，否则 403 |
+| POST/GET `/api/v1/events/log?device_id=&event_type=&pin=&detail=` | 上报行为事件。支持 POST body（v4.23 起）；鉴权同 calls/batch |
 | GET `/api/v1/stats/report?device_id=&pin=&model=&version=&count=&duration=&connected=` | 上报每日统计快照 |
 | GET `/api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` | 通话记录查询 | 🔐 |
 | GET `/api/v1/phone-stats?device_id=` | 每日对账 | 🔐 |
 | GET `/api/v1/events?device_id=&event_type=&limit=` | 手机事件日志 | 🔐 |
 | GET `/api/v1/visits/batch?data=<json数组>` | 批量导入登记记录 | 🔐 |
 
-> 手机端上报端点（`calls/batch`、`events/log`、`stats/report`）走设备自身上报，无需管理员鉴权。
+> 手机端上报端点（`calls/batch`、`events/log`、`stats/report`）走设备自身上报，无需管理员鉴权。**v4.23 起** `calls/batch`、`events/log` 额外要求：`device_id` 已在 phones 表注册，且 `pin` 与该设备登记的 PIN 一致——伪造他人 device_id 或乱填 pin 一律 `403`（未注册设备先完成 WS 配对注册即可）。
 
 ### 错误码枚举
 
@@ -241,14 +241,16 @@ Header: X-AutoDial-PIN: 13800138000
 
 > v4.14 起：① 密码以 SHA-256（加盐）哈希存储，登录兼容旧明文记录并自动迁移；② 登录接口限频（60s 窗口失败超 5 次返回 `429 RATE_LIMITED`）；③ 敏感**读**端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`、`/api/v1/visits`（无 `pin` 时））同样要求管理员鉴权，防止客户隐私/设备信息泄露。
 >
+> **v4.23 起**：④ 登录仅接受 **POST body** `{"user":"","pass":""}`，GET query 通道关闭（误用返回 401 并提示改 POST，口令不再进 URL/访问日志）；⑤ `/api/v1/visits` 按 `group` 查询或无筛选也要求管理员鉴权（原 `?pin=任意&group=N` 可免鉴权读整组客户数据，属越权，已堵）。
+>
 > 初始管理员账号/密码由环境变量决定：`AUTODIAL_ADMIN_USER`（默认 `18335162275`）、`AUTODIAL_ADMIN_PASS`。**未设置 `AUTODIAL_ADMIN_PASS` 时首次启动会生成随机密码并只打印在服务日志里**，请从日志取值或直接注入环境变量（Docker 部署见 `docker-compose.yml`）。账号存于 SQLite `admin_accounts` 表，密码 SHA-256 加盐哈希，登录后请尽快修改。
 >
 > 登录限频按 `(用户名, 客户端 IP)` 维度计数。客户端 IP 默认取 TCP 对端地址；只有当请求确实经过可信反向代理时，才设置 `AUTODIAL_TRUST_PROXY=1` 采信 `X-Forwarded-For`（该头可被客户端伪造，开启前请确认代理一定会覆盖它）。
 
 | 端点 | 说明 | 鉴权 |
 |------|------|------|
-| `GET /api/v1/login?user=&pass=` | 管理员登录，返回 `{"ok":true,"token":...,"username":...}` | - |
-| `GET /api/v1/logout?token=` | 管理员登出 | - |
+| `POST /api/v1/login` | 管理员登录，body `{"user":"","pass":""}`，返回 `{"ok":true,"token":...,"username":...}`。v4.23 起仅接受 POST body | - |
+| `POST/GET /api/v1/logout` | 管理员登出。令牌优先走 `Authorization: Bearer` 头（`?token=` 保留兼容） | - |
 | `GET /api/v1/admin/accounts` | 列出管理账号 | 🔐 |
 | `GET /api/v1/admin/add?user=&pass=` | 添加管理账号 | 🔐 |
 | `GET /api/v1/admin/del?id=` | 删除管理账号（不可删最后一个） | 🔐 |

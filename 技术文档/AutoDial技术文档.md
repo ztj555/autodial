@@ -15,7 +15,7 @@
 
 > 各端版本号不统一（云端 API 报 4.10 / 面板 v6.0 / 扩展 5.0.0 / Android 4.53，代码注释中 v4.57 系开发批次号 / Electron 3.0.0）。文中的 v4.x 叙事指系统整体迭代批次。
 >
-> **v4.21（2026-09-11，综合复核 P0 批 + 管理员拍板追加，本地验证通过、待部署）**：REST 限流按端点分级（认证类 60 / 轮询类 240 / 业务类 600 每分钟/IP，解决"20 人共用出口 IP 被扩展轮询打爆、上门登记被 429"）；`/api/v1/visits/batch` 支持 POST body（websockets 对 HTTP 请求行 8192 字节硬上限，原 GET 200 条 JSON 约 20 行即整批静默失败），`_PeerProtocol.read_http_request()` 放行 POST；init_db 全新库初始化必炸修复（v4.17 潜伏雷：索引建在建表前，新库落 `:memory:` 数据重启即丢）；面板未登录/过期停止自动刷新；批量导入改 POST + 20 条/批；扩展授权轮询 5s→30s + 429 退避；扩展 dial/hangup/sms 读取响应体（PC 手机未连时 `200 {success:false}` 不再误报"已拨出/已挂断"，dial 落云端兜底）；Android `logEvent()` 接线（原零调用致 phone_events 恒空，拨号/短信结果上报）+ 通话同步权限缺失/上报失败可观测 + 首传水位线 DESC（先报最近记录）。**拍板追加（v4.21.1）**：局域网直连修通（Electron 监听 0.0.0.0 + WS verifyClient 改"带 Origin 必须可信/无 Origin 放行 + PIN 握手兜底"，HTTP 层回环校验保留，"检查防火墙"文案改准确指引）；PC `uncaughtException` 不再退出应用（记日志+弹一次提示继续运行）；PC 直连 `/dial` 补 5 秒同号去重（原仅云端有，双击会真拨两次）；本地库 50 台压测设备已清。**第二梯队（v4.21.2）**：C-4 授权握手改"配对成功再踢旧机"（待授权设备不再顶掉同 PIN 真机）；A-2 切换云服务器立即重连（"当前服务器"排到队首 + switchCloudServer）；C-1 REST 六个重端点（登记/列表/两个导出/设备/通话）DB 段移入线程池（导出期间不再卡全员 WS）；D-8 登录/加账号/改密码改 POST body、导出改 Authorization 头 + blob（凭据不再进网址）；面板 13 项打磨（hash 路由、自定义确认弹窗、改密下拉选账号、删假"详情"列、列宽 92→72、表头 12px、次要色对比度达 AA、定时软刷新不重置分页/筛选/展开、列表请求序号防覆盖、横幅错误计数、未登录中性文案）。复核实况：Android 14 前台服务（specialUse）已修无需动；配对码 deviceId（v4.16）已实施。**v4.19/v4.20**：面板状态可信度整改（统一请求层 + 401/429/断网全局横幅、假保存移除、通话导出服务端全量、自动刷新暂停/跳过编辑、表格横向滚动、搜索防抖、密码框遮罩）；云端 `/api/v1/calls/export` + 新设备广播 TypeError 修复。**v4.18**：面板分页/服务端导出 + REST 全局限频 + 顾问姓名 DO NOTHING。**v4.17**：登记 crm_id 唯一去重 + 2 小时窗口 + 离线补推重写 + 统计翻倍三重修复。**v4.16.1**：设备自动注册（未注册设备首连自动绑定当前 PIN 放行，env `AUTODIAL_AUTO_REGISTER=0` 关闭）；跨 PIN 授权文案改可操作提示。**v4.16**：设备唯一键改用 `deviceId`（Android 端复用 device_uuid，旧 APK 回退 deviceName）；Android 端 `auth_pending` 等待授权 UI（此前被静默丢弃只能干等 120s）；后台登录门禁（未登录仅显示登录页）；35440 Docker 数据库落持久卷（此前落在容器内，重建即丢）。设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备）。**v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
+> **v4.23（2026-09-12，场景化复核修复，CI 编译通过）**：安全收口——`/api/v1/visits` 按分组或无筛选必须管理员令牌（原 `?pin=任意&group=N` 免鉴权可读整组客户数据，单 PIN 精确查询仍免鉴权供手机端同步）；calls/batch、events/log 要求设备已注册且 pin 与登记 PIN 一致（伪造 device_id 返回 403），并支持 POST body（GET 保留兼容，新版 App 优先 POST 使凭据不进 URL）；`/api/v1/login` 仅接受 POST body（GET 通道关闭，误用返回 401 并提示）；logout 令牌优先走 Authorization 头（query 保留兼容）；压测脚本 `test_stress_live.py` 改 `--host/--port/--dry-run/preflight`，默认拒绝公网目标。体验修复——PC Electron：短信失败/超时回执（窗口不再卡死）、settings 原子写+损坏备份、云重连 30 次后转 5 分钟低频重试、removeDevice 连接归属校验、LAN 重连不覆盖 isCloud、关闭即退出清悬浮条、剪贴板同值不覆写；Android：KeepAliveReceiver 保活自查（进程被杀 15 分钟内复活，`setExactAndAllowWhileIdle`，exact alarm 属 Android 12+ FGS 后台启动豁免场景）、simHandleCache 绑定 subscriptionId（换卡不再拨错卡）、自动选卡预布防扩展到全厂商（非小米走"仅新窗口弹出"严格模式防误点通话界面）、manual_disconnect 不再被 Activity 重建复位、拨号盘/详情页拨号统一走 DialEngine（新增 DIAL action）、onCreate 异常路径补 startDataSync（幂等）、统计页 READ_CALL_LOG 去授权横幅、云端空响应不清空本地记录、上报改 POST；扩展：点击拨打实时读取号码（SPA 复用节点不再拨错人）、浮窗 2 秒防连点、测试连接与 uploadAdvisorName 加 8 秒超时；面板：recent-clients pin/ip 转义、通话记录设备筛选每次进页刷新且保留已选值。**v4.21（2026-09-11，综合复核 P0 批 + 管理员拍板追加，本地验证通过、待部署）**：REST 限流按端点分级（认证类 60 / 轮询类 240 / 业务类 600 每分钟/IP，解决"20 人共用出口 IP 被扩展轮询打爆、上门登记被 429"）；`/api/v1/visits/batch` 支持 POST body（websockets 对 HTTP 请求行 8192 字节硬上限，原 GET 200 条 JSON 约 20 行即整批静默失败），`_PeerProtocol.read_http_request()` 放行 POST；init_db 全新库初始化必炸修复（v4.17 潜伏雷：索引建在建表前，新库落 `:memory:` 数据重启即丢）；面板未登录/过期停止自动刷新；批量导入改 POST + 20 条/批；扩展授权轮询 5s→30s + 429 退避；扩展 dial/hangup/sms 读取响应体（PC 手机未连时 `200 {success:false}` 不再误报"已拨出/已挂断"，dial 落云端兜底）；Android `logEvent()` 接线（原零调用致 phone_events 恒空，拨号/短信结果上报）+ 通话同步权限缺失/上报失败可观测 + 首传水位线 DESC（先报最近记录）。**拍板追加（v4.21.1）**：局域网直连修通（Electron 监听 0.0.0.0 + WS verifyClient 改"带 Origin 必须可信/无 Origin 放行 + PIN 握手兜底"，HTTP 层回环校验保留，"检查防火墙"文案改准确指引）；PC `uncaughtException` 不再退出应用（记日志+弹一次提示继续运行）；PC 直连 `/dial` 补 5 秒同号去重（原仅云端有，双击会真拨两次）；本地库 50 台压测设备已清。**第二梯队（v4.21.2）**：C-4 授权握手改"配对成功再踢旧机"（待授权设备不再顶掉同 PIN 真机）；A-2 切换云服务器立即重连（"当前服务器"排到队首 + switchCloudServer）；C-1 REST 六个重端点（登记/列表/两个导出/设备/通话）DB 段移入线程池（导出期间不再卡全员 WS）；D-8 登录/加账号/改密码改 POST body、导出改 Authorization 头 + blob（凭据不再进网址）；面板 13 项打磨（hash 路由、自定义确认弹窗、改密下拉选账号、删假"详情"列、列宽 92→72、表头 12px、次要色对比度达 AA、定时软刷新不重置分页/筛选/展开、列表请求序号防覆盖、横幅错误计数、未登录中性文案）。复核实况：Android 14 前台服务（specialUse）已修无需动；配对码 deviceId（v4.16）已实施。**v4.19/v4.20**：面板状态可信度整改（统一请求层 + 401/429/断网全局横幅、假保存移除、通话导出服务端全量、自动刷新暂停/跳过编辑、表格横向滚动、搜索防抖、密码框遮罩）；云端 `/api/v1/calls/export` + 新设备广播 TypeError 修复。**v4.18**：面板分页/服务端导出 + REST 全局限频 + 顾问姓名 DO NOTHING。**v4.17**：登记 crm_id 唯一去重 + 2 小时窗口 + 离线补推重写 + 统计翻倍三重修复。**v4.16.1**：设备自动注册（未注册设备首连自动绑定当前 PIN 放行，env `AUTODIAL_AUTO_REGISTER=0` 关闭）；跨 PIN 授权文案改可操作提示。**v4.16**：设备唯一键改用 `deviceId`（Android 端复用 device_uuid，旧 APK 回退 deviceName）；Android 端 `auth_pending` 等待授权 UI（此前被静默丢弃只能干等 120s）；后台登录门禁（未登录仅显示登录页）；35440 Docker 数据库落持久卷（此前落在容器内，重建即丢）。设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备）。**v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
 
 ---
 
@@ -141,7 +141,7 @@ class PinGroup:
 | 端点 | 说明 |
 |------|------|
 | `/api/v1/visit?name=&mobile=&kefu_tel=&visit_type=&visit_time=` | 一键登记（支持 visit_time 纯增量去重） |
-| `/api/v1/visits?pin=&group=` | 查询登记列表（API 仅支持 pin/group 参数；unsynced、日期筛选是 dashboard 前端过滤；无 pin 时需管理员令牌） |
+| `/api/v1/visits?pin=&group=` | 查询登记列表（API 仅支持 pin/group 参数；unsynced、日期筛选是 dashboard 前端过滤）。**鉴权（v4.23）**：单 `pin` 精确查询免鉴权（手机端同步路径）；按 `group` 或无筛选必须管理员令牌 |
 | `/api/v1/visit/update?id=N&...` | 更新登记记录（🔐） |
 | `/api/v1/visit/delete?id=N` | 删除登记记录（🔐） |
 | `/api/v1/visits/batch?data=<JSON>&token=` | CRM 批量导入（🔐） |
@@ -162,11 +162,11 @@ class PinGroup:
 
 | 端点 | 说明 |
 |------|------|
-| `/api/v1/login?user=&pass=` | 管理员登录（返回令牌；限频 60s/5 次失败按 username+IP 维度，超限返回 429 `RATE_LIMITED`） |
-| `/api/v1/logout?token=` | 登出 |
+| `/api/v1/login` | 管理员登录，**POST body** `{"user":"","pass":""}`（返回令牌；限频 60s/5 次失败按 username+IP 维度，超限返回 429 `RATE_LIMITED`）。**v4.23 起仅接受 POST body**，GET query 通道关闭（误用返回 401 并提示改 POST） |
+| `/api/v1/logout` | 登出。v4.23 起令牌优先走 `Authorization: Bearer` 头（`?token=` query 保留兼容旧客户端） |
 | `/api/v1/admin/accounts` / `/add` / `/del` / `/chpwd` | 账号管理（🔐） |
 
-> v4.14 起管理员密码 SHA-256 加盐哈希存储（登录兼容旧明文并自动迁移）；敏感读端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`）同样需要管理员令牌；手机端上报端点（calls/batch、events/log、stats/report）无需令牌。
+> v4.14 起管理员密码 SHA-256 加盐哈希存储（登录兼容旧明文并自动迁移）；敏感读端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`）同样需要管理员令牌；`/api/v1/visits` 按分组或无筛选也要求管理员令牌（v4.23）；手机端上报端点无需管理员令牌，但 **calls/batch、events/log 自 v4.23 起要求设备已注册且 pin 与登记 PIN 一致**（伪造 device_id 返回 403；stats/report 暂不校验）。
 
 **设备与数据同步（v4.10+）**
 
@@ -177,10 +177,10 @@ class PinGroup:
 | `/api/v1/device-set-default-pin?device_id=&default_pin=` | 设置设备默认 PIN |
 | `/api/v1/device/update?device_id=&label=` | 设置设备别名 |
 | `/api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` | 通话记录查询+分页 |
-| `/api/v1/calls/batch?device_id=&pin=&data=<json>` | 批量通话记录上传（幂等去重，无需令牌） |
+| `/api/v1/calls/batch` | 批量通话记录上传（幂等去重）。**POST body** `{"device_id","pin","data":[...]}`（v4.23 起，推荐）或 GET `?device_id=&pin=&data=<json>`（兼容）。要求设备已注册且 pin 归属一致，否则 403（v4.23） |
 | `/api/v1/phone-stats?device_id=` | 每日对账数据（OK/MISMATCH） |
 | `/api/v1/events?device_id=&event_type=&limit=` | 手机行为事件日志 |
-| `/api/v1/events/log?device_id=&event_type=&pin=&detail=` | 上报行为事件（无需令牌） |
+| `/api/v1/events/log` | 上报行为事件。**POST body**（v4.23 起）或 GET `?device_id=&event_type=&pin=&detail=`（兼容）。鉴权同 calls/batch（v4.23） |
 | `/api/v1/stats/report?device_id=&pin=&count=&duration=&connected=` | 每日统计快照（服务器重算并对比，无需令牌） |
 | `/api/v1/kick?pin=&role=` | 踢出在线客户端 |
 | `/api/v1/auth/pending?pin=` | 查询挂起授权请求（同时登记扩展在线） |

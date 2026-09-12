@@ -84,6 +84,8 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   │   ├── requirements.txt         # Python 依赖
 │   │   ├── install.bat / build.bat  # 安装/构建脚本
 │   │   ├── test_cloud_relay_v2.py / test_cloud_relay.py / test_auth.py / test_batch_import.py / test_server_start.py / test_stress_50_users.py  # pytest 测试集
+│   │   ├── test_p0_fixes.py         # v4.22 回归：limit 钳制 / 内存降级共享 / loop 登记
+│   │   ├── test_stress_live.py      # 线上压测（v4.23 起加 --host 隔离：默认拒绝公网目标；用 `preflight --dry-run` 预检，压真实环境须显式 `--host <私网或localhost>`）
 │   │   └── docs/                    # 架构设计文档（Mermaid图）
 │   ├── Dockerfile / docker-compose.yml  # Docker 部署
 │   ├── start.bat                    # 快速启动脚本
@@ -217,7 +219,7 @@ cd pc-app-Electron && npm install && npm start
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/v1/visit?name=...&mobile=...&kefu_tel=...&visit_type=...&visit_time=...` | 一键登记（支持visit_time去重） |
-| GET | `/api/v1/visits?pin=...&group=...&days=...&source=...&d_from=...&d_to=...&page=...&page_size=...` | 查询登记列表。服务端已支持 `days`（最近 N 天）、`source`（`plugin`/`phone`/`crm_sync`/`unsynced`）、`d_from`/`d_to`（按 `COALESCE(visit_time, created_at)` 比较）以及 `page`/`page_size` 服务端分页；无 `pin`/`group` 筛选时需管理员令牌（v4.21 起上述筛选均已下推到服务端，不再依赖前端过滤） |
+| GET | `/api/v1/visits?pin=...&group=...&days=...&source=...&d_from=...&d_to=...&page=...&page_size=...` | 查询登记列表。服务端已支持 `days`（最近 N 天）、`source`（`plugin`/`phone`/`crm_sync`/`unsynced`）、`d_from`/`d_to`（按 `COALESCE(visit_time, created_at)` 比较）以及 `page`/`page_size` 服务端分页。**鉴权（v4.23）**：携带单个 `pin` 的精确查询免鉴权（手机端同步路径）；**按 `group` 查询或无筛选必须管理员令牌**（group 编号可枚举，免鉴权会泄露整组客户数据）（v4.21 起上述筛选均已下推到服务端，不再依赖前端过滤） |
 | GET | `/api/v1/visit/update?id=N&...` | 更新登记记录（🔐 管理员） |
 | GET | `/api/v1/visit/delete?id=N` | 删除登记记录（🔐 管理员） |
 
@@ -243,8 +245,8 @@ cd pc-app-Electron && npm install && npm start
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| GET | `/api/v1/login?user=...&pass=...` | 管理员登录（返回令牌；限频 60s/5 次失败） |
-| GET | `/api/v1/logout?token=...` | 登出 |
+| POST | `/api/v1/login` | 管理员登录，body `{"user":"...","pass":"..."}`（返回令牌；限频 60s/5 次失败）。**v4.23 起仅接受 POST body**，GET query 通道关闭（口令不再进网址/访问日志） |
+| POST/GET | `/api/v1/logout` | 登出。**v4.23 起**令牌走 `Authorization: Bearer` 头（`?token=` query 通道保留兼容） |
 | GET | `/api/v1/admin/accounts` | 管理账号列表（🔐） |
 | GET | `/api/v1/admin/add?user=...&pass=...` | 添加管理账号（🔐） |
 | GET | `/api/v1/admin/del?id=N` | 删除管理账号（🔐） |
@@ -261,10 +263,10 @@ cd pc-app-Electron && npm install && npm start
 | GET | `/api/v1/device-set-default-pin?device_id=...&default_pin=...` | 设置设备默认 PIN |
 | GET | `/api/v1/device/update?device_id=...&label=...` | 设置设备别名 |
 | GET | `/api/v1/calls?device_id=&pin=&date_from=&date_to=&number=&limit=&offset=` | 通话记录查询+分页 |
-| GET | `/api/v1/calls/batch?device_id=...&pin=...&data=<json>` | 批量通话记录上传 |
+| POST/GET | `/api/v1/calls/batch?device_id=...&pin=...&data=<json>` | 批量通话记录上传。**v4.23 起支持 POST body** `{"device_id","pin","data":[...]}`（推荐，凭据与记录不进 URL）；GET 保留兼容。**鉴权（v4.23）**：设备须已注册（phones 表存在）且 `pin` 与该设备登记 PIN 一致，否则 403 |
 | GET | `/api/v1/phone-stats?device_id=...` | 每日对账数据 |
 | GET | `/api/v1/events?device_id=&event_type=&limit=` | 手机行为事件日志 |
-| GET | `/api/v1/events/log?device_id=...&event_type=...` | 上报行为事件 |
+| POST/GET | `/api/v1/events/log?device_id=...&event_type=...` | 上报行为事件。**v4.23 起支持 POST body**；鉴权同 calls/batch（设备已注册 + pin 归属一致，否则 403） |
 | GET | `/api/v1/stats/report?device_id=...&...` | 每日统计快照 |
 | GET | `/api/v1/kick?pin=...&role=...` | 踢出在线客户端 |
 | GET | `/api/v1/visits/batch?data=<JSON>&token=...` | 批量导入登记 |
@@ -402,7 +404,7 @@ curl http://localhost:35430/health
 # 预期: {"service": "AutoDial Cloud Relay", "version": "4.10", "port": 35430, ...}
 ```
 
-**安全配置（v4.14 起）**：管理员默认账号 `18335162275` / 初始密码 `123456`（SHA-256 加盐哈希存储），**首次登录后立即修改**；登录限频 60s/5 次（超限返回 `RATE_LIMITED`）；除 `/health`、`/`、`/api/v1/dial`、`/api/v1/visit` 等业务端点外，管理/统计/客户数据读端点均需管理员令牌（`?token=` 或 `Authorization: Bearer`）；手机端上报端点（calls/batch、events/log、stats/report）无需令牌。
+**安全配置（v4.14 起，v4.23 收紧）**：管理员默认账号 `18335162275` / 初始密码 `123456`（SHA-256 加盐哈希存储），**首次登录后立即修改**；登录限频 60s/5 次（超限返回 `RATE_LIMITED`），**登录仅接受 POST body**（v4.23）；除 `/health`、`/`、`/api/v1/dial`、`/api/v1/visit` 等业务端点外，管理/统计/客户数据读端点均需管理员令牌（`?token=` 或 `Authorization: Bearer`）；`/api/v1/visits` 按分组或无筛选查询也要求管理员令牌（v4.23）；手机端上报端点（calls/batch、events/log、stats/report）无需管理员令牌，但 **calls/batch 与 events/log 要求设备已注册且 pin 归属一致（v4.23）**，伪造 device_id 返回 403。
 
 **双实例部署（35430 + 35440）**：`python cloud_relay_v2.py --port 35430 &` + `python cloud_relay_v2.py --port 35440 &`（1Panel 两容器或 Supervisor 两进程）。
 
