@@ -1479,7 +1479,8 @@
 
     // ─── HTML 转义 ──────────────────────────────────
     function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      // v4.23 (E-11): 补引号转义——输出若落在 HTML 属性内（如 title/value）不再可注入
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     // ─── 一键登记确认弹窗 ────────────────────────────

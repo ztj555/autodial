@@ -1254,7 +1254,8 @@
 
         function doLogout() {
             const token = getSessionToken();
-            if (token) fetch(API_BASE + '/api/v1/logout?token=' + token).catch(function(){});
+            // v4.23 (M-2): token 改走 Authorization 头，不再拼 URL（与服务端 Y-7 修复配套）
+            if (token) fetch(API_BASE + '/api/v1/logout', { headers: { 'Authorization': 'Bearer ' + token } }).catch(function(){});
             clearSessionToken();
             location.reload();
         }

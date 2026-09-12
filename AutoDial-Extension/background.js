@@ -602,7 +602,9 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function notifyTab(tabId, msg) {
   if (tabId) {
-    chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }).catch(() => {});
+    // v4.23 (E-5): 不再限定 frameId:0——iframe 内的浮窗也要收到拨号结果；
+    // 无监听的帧 catch 掉即可
+    chrome.tabs.sendMessage(tabId, msg).catch(() => {});
   }
 }
 
@@ -634,10 +636,10 @@ async function maybeSwitchPin(newPhone, precise, tabId) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender?.tab?.id;
 
-  // 客户手机号检测（子iframe -> 顶层页面转发）
+  // 客户手机号检测（子iframe -> 转发给全部帧，v4.23 E-5：iframe 内浮窗也要更新号码）
   if (msg.type === 'phoneDetected') {
     if (tabId) {
-      chrome.tabs.sendMessage(tabId, { type: 'updatePhone', phone: msg.phone }, { frameId: 0 }).catch(() => {});
+      chrome.tabs.sendMessage(tabId, { type: 'updatePhone', phone: msg.phone }).catch(() => {});
     }
     return;
   }
