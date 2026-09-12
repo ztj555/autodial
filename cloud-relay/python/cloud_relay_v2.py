@@ -1280,7 +1280,13 @@ async def handle_connection(ws, path=None):
 def configure_firewall():
     """自动配置 Windows 防火墙规则（需要管理员权限）"""
     import subprocess
-    
+
+    # Y-14修复(v4.23): netsh 是 Windows 独有命令。此前无平台判断，
+    # Linux/Docker 每次启动都白跑两趟 netsh 并刷两条 error 日志（噪音+困惑）。
+    if not sys.platform.startswith('win'):
+        log.info('非 Windows 平台，跳过防火墙自动配置')
+        return
+
     rules = [
         (f'AutoDial Cloud Relay (WebSocket {PORT})', PORT),
     ]
@@ -3585,7 +3591,10 @@ async def shutdown():
     await stop_server()
     if tray_icon:
         tray_icon.stop()
-    sys.exit(0)
+    # Y-10修复(v4.23): 协程里的 sys.exit 抛 SystemExit 只会终止运行事件循环的线程
+    # （托盘路径下 loop 在子线程），主线程的托盘图标残留成"僵尸进程"。
+    # 走到这里说明落盘与停服已完成，直接结束整个进程即为用户点「退出」的预期。
+    os._exit(0)
 
 def run_tray():
     """在主线程运行托盘图标"""

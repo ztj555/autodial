@@ -419,7 +419,19 @@ async function registerVisit(name, phone, tabId, managerName) {
 
 // ==================== v4.17: 云端登记暂存队列 ====================
 // CRM 成功但云端不可达时入队；SW 启动/下次登记成功时自动补推（crm_id 保证云端去重）
-async function queueCloudVisit(paramsObj, pin) {
+//
+// v4.23: 队列读写串行化。flush 一次要跑数秒（逐条补推 + 150ms 间隔），期间任何
+// queueCloudVisit 的 get→push→set 都会被 flush 结尾的 set(remain) 覆盖——
+// 补推期间新登记的记录直接丢失。用 promise 链把所有读写排队，保证原子。
+let _visitQueueChain = Promise.resolve();
+
+function queueCloudVisit(paramsObj, pin) {
+  const p = _visitQueueChain.then(() => _queueCloudVisitLocked(paramsObj, pin));
+  _visitQueueChain = p.catch(() => {});
+  return p;
+}
+
+async function _queueCloudVisitLocked(paramsObj, pin) {
   try {
     const s = await chrome.storage.local.get(['pending_cloud_visits']);
     const arr = s.pending_cloud_visits || [];
@@ -432,7 +444,13 @@ async function queueCloudVisit(paramsObj, pin) {
   }
 }
 
-async function flushCloudVisits() {
+function flushCloudVisits() {
+  const p = _visitQueueChain.then(() => _flushCloudVisitsLocked());
+  _visitQueueChain = p.catch(() => {});
+  return p;
+}
+
+async function _flushCloudVisitsLocked() {
   try {
     const s = await chrome.storage.local.get(['pending_cloud_visits']);
     const arr = s.pending_cloud_visits || [];

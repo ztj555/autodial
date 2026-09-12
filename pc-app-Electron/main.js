@@ -833,6 +833,22 @@ ipcMain.on('connect-cloud-specific', (event, serverUrl) => {
 
 // ==================== 应用生命周期 ====================
 
+// P-3修复(v4.23): 单实例锁。双开后第二个实例会占用同一 LAN/发现端口
+// （静默失败或互相抢），手机端连到谁全凭运气。拿不到锁直接退出，
+// 并把焦点拉回已有实例的主窗口。
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
   // 防火墙
   firewall.tryAddFirewallRule(PORT, DISCOVERY_PORT, fileLog);

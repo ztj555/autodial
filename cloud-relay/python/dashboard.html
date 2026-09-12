@@ -1142,6 +1142,31 @@
             });
         }
 
+        // ==================== v4.23: Esc 关闭最上层弹窗 ====================
+        // 只处理已打开的（.active）弹窗；确认弹窗走取消按钮回调，保证 Promise 正常 resolve(false)
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            var order = ['confirm-modal', 'import-modal', 'visit-edit-modal'];
+            for (var i = 0; i < order.length; i++) {
+                var ov = document.getElementById(order[i]);
+                if (ov && ov.classList.contains('active')) {
+                    if (order[i] === 'confirm-modal') {
+                        var c = document.getElementById('confirm-cancel');
+                        if (c && typeof c.onclick === 'function') c.onclick();
+                        else ov.classList.remove('active');
+                    } else if (order[i] === 'visit-edit-modal' && typeof closeEditModal === 'function') {
+                        closeEditModal();
+                    } else if (order[i] === 'import-modal' && typeof closeImportModal === 'function') {
+                        closeImportModal();
+                    } else {
+                        ov.classList.remove('active');
+                    }
+                    e.preventDefault();
+                    return;
+                }
+            }
+        });
+
         // ==================== 侧边栏（移动端） ====================
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('open');
