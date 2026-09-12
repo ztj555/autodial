@@ -808,7 +808,7 @@
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg></div>系统信息</div>
                     <dl class="info-list">
-                        <div class="info-row"><dt>服务版本</dt><dd><strong>6.0 (Sky Design System)</strong></dd></div>
+                        <div class="info-row"><dt>服务版本</dt><dd><strong id="svc-version">-</strong></dd></div>
                         <div class="info-row"><dt>API 端点</dt><dd><code id="api-url">-</code></dd></div>
                         <div class="info-row"><dt>数据库</dt><dd><code>visits.db (SQLite)</code></dd></div>
                         <div class="info-row"><dt>WebSocket</dt><dd>同端口 ping_interval=30s ping_timeout=90s</dd></div>
@@ -1492,6 +1492,8 @@
             const he = document.getElementById('hero-port'); if (he) he.textContent = d.port;
             const hu = document.getElementById('hero-uptime'); if (hu) hu.textContent = fmtUptime(d.uptime_seconds);
             const hc = document.getElementById('hero-conn'); if (hc) hc.textContent = d.total_connections;
+            // v4.23 (M-8): 系统信息页显示真实服务版本（此前写死"设计系统 6.0"，易误判线上版本）
+            const sv = document.getElementById('svc-version'); if (sv) sv.textContent = d.version || '-';
 
             document.getElementById('stat-today-dials').textContent = d.today_dials || 0;
             document.getElementById('stat-today-visits').textContent = d.today_visits || 0;

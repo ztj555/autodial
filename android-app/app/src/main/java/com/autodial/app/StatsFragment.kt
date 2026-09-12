@@ -636,9 +636,14 @@ class StatsFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
+                // v4.23 (A-9): 带上具体原因——此前统一"请检查云端连接"，超时/401/地址错分不清
+                val reason = e.message?.trim()?.take(60)
                 refreshHandler.post {
                     if (isAdded) {
-                        Toast.makeText(requireContext(), "❌ 同步失败，请检查云端连接", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(),
+                            if (reason.isNullOrEmpty()) "❌ 同步失败，请检查云端连接"
+                            else "❌ 同步失败: $reason",
+                            Toast.LENGTH_SHORT).show()
                         resetSyncBtn()
                     }
                 }

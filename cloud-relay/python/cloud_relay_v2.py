@@ -39,6 +39,9 @@ from websockets.exceptions import InvalidMessage
 # ==================== 配置 ====================
 DEFAULT_PORT = 35430
 PORT = DEFAULT_PORT
+# v4.23 (M-8): 服务版本单一来源——/health、/api/status 与面板"系统信息"统一显示，
+# 此前面板展示"设计系统 6.0"、接口硬编码 '4.10'，排查问题时易误判线上版本
+APP_VERSION = '4.23'
 # Fix D4: Web 管理界面和 WebSocket 共用 PORT, WEB_PORT 已废弃
 
 # v4.16.1: 设备自动注册（内部部署便捷模式）。
@@ -1682,7 +1685,7 @@ async def health_check_handler(path, request_headers):
     if path == '/health':
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '4.10',
+            'version': APP_VERSION,
             'port': PORT,
             'uptime_seconds': get_uptime_seconds(),
             'total_connections': len(ws_connections),
@@ -1751,7 +1754,7 @@ async def health_check_handler(path, request_headers):
 
         body = json.dumps({
             'service': 'AutoDial Cloud Relay',
-            'version': '4.10',
+            'version': APP_VERSION,
             'port': PORT,
             'uptime_seconds': get_uptime_seconds(),
             'total_connections': len(ws_connections),
