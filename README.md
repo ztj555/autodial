@@ -176,7 +176,7 @@ pip install "websockets>=12,<14" pystray Pillow
 python cloud_relay_v2.py
 ```
 
-> ⚠️ **依赖版本提示**：代码使用 `websockets.legacy.server`（14.0 起弃用但**从未移除**，最新版仍可导入，不会 `ImportError`）。建议安装时钉死 `websockets<14` 以锁定仍受支持的版本（防御性）。云中继 `Dockerfile` 中 `pip install ... websockets>=12.0 ...` 未加引号，`>` 会被 shell 解析为重定向、版本约束实际不生效（详见《Bug检查报告-2026-08-21.md》PY-P0-2，已降级为 P2）。
+> ⚠️ **依赖版本提示**：代码使用 `websockets.legacy.server`（14.0 起弃用但**从未移除**，最新版仍可导入，不会 `ImportError`）。建议安装时钉死 `websockets<14` 以锁定仍受支持的版本（防御性）。云中继 `Dockerfile` 中 `pip install ... websockets>=12.0 ...` 未加引号，`>` 会被 shell 解析为重定向、版本约束实际不生效（2026-08-21 审计发现 PY-P0-2，已降级为 P2；原始报告已归档删除，见 git 历史）。
 
 启动后 WebSocket + REST API + Web 面板均监听 35430 端口。生产部署建议使用 Docker 或 Supervisor（见下文「部署」章节）。
 
@@ -468,5 +468,5 @@ ufw allow 35430/tcp        # 云中继端口（腾讯云安全组另加入站规
 5. PC 端和云中继可同时运行，扩展自动优先 PC 直连
 6. 管理员默认账号 `18335162275 / 123456`（哈希存储），首次登录后请立即修改
 7. PC 端本地端口 35432 仅接受回环 Host + 可信来源（Chrome 扩展/本机程序），外部网页无法直接拨号
-8. 2026-08-22 已依据《Bug检查报告-2026-08-21.md》完成四批 49 点修复（P0 有效 9 项全部处理 + 精选 P1 + 中危清理），详见 CHANGELOG.md；剩余建议单独立项项（REST 线程池化、HTTPS 迁移、PIN 误检测设计取舍）见 CHANGELOG 与报告
+8. 2026-08-22 完成四批 49 点修复（P0 有效 9 项全部处理 + 精选 P1 + 中危清理，原始审计报告已整合删除），详见 CHANGELOG.md；剩余建议单独立项项（REST 线程池化、HTTPS 迁移、PIN 误检测设计取舍）见 CHANGELOG 与《未闭环问题清单-2026-09-12.md》
 9. 文档体系：技术细节见 `技术文档/AutoDial技术文档.md`，UI 规范见 `技术文档/AutoDial-UI设计文档.md`，测试场景/审计/QA 清单见 `测试与质量.md`，导航见 `技术文档/README.md`
