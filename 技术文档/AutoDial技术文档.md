@@ -1,6 +1,6 @@
 # AutoDial 技术文档
 
-> 合并自原《AutoDial总技术文档》《AutoDial云端技术文档》《AutoDial-手机端技术文档》《AutoDial浏览器插件端技术文档》《AutoDial电脑端技术文档》。修订：2026-09-10 | v4.16.1（设备唯一键 deviceId + 自动注册 + 等待授权 UI + 后台登录门禁 + 35440 数据落卷）
+> 合并自原《AutoDial总技术文档》《AutoDial云端技术文档》《AutoDial-手机端技术文档》《AutoDial浏览器插件端技术文档》《AutoDial电脑端技术文档》。修订：2026-09-11 | v4.21.2（第二梯队：授权不误踢 + 切服务器立即重连 + REST 重端点线程池 + 面板凭据出网址 + 13 项打磨）
 
 ## 版本现状（各端独立演进）
 
@@ -8,14 +8,14 @@
 |------|--------|--------|----------|
 | **Electron PC 端** | **v3.0.0** | Node.js + Electron | PIN（4位或11位纯数字） |
 | **Go/Wails PC 端** | **v1.0.0** | Go + Wails v2.12 | PIN（4位或11位纯数字） |
-| **云中继（主）** | **v4.16.1**（`/health` API 报 4.10） | Python + websockets + SQLite | PIN（4位或11位纯数字） |
+| **云中继（主）** | **v4.21.2**（`/health` API 报 4.10） | Python + websockets + SQLite | PIN（4位或11位纯数字） |
 | **Chrome 扩展** | **v5.0.0** | MV3 + Service Worker | X-AutoDial-PIN Header |
 | **Android 端** | **v4.53** | Kotlin + OkHttp | PIN + WS 双通道 |
 | **云端管理面板** | **v6.0**（Sky Design System） | dashboard.html + Chart.js | 管理员账号（SHA-256 加盐哈希） |
 
 > 各端版本号不统一（云端 API 报 4.10 / 面板 v6.0 / 扩展 5.0.0 / Android 4.53，代码注释中 v4.57 系开发批次号 / Electron 3.0.0）。文中的 v4.x 叙事指系统整体迭代批次。
 >
-> **v4.16.1**：设备自动注册（未注册设备首连自动绑定当前 PIN 放行，env `AUTODIAL_AUTO_REGISTER=0` 关闭）；跨 PIN 授权文案改可操作提示。**v4.16**：设备唯一键改用 `deviceId`（Android 端复用 device_uuid，旧 APK 回退 deviceName）；Android 端 `auth_pending` 等待授权 UI（此前被静默丢弃只能干等 120s）；后台登录门禁（未登录仅显示登录页）；35440 Docker 数据库落持久卷（此前落在容器内，重建即丢）。设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备）。**v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
+> **v4.21（2026-09-11，综合复核 P0 批 + 管理员拍板追加，本地验证通过、待部署）**：REST 限流按端点分级（认证类 60 / 轮询类 240 / 业务类 600 每分钟/IP，解决"20 人共用出口 IP 被扩展轮询打爆、上门登记被 429"）；`/api/v1/visits/batch` 支持 POST body（websockets 对 HTTP 请求行 8192 字节硬上限，原 GET 200 条 JSON 约 20 行即整批静默失败），`_PeerProtocol.read_http_request()` 放行 POST；init_db 全新库初始化必炸修复（v4.17 潜伏雷：索引建在建表前，新库落 `:memory:` 数据重启即丢）；面板未登录/过期停止自动刷新；批量导入改 POST + 20 条/批；扩展授权轮询 5s→30s + 429 退避；扩展 dial/hangup/sms 读取响应体（PC 手机未连时 `200 {success:false}` 不再误报"已拨出/已挂断"，dial 落云端兜底）；Android `logEvent()` 接线（原零调用致 phone_events 恒空，拨号/短信结果上报）+ 通话同步权限缺失/上报失败可观测 + 首传水位线 DESC（先报最近记录）。**拍板追加（v4.21.1）**：局域网直连修通（Electron 监听 0.0.0.0 + WS verifyClient 改"带 Origin 必须可信/无 Origin 放行 + PIN 握手兜底"，HTTP 层回环校验保留，"检查防火墙"文案改准确指引）；PC `uncaughtException` 不再退出应用（记日志+弹一次提示继续运行）；PC 直连 `/dial` 补 5 秒同号去重（原仅云端有，双击会真拨两次）；本地库 50 台压测设备已清。**第二梯队（v4.21.2）**：C-4 授权握手改"配对成功再踢旧机"（待授权设备不再顶掉同 PIN 真机）；A-2 切换云服务器立即重连（"当前服务器"排到队首 + switchCloudServer）；C-1 REST 六个重端点（登记/列表/两个导出/设备/通话）DB 段移入线程池（导出期间不再卡全员 WS）；D-8 登录/加账号/改密码改 POST body、导出改 Authorization 头 + blob（凭据不再进网址）；面板 13 项打磨（hash 路由、自定义确认弹窗、改密下拉选账号、删假"详情"列、列宽 92→72、表头 12px、次要色对比度达 AA、定时软刷新不重置分页/筛选/展开、列表请求序号防覆盖、横幅错误计数、未登录中性文案）。复核实况：Android 14 前台服务（specialUse）已修无需动；配对码 deviceId（v4.16）已实施。**v4.19/v4.20**：面板状态可信度整改（统一请求层 + 401/429/断网全局横幅、假保存移除、通话导出服务端全量、自动刷新暂停/跳过编辑、表格横向滚动、搜索防抖、密码框遮罩）；云端 `/api/v1/calls/export` + 新设备广播 TypeError 修复。**v4.18**：面板分页/服务端导出 + REST 全局限频 + 顾问姓名 DO NOTHING。**v4.17**：登记 crm_id 唯一去重 + 2 小时窗口 + 离线补推重写 + 统计翻倍三重修复。**v4.16.1**：设备自动注册（未注册设备首连自动绑定当前 PIN 放行，env `AUTODIAL_AUTO_REGISTER=0` 关闭）；跨 PIN 授权文案改可操作提示。**v4.16**：设备唯一键改用 `deviceId`（Android 端复用 device_uuid，旧 APK 回退 deviceName）；Android 端 `auth_pending` 等待授权 UI（此前被静默丢弃只能干等 120s）；后台登录门禁（未登录仅显示登录页）；35440 Docker 数据库落持久卷（此前落在容器内，重建即丢）。设计原则：20 人内部使用、便捷优先于安全、单管理员、双实例容灾（35430 主 / 35440 备）。**v4.14**：全链路修复（授权归属校验、`reconnect_request` 转发白名单、`INSERT OR REPLACE`→`ON CONFLICT DO UPDATE`、统一 busy_timeout、Go ACK 竞态）+ 安全加固（PC 端 35432 回环 Host + 可信来源校验、敏感读端点鉴权、管理员密码哈希 + 登录限频、XSS 修复）+ Docker 数据库持久卷。**v4.13**：云中继并发/DB 性能 P0 修复（WAL、DB 线程池、`_schedule_async`）、扩展 9 套主题。**v4.11**：同步登记列表全链路修复 + 纯增量去重 + 右键一键同步。
 
 ---
 
@@ -743,12 +743,12 @@ SQLite `autodial.db`，DCL 单例，版本 2：
 |------|------|
 | PIN 强校验 | 全链路兼容 4 位/11 位 |
 | 并发保护 | PC_CONNECTED 去重 + DUPLICATE_DIAL 5s 去重 |
-| 频率限制 | WS 握手每 IP 每分钟 5 次；管理登录 60s/5 次（username+IP 维度，HTTP 429） |
+| 频率限制 | WS 握手每 IP 每分钟 5 次；管理登录 60s/5 次（username+IP 维度，HTTP 429）；REST 按端点分级限频（v4.21）：认证/管理类 60、轮询类（auth/pending）240、业务类 600 每分钟/IP，localhost 豁免 |
 | 心跳超时 | WebSocket ping/pong（云端 30s/90s；PC 端 15s/20s） |
 | 空 PIN 守卫 | PC 端未设置 PIN 时拒绝一切连接 |
 | 本地端口来源校验 | PC 端 35432 仅接受回环 Host + 可信来源（chrome-extension://、本机程序），防外部网页静默拨号/DNS rebinding（v4.14） |
 | 管理员鉴权 | 敏感读端点需会话令牌（24h 过期）；密码 SHA-256 加盐哈希存储 + 登录兼容旧明文自动迁移（v4.14） |
-| 授权归属校验 | WS auth_response 仅 PC 端可响应；REST auth/respond 必须携带与请求一致的 pin，防手机自批/越权（v4.14） |
+| 授权归属校验 | WS auth_response 仅 PC 端可响应；REST auth/respond 三重校验：pin 一致 + 该 PIN 的扩展在线 + 响应 IP 与扩展轮询 IP 一致（防手机自批/越权，v4.14 / v4.22） |
 | generation 防竞态 | PC 端云中转递增 generation 防旧连接事件覆盖新状态 |
 | ACK 确认 | 拨号/挂断指令 3s ACK 超时自动切通道重试 |
 | XSS 防护 | dashboard 动态 onclick 委托化 + escA 转义；Electron addLog/短信模板 innerHTML 转义 |

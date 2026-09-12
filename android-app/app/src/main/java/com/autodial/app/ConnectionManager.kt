@@ -147,7 +147,13 @@ class ConnectionManager(private val context: Context) {
     private var lastLanIp = ""
     private var currentCloudServer = ""
     private var cloudServerList: List<String> = emptyList()
-    private var autoReconnect = true
+    // 「自动连接」开关：必须是实时读 prefs 的计算属性。
+    // 之前是普通字段，只在 loadSavedConfig()（服务创建时）赋值一次 —— 用户在设置页
+    // 切换开关后，运行中的 ConnectionManager 完全不知情（开关不驱动运行时）。
+    // 默认值也与 PrefCtrl 共用，避免出现"UI 显示关、实际行为开"。
+    private val autoReconnect: Boolean
+        get() = prefs.getBoolean(PrefCtrl.KEY_AUTO_CONNECT, PrefCtrl.DEFAULT_AUTO_CONNECT) &&
+                !prefs.getBoolean("manual_disconnect", false)
     private var manualConnecting = false
     @Volatile private var manualDisconnecting = false
     private var currentStrategy: ConnectionStrategy = ConnectionStrategy.AUTO
@@ -364,8 +370,8 @@ class ConnectionManager(private val context: Context) {
     }
 
     fun loadSavedConfig() {
-        autoReconnect = prefs.getBoolean("auto_reconnect", true)
-        if (prefs.getBoolean("manual_disconnect", false)) autoReconnect = false
+        // autoReconnect 已改为实时计算属性（见字段声明），此处不再加载；
+        // 「手动断开」标记同样在属性内部实时判断，无需在此冻结成字段。
 
         // 读取策略（向后兼容旧 cloud_enabled，自动迁移）
         currentStrategy = ConnectionStrategy.readFromPrefs(prefs)
@@ -399,6 +405,11 @@ class ConnectionManager(private val context: Context) {
             else -> {
                 if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
             }
+        }
+
+        // v4.21.2 (A-2): "当前服务器"排到尝试队首（与 refreshCloudServerList 同口径）
+        if (currentCloudServer.isNotEmpty()) {
+            cloudServerList = cloudServerList.sortedBy { it != currentCloudServer }
         }
 
         if (!isAnyNetworkAvailable()) {
@@ -480,6 +491,33 @@ class ConnectionManager(private val context: Context) {
             else -> {
                 if (currentCloudServer.isNotEmpty()) listOf(currentCloudServer) else emptyList()
             }
+        }
+
+        // v4.21.2 (A-2): 用户明确指定的"当前服务器"排到尝试队首（稳定排序，其余保持原顺序），
+        // 否则"设为当前"只改了偏好、连接顺序不变，切了等于没切
+        if (currentCloudServer.isNotEmpty()) {
+            cloudServerList = cloudServerList.sortedBy { it != currentCloudServer }
+        }
+    }
+
+    /**
+     * v4.21.2 (A-2): 切换云服务器后立即生效——断开现有云端连接，以新"当前服务器"
+     * 优先重连。若当前没有云端连接则不动（下次连接自然用新服务器）。
+     */
+    fun switchCloudServer() {
+        if (cloudWebSocket == null) {
+            v6LogI(TAG, lastPin, "切换服务器: 当前无云端连接, 下次连接生效")
+            return
+        }
+        v6LogI(TAG, lastPin, "切换云服务器, 立即重连")
+        disconnectCloud()
+        cloudReconnectAttempts = 0
+        manualDisconnecting = false
+        refreshCloudServerList()
+        if (lastPin.isNotEmpty() && cloudServerList.isNotEmpty()) {
+            manualConnecting = true
+            setState(ConnectionState.CONNECTING)
+            connectCloud(cloudServerList, lastPin)
         }
     }
 

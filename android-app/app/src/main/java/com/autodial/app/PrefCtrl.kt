@@ -41,6 +41,15 @@ enum class ConnectionStrategy(val key: String, val label: String) {
 class PrefCtrl(private val context: Context) {
     private val prefs = context.getSharedPreferences("autodial", Context.MODE_PRIVATE)
 
+    companion object {
+        /** 「自动连接」开关的键与默认值。
+         *  UI（PrefCtrl）与运行时（ConnectionManager）必须共用同一份默认值，
+         *  否则会出现"开关显示关闭、实际仍在自动重连"的相反状态。
+         *  取 true：保持既有的自动重连行为，避免升级后静默改变用户预期。 */
+        const val KEY_AUTO_CONNECT = "auto_reconnect"
+        const val DEFAULT_AUTO_CONNECT = true
+    }
+
     fun getDeviceId(): String {
         val existing = prefs.getString("device_uuid", null)
         if (existing != null) return existing
@@ -57,8 +66,8 @@ class PrefCtrl(private val context: Context) {
         prefs.edit().putString("connection_strategy", strategy.key).apply()
     }
 
-    fun isAutoConnectEnabled() = prefs.getBoolean("auto_reconnect", false)
-    fun setAutoConnect(enabled: Boolean) = prefs.edit().putBoolean("auto_reconnect", enabled).apply()
+    fun isAutoConnectEnabled() = prefs.getBoolean(KEY_AUTO_CONNECT, DEFAULT_AUTO_CONNECT)
+    fun setAutoConnect(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTO_CONNECT, enabled).apply()
 
     fun isAutoCopyEnabled() = prefs.getBoolean("auto_copy_number", true)
     fun setAutoCopy(enabled: Boolean) = prefs.edit().putBoolean("auto_copy_number", enabled).apply()

@@ -13,6 +13,14 @@ services:
       - autodial_data:/app/data
     environment:
       - TZ=Asia/Shanghai
+      # 管理员初始账号/密码：不注入时首次启动会生成随机密码并只打印在日志里，
+      # 用户拿不到就登不进去。生产部署请在 .env 或宿主环境里设置这两个变量。
+      - AUTODIAL_ADMIN_USER=${AUTODIAL_ADMIN_USER:-}
+      - AUTODIAL_ADMIN_PASS=${AUTODIAL_ADMIN_PASS:-}
+      # 显式启用 headless 启动（无托盘 + 接管 SIGTERM 优雅退出）
+      - AUTODIAL_HEADLESS=1
+    # docker stop 默认发 SIGTERM，需给足优雅退出（落盘 + 断开连接）的时间
+    stop_grace_period: 15s
     logging:
       driver: "json-file"
       options:

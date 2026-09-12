@@ -13,34 +13,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖 (仅生产必需，跳过 pystray/Pillow/PyInstaller/pytest)
-RUN pip install --no-cache-dir websockets>=12.0 aiohttp>=3.11
+# 注意：版本约束必须加引号。不加引号时 shell 会把 `websockets>=12.0` 里的 `>`
+# 当成重定向（把 stdout 写进名为 `=12.0` 的文件），结果装的是无版本约束的包，
+# 还会在工作目录留下垃圾文件。
+RUN pip install --no-cache-dir "websockets>=12.0" "aiohttp>=3.11"
 
 # 复制应用文件
 COPY python/cloud_relay_v2.py .
 COPY python/dashboard.html .
 RUN mkdir -p /app/data
 
+ENV PYTHONUNBUFFERED=1
+ENV AUTODIAL_HEADLESS=1
+
 # 创建 headless 启动脚本（无托盘图标，纯后台运行）
-RUN echo '#!/usr/bin/env python3' > /app/entrypoint.py && \
-    echo '"""Docker entrypoint - runs cloud relay server without tray icon"""' >> /app/entrypoint.py && \
-    echo 'import asyncio, sys, os' >> /app/entrypoint.py && \
-    echo 'sys.path.insert(0, "/app")' >> /app/entrypoint.py && \
-    echo 'os.environ["APPDATA"] = "/app/data"' >> /app/entrypoint.py && \
-    echo 'os.environ.setdefault("AUTODIAL_DB_PATH", "/app/data/visits.db")' >> /app/entrypoint.py && \
-    echo '' >> /app/entrypoint.py && \
-    echo 'from cloud_relay_v2 import run_server, log' >> /app/entrypoint.py && \
-    echo '' >> /app/entrypoint.py && \
-    echo 'async def main():' >> /app/entrypoint.py && \
-    echo '    try:' >> /app/entrypoint.py && \
-    echo '        await run_server()' >> /app/entrypoint.py && \
-    echo '    except KeyboardInterrupt:' >> /app/entrypoint.py && \
-    echo '        log.info("Received SIGTERM, shutting down...")' >> /app/entrypoint.py && \
-    echo '    except Exception as e:' >> /app/entrypoint.py && \
-    echo '        log.error(f"Fatal: {e}")' >> /app/entrypoint.py && \
-    echo '        sys.exit(1)' >> /app/entrypoint.py && \
-    echo '' >> /app/entrypoint.py && \
-    echo 'if __name__ == "__main__":' >> /app/entrypoint.py && \
-    echo '    asyncio.run(main())' >> /app/entrypoint.py
+# 必须走 run_headless()：它显式登记全局 event loop 并接管 SIGTERM 优雅退出。
+# 早期版本这里直接 asyncio.run(run_server())，全局 loop 恒为 None，
+# 所有 _schedule_async（拨号 / 挂断 / 登记推送 / 踢人 / 授权回调）被静默丢弃。
+RUN printf '%s\n' \
+    '#!/usr/bin/env python3' \
+    '"""Docker entrypoint - headless cloud relay (no tray icon)"""' \
+    'import os, sys' \
+    'sys.path.insert(0, "/app")' \
+    'os.environ["APPDATA"] = "/app/data"' \
+    'os.environ.setdefault("AUTODIAL_DB_PATH", "/app/data/visits.db")' \
+    'from cloud_relay_v2 import run_headless' \
+    'if __name__ == "__main__":' \
+    '    run_headless()' \
+    > /app/entrypoint.py && chmod +x /app/entrypoint.py
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

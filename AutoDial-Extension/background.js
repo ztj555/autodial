@@ -43,8 +43,14 @@ refreshPcStatus(); // 启动时立刻探测一次
 flushCloudVisits().catch(() => {}); // v4.17: SW 启动时补推暂存的云端登记
 
 // ==================== 设备授权轮询 ====================
+// v4.21: 轮询从 5 秒放宽到 30 秒，并对 429 退避加倍。
+// 20 人共用同一出口 IP 时，5 秒/台 ≈ 240 次/分钟，会把云端按 IP 的限流桶打爆，
+// 连带 /api/v1/visit（上门登记）等业务请求被 429 拦截（线上已实际发生）。
+// 授权请求在云端保留 120 秒，30 秒轮询最坏 30 秒内弹窗，体验可接受。
 let _authPollTimer = null;
 let _crmPageActive = false;
+const AUTH_POLL_INTERVAL_MS = 30000;
+let _authPollBackoff = 1; // 429 退避倍数（1 = 正常；被限流后 2、4…封顶 8）
 
 // 检测是否有 CRM 页面在打开状态
 async function checkCrmPageStatus() {
@@ -65,6 +71,13 @@ async function pollAuthRequests() {
     const api = await getCloudApi();
     const url = api + '/api/v1/auth/pending?pin=' + encodeURIComponent(pin);
     const r = await fetch(url);
+    if (r.status === 429) {
+      // 被限流：退避加倍（封顶 8 倍 ≈ 最长 4 分钟），恢复后逐次回落
+      applyAuthPollBackoff(_authPollBackoff * 2);
+      console.warn('[AutoDial BG] auth poll 429, backoff x' + _authPollBackoff);
+      return;
+    }
+    applyAuthPollBackoff(1);
     const d = await r.json();
     if (!d.ok || !d.pending || d.pending.length === 0) {
       return;
@@ -83,7 +96,18 @@ async function pollAuthRequests() {
 
 function startAuthPolling() {
   if (_authPollTimer) clearInterval(_authPollTimer);
-  _authPollTimer = setInterval(pollAuthRequests, 5000); // 每 5 秒轮询
+  // 注意：setInterval 的间隔在"创建那一刻"就固定了，之后改 _authPollBackoff
+  // 不会影响已存在的定时器 —— 这正是 v4.21 退避成为死代码的原因
+  // （429 时只改了个没人再读的变量，实际仍固定 30 秒硬撞云端限流桶）。
+  _authPollTimer = setInterval(pollAuthRequests, AUTH_POLL_INTERVAL_MS * _authPollBackoff);
+}
+
+// 变更退避倍数：必须清掉旧定时器、用新间隔重建，退避才会真正生效
+function applyAuthPollBackoff(nextBackoff) {
+  const clamped = Math.min(Math.max(nextBackoff, 1), 8);
+  if (clamped === _authPollBackoff) return;
+  _authPollBackoff = clamped;
+  startAuthPolling();
 }
 
 function stopAuthPolling() {
@@ -173,8 +197,14 @@ let pcLastCheck = 0;
 // ==================== PIN 管理（替代原 JWT） ====================
 
 async function getPin() {
-  const stored = await chrome.storage.local.get(['self_phone', 'pin']);
-  return stored.pin || stored.self_phone || null;
+  // pin 是权威值（仅由"精确识别"或手动设置写入）。
+  // self_phone 只作兜底，且被明确标记为非精确识别时不得使用——此前无条件兜底，
+  // 而 self_phone 会被 TreeWalker 的猜测结果覆盖，一旦误判（例如读到客户手机号），
+  // 错误号码会直接变成生效 PIN 并打到云端（拨给错误的人 / 错账号登记）。
+  const stored = await chrome.storage.local.get(['pin', 'self_phone', 'self_phone_precise']);
+  if (stored.pin) return stored.pin;
+  if (stored.self_phone && stored.self_phone_precise !== false) return stored.self_phone;
+  return null;
 }
 
 // ==================== PC 检测（与 v3.1 一致） ====================
@@ -215,12 +245,23 @@ async function uploadAdvisorName(pin, name) {
 
 async function dial(phone, tabId) {
   // 1) PC 直连优先（v4.15: 3 秒超时，PC 假死时快速转云端，不再永久挂起）
+  //    v4.21: 不再只看 HTTP 状态码——PC 在手机未连接时也返回 200 {success:false}，
+  //    必须读 body；失败时不再直接报成功，继续走云端兜底。
   if (await isPcAlive()) {
     try {
       const res = await fetchWithTimeout(`${PC_BASE}/dial?number=${encodeURIComponent(phone)}`, {}, 3000);
       if (res.ok) {
-        notifyTab(tabId, { type: 'dialResult', ok: true });
-        return { success: true };
+        const body = await res.json().catch(() => null);
+        if (body && body.success === false) {
+          // PC 明确失败（如"手机未连接"）→ 落入云端兜底，不再误报"已拨出"。
+          // 同时复位 pcAvailable：否则 35 秒缓存窗口内每次拨号都要先白等 3 秒超时。
+          pcAvailable = false;
+          pcLastCheck = Date.now();
+          console.warn('[AutoDial BG] PC dial rejected:', body.error);
+        } else {
+          notifyTab(tabId, { type: 'dialResult', ok: true });
+          return { success: true };
+        }
       }
     } catch {}
   }
@@ -284,8 +325,13 @@ async function registerVisit(name, phone, tabId, managerName) {
       });
       const crmRes = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/saoma_indb.html', {
         method: 'POST',
+        // credentials:'include' 是 CRM 请求能否带登录态的关键：扩展页面是
+        // chrome-extension:// 源，默认 same-origin 不会附带 Cookie，CRM 会当成
+        // 未登录返回登录页（表现为"CRM 登录已过期"）。
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          // Origin / Referer 属浏览器禁改头，设置会被忽略（保留仅为标注来源）
           'Origin': 'https://guwen.zhudaicms.com',
           'Referer': 'https://guwen.zhudaicms.com/bserve/saoma.html?brand=1833'
         },
@@ -391,17 +437,26 @@ async function flushCloudVisits() {
     const arr = s.pending_cloud_visits || [];
     if (!arr.length) return;
     const remain = [];
-    for (const item of arr) {
+    for (let i = 0; i < arr.length; i++) {
+      const item = arr[i];
       try {
         const qs = new URLSearchParams(item.params).toString();
         const res = await fetchWithTimeout(`${await getCloudApi()}/api/v1/visit?${qs}`, {
           headers: { 'X-AutoDial-PIN': item.pin }
         }, 5000);
+        if (res.status === 429) {
+          // 被限流：剩下的全部留到下次，不再无间隔重放把限流桶继续打爆
+          remain.push(...arr.slice(i));
+          console.warn('[AutoDial BG] flush hit 429, deferring', arr.length - i, 'visits');
+          break;
+        }
         const d = await res.json().catch(() => null);
         if (!d || !d.ok) remain.push(item);
       } catch (_) {
         remain.push(item);
       }
+      // 逐条之间留出间隔：暂存上限 500 条，一次性无间隔重放会打满云端限流与线程池
+      if (i < arr.length - 1) await new Promise(r => setTimeout(r, 150));
     }
     await chrome.storage.local.set({ pending_cloud_visits: remain });
     if (remain.length < arr.length) {
@@ -420,6 +475,7 @@ async function lookupKidFromCrm(managerName) {
     const params = new URLSearchParams({ keyword: managerName, brand: '1833' });
     const res = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/search', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Origin': 'https://guwen.zhudaicms.com',
@@ -451,6 +507,7 @@ async function getConsultantList() {
     const params = new URLSearchParams({ keyword: '', brand: '1833' });
     const res = await fetchWithTimeout('https://guwen.zhudaicms.com/bserve/search', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Origin': 'https://guwen.zhudaicms.com',
@@ -474,7 +531,15 @@ async function hangup(tabId) {
   if (await isPcAlive()) {
     try {
       const r = await fetchWithTimeout(`${PC_BASE}/hangup`, {}, 2000);
-      return { success: r.ok };
+      // v4.21: 读 body——PC 在手机未连接时返回 200 {success:false}，不能当"已挂断"
+      if (r.ok) {
+        const body = await r.json().catch(() => null);
+        if (body && body.success === false) {
+          return { success: false, error: body.error || '手机未连接，挂断失败' };
+        }
+        return { success: true };
+      }
+      return { success: false, error: 'PC 端返回异常' };
     } catch {}
   }
   const pin = await getPin();
@@ -497,7 +562,15 @@ async function sendSms(phone, tabId) {
   if (await isPcAlive()) {
     try {
       const r = await fetchWithTimeout(`${PC_BASE}/sms?number=${encodeURIComponent(phone)}`, {}, 2000);
-      return { success: r.ok };
+      // v4.21: 同 dial/hangup——PC 的 200 响应体可能带 success:false
+      if (r.ok) {
+        const body = await r.json().catch(() => null);
+        if (body && body.success === false) {
+          return { success: false, error: body.error || '手机未连接' };
+        }
+        return { success: true };
+      }
+      return { success: false, error: 'PC 端返回异常' };
     } catch {}
   }
   notifyTab(tabId, { type: 'dialResult', ok: false, err: '短信仅支持 PC 直连模式' });
@@ -568,8 +641,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // 坐席手机号检测 -> 存为 PIN + 刷新服务器列表 + 上传姓名到云端
   if (msg.type === 'selfPhoneDetected') {
-    chrome.storage.local.set({ self_phone: msg.phone });
-    console.log('[AutoDial BG] 坐席手机号已检测:', msg.phone);
+    // 同时记录是否为精确识别：非精确（TreeWalker 猜测）的结果只用于界面展示与提醒，
+    // 不参与 getPin() 的 PIN 兜底（见 getPin 注释）
+    chrome.storage.local.set({ self_phone: msg.phone, self_phone_precise: !!msg.precise });
+    console.log('[AutoDial BG] 坐席手机号已检测:', msg.phone, msg.precise ? '(精确)' : '(非精确)');
     // v4.15: 换人使用时同步切换 PIN，防止"电话打给上一任坐席"（异步执行，不阻塞监听器）
     maybeSwitchPin(msg.phone, !!msg.precise, tabId);
     if (msg.name) {
@@ -588,7 +663,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ success: false, error: 'PIN 格式错误，须为4位或11位数字' });
       return true;
     }
-    chrome.storage.local.set({ pin: p, self_phone: p }, () => {
+    chrome.storage.local.set({ pin: p, self_phone: p, self_phone_precise: true }, () => {
       console.log('[AutoDial BG] PIN 已设置:', p);
       sendResponse({ success: true });
     });
@@ -724,7 +799,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           kefu_tel: v.advisor_name || pin,
           visit_type: v.visit_type || '贷款咨询',
           visit_time: v.visit_time || '',
-          source: 'crm_sync'
+          source: 'crm_sync',
+          // 必须带 crm_id：云端按 crm_id 唯一去重（同一物理来访只入一次库）。
+          // 此前批量同步漏传 → 重复点"同步"会把同一条来访反复写进云端。
+          crm_id: v.crm_id || ''
         });
         return fetch(`${apiUrl}/api/v1/visit?${params.toString()}`, {
           headers: { 'X-AutoDial-PIN': pin }

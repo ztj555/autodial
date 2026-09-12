@@ -1,5 +1,174 @@
 # AutoDial 更新日志
 
+## 2026-09-12（第三批 · 外部复核结论修复 v4.22）
+
+> 依据一份外部源码核查结论（逐条回源核实后确认全部属实），修复了 4 个端"文档声称已修、实际未生效"与"半落地"的问题。
+> 验证情况：云端 `pytest` 109 通过（新增 `test_p0_fixes.py` 6 例专门覆盖 P0）、`py_compile` 通过、dashboard 内联脚本经 `node --check` 通过、扩展 JS 经 `node --check` 通过。**Android 侧未做编译验证**——本机 Gradle wrapper 不可用（`gradlew` 报 `Please run: gradle wrapper --gradle-version 8.2`，且无系统 gradle），改动请在有 Android SDK 的机器上跑一次 `./gradlew compileDebugKotlin` 再合并。
+> **尚未部署到线上。**
+
+### 云中继 `cloud_relay_v2.py`
+
+- **[P0] Docker/headless 路径下所有异步任务被静默丢弃**（`run_server()` 用局部变量接收 `get_running_loop()`，函数未 `global loop`，而全局 `loop` 恒为 `None`）。Docker entrypoint 走的是 `asyncio.run(run_server())`，从不经过 `run_server_thread()`，因此 `_schedule_async`（REST 拨号 / 挂断 / 登记推送 / 踢人 / 授权回调）全部落到 else 分支只打一条 warning。表现是"服务看着在跑、界面能点，实际什么也没执行"。
+  - `run_server()` 改为 `global ... loop` 并在启动时登记事件循环（`run_server_thread` 路径行为不变）
+  - 新增 `run_headless()`：headless 专用入口，登记全局 loop + 接管 SIGTERM/SIGINT
+  - 新增 `shutdown_gracefully()`：退出时落盘统计 → 取消周期任务 → 关闭所有 WS 连接 → 停服
+- **[P0] 分页 limit 只钳上限不钳下限**：SQLite 中 `LIMIT -1` 表示"不限量"，`/api/v1/calls?limit=-1`、`/api/v1/events?limit=-1` 可一次拖走全表（同时打满内存与事件循环）；`/api/logs?n=-1` 同类问题
+  - 新增 `_safe_limit(value, default, maximum)`（夹到 `[1, maximum]`）与 `_safe_offset`（负数归零），三处调用点统一替换
+- **[P0] `:memory:` 降级分支实际不可用**：每次 `_connect_db()` 都新建一个独立空内存库，`init_db` 建的表后续 44 处连接看不到 → 降级不是"重启丢数据"而是"整个后端直接不可用"
+  - 改用 shared-cache 内存库（`file:autodial_memdb?mode=memory&cache=shared`）+ 常驻 anchor 连接（anchor 关闭则库被回收，故永不关闭），所有连接共享同一内存库
+- **[P1] 离线登记"无痕丢失"**：组内有手机但连接已死（僵尸连接）时 `forward_to_phones` 吞异常返回，既不发送也不落 pending；补推时删 pending 与"送达"脱钩，补推失败也照样删
+  - `forward_to_phones` 现在返回实际送达数；`_push_visit_to_phone` 在送达数为 0 时落 pending；`phone_hello` 补推循环仅在真正送达后删除 pending
+- **[P1] `new_device_join` 通知分支不可达**：踢旧机在广播之前执行，遍历 `group.phones` 时集合已空 → 改为使用踢机前的快照
+- **[P1] 导出 CSV"顾问姓名"整列为空**：`SELECT * FROM visits` 没有 `kefu_name` 列，`r.get('kefu_name','')` 恒为空字符串 → 按 `kefu_tel` 关联 `advisor_names` 补全（`kefu_tel` 本身是姓名时直接使用）
+- **[P1] 登录限频信任可伪造的 `X-Forwarded-For`**：任何客户端换个假 IP 即可绕过。改为默认取 TCP 对端地址（`_peer_ip`），仅当显式设置 `AUTODIAL_TRUST_PROXY=1` 时才采信代理头
+- **[P1] REST `auth/respond` 可被手机自批**：原来只校验 `caller_pin == 请求 pin`，而等待授权的手机自己就知道这个 PIN，先调一次 `auth/pending`（也会登记扩展活跃）再调 `auth/respond` 就能给自己放行。现增加：该 PIN 的插件须在线（5 分钟内轮询过）+ 响应方 IP 须与插件轮询 IP 一致
+- **[P1] 无优雅退出 / 周期任务叠加 / 会话不回收**：`import signal` 从未使用（`docker stop` 只能硬杀）；服务器重启时 `periodic_*` 任务重复叠加；`_admin_sessions` 只增不减
+  - 新增 `_periodic_tasks` 统一记录并在重启前取消、退出时取消；`cleanup_memory()` 增加过期会话清理
+- **[P2] Dockerfile `pip install websockets>=12.0` 未加引号**：shell 把 `>` 当重定向，实际装的是无版本约束的包并在工作目录留下垃圾文件 → 已加引号并改用 `printf` 生成 entrypoint
+- **[P2] `docker-compose.yml` 未注入管理员账号密码**：代码支持 `AUTODIAL_ADMIN_USER`/`AUTODIAL_ADMIN_PASS`，但 compose 没传 —— 首次启动生成随机密码只打在日志里，用户拿不到就登不进去 → 已补环境变量与 `stop_grace_period`
+
+### 管理面板 `dashboard.html`
+
+- **[P1] 令牌仍大量出现在 URL 里**（"凭据出网址"只做了一半）：`apiGet` 拼 `?token=`，20 余处 `fetch(withToken(url))` 直接调用原生 fetch
+  - `apiGet` 改走 `Authorization: Bearer`；新增全局 `fetch` 包装，对所有 `/api/` 请求自动注入 Authorization 头（一次性消灭所有死角，含遗漏的调用点）；`withToken` 保留为恒等函数仅供兼容
+- **[P1] 反射型 XSS 面**：`toast()` 与 `setApiBanner()` 直接把消息拼进 `innerHTML` → 统一用已有的 `esc()` 转义
+- **[P2] 人员管理表格有「操作」列表头但单元格恒空**（删功能留下的残骸）→ 移除该列，并同步修正 4 处 `colspan="5"` → `4`
+- **[P2] 手机管理设备列表无分页、全量渲染**（每台设备还带一行展开详情，设备多时明显卡顿）→ 新增 50 条/页的客户端分页（分页脚注渲染在表格内，不改动页面布局），筛选条件变化自动回到第 1 页
+- **[P2] `loadVisits` 绕过统一请求层**：自己 fetch，缺少 429/断网横幅 → 补上 429、非 2xx 与网络异常的提示
+
+### Chrome 扩展
+
+- **[P0] 429 退避是死代码**：`setInterval(pollAuthRequests, INTERVAL * _authPollBackoff)` 的间隔在创建时就固定，429 时只改 `_authPollBackoff` 不重建定时器 → 退避永不生效，始终 30 秒硬撞限流桶。新增 `applyAuthPollBackoff()`：变更倍数即清掉旧定时器、用新间隔重建
+  - 注：v4.21 的更新日志把"429 退避"记为已修复，实际只是写了一个没人再读的变量
+- **[P0] popup 主题被 MV3 CSP 拦截**：主题初始化为 `popup.html` 内联脚本，MV3 默认 CSP（`script-src 'self'`）拒绝执行且不报错 → 抽成 `theme-init.js` 外部文件（与 `auth.html` 的 `auth.js` 同思路），并在 `manifest.json` 显式声明 `content_security_policy`
+- **[P1] 误判号码可能成为生效 PIN**：`getPin()` 无条件兜底 `self_phone`，而 `self_phone` 会被 TreeWalker 的非精确识别覆盖 → 新增 `self_phone_precise` 标记，非精确识别不参与 PIN 兜底（手动 `setPin` 视为精确）
+- **[P1] 批量同步漏传 `crm_id`**：云端按 `crm_id` 唯一去重，漏传会导致重复点"同步"把同一条来访反复写库 → 已补
+- **[P1] CRM 请求缺 `credentials:'include'`**：扩展页面是 `chrome-extension://` 源，默认不附带 Cookie，CRM 会当成未登录返回登录页（表现为"CRM 登录已过期"）；顺带标注 `Origin`/`Referer` 属浏览器禁改头、设置会被忽略
+- **[P1] PC 返回 `success:false` 后未复位 `pcAvailable`**：35 秒缓存窗口内每次拨号都要先白等 3 秒超时 → 失败即复位
+- **[P2] 补推队列无间隔重放**：`flushCloudVisits` 逐条之间加 150ms 间隔，遇 429 立即停止并把剩余留到下次（暂存上限 500 条，无间隔重放会继续打爆限流桶）
+
+### Android
+
+- **[P0] 通话记录批量上传水位线逻辑错误**（`DialService.syncCallRecords`）：查询是 `_ID > 水位线` 且 `ORDER BY _ID DESC LIMIT 20`，水位线却取"本批最小 id" —— 水位线落到 81 后下一轮 `_ID > 81` 又把最近 20 条（82..100）捞回来，每轮只前移 1 条，永远在最近 20 条里打转，`id <= 80` 的老记录一条都传不上去
+  - 改为**双向水位线**：`highId`（`_ID > highId`，ASC，向上补新）+ `floorId`（`_ID < floorId`，DESC，向下补旧历史），两条线各自单调向外扩张；首次启动把边界对齐到当前最大 id（`floorId = maxId + 1`）
+  - 云端 `call_records_raw` 以 `(device_id, local_id)` 为主键且 `INSERT OR IGNORE`，重报幂等，故升级后少量重报不会产生脏数据
+  - 抽出 `currentMaxCallLogId()` / `readCallLogBatch()` / `uploadCallBatch()` 三个方法
+- **[P0] Manifest 缺 `FOREGROUND_SERVICE_SPECIAL_USE`**：服务声明了 `phoneCall|specialUse`，targetSdk 34 下 `startForeground()` 会抛 `SecurityException` → 开机自启/后台保活全部失效。已补权限声明
+- **[P0] 无障碍服务整段被注释**：`DialEngine.kt:178` 在小米机型上调用 `DialAccessibilityService.expectSimPicker()`，但 manifest 里服务未注册 → 自动选卡回退完全失效。已恢复声明（服务仍需用户在系统设置里手动开启，不会强制启用）
+- **[P1] 内联"连接"把云地址当 LAN IP 写入**：`putExtra("ip", server)` 传入的是 `ws://host:port`，会污染 `lastLanIp` 与 `prefs["ip"]`，之后局域网直连全部失效 → 不再传 `ip`；`DialService` 侧同时加防御（带 `://` 的值一律忽略，空值不再覆盖已保存的 LAN IP）
+- **[P1] 连接中点"取消"不下发 DISCONNECT**：只改本地标志位，后台仍在继续建连，出现"按钮显示未连接、实际已连上"的状态错乱 → 已在下发取消时发送 DISCONNECT
+- **[P1] "自动连接"开关与运行时状态相反且不驱动运行时**：UI 默认 `false`（`PrefCtrl`），运行时默认 `true`（`ConnectionManager.loadSavedConfig`），且运行时只在服务创建时读一次 pref → 统一为 `PrefCtrl.KEY_AUTO_CONNECT` / `DEFAULT_AUTO_CONNECT`（取 `true`，保持既有行为），并把 `autoReconnect` 改为实时读 pref 的计算属性，开关立即生效
+- **[P2] `allowBackup="true"`** → 改为 `false`（应用数据含 PIN、云端地址、通话记录，不应被系统备份带走）
+
+### 文档同步
+
+- `README.md`：`/api/v1/dial` 的 `PC_CONNECTED` 已于 v4.15 移除（文档与状态码表仍写着）；`/api/v1/visits` 已支持 `days`/`source`/`d_from`/`d_to` 与 `page`/`page_size` 服务端分页（旧文档称"API 仅支持 pin/group、日期筛选是前端过滤"）
+- `AutoDial-Extension/AutoDial-API.md`：补充 `auth/respond` 三重归属校验；管理员初始密码说明改为环境变量机制（旧文档称"无 `AUTODIAL_ADMIN_PASS` 环境变量机制、初始密码 123456"，与代码不符）；补充 `AUTODIAL_TRUST_PROXY`
+- `技术文档/AutoDial技术文档.md`：授权归属校验条目同步
+- 新增 `cloud-relay/python/test_p0_fixes.py`：6 个回归用例覆盖 limit 钳制、内存降级共享、`run_server` 登记全局 loop
+
+## 2026-09-11（第二批 · 综合复核 P0 修复 v4.21）
+
+> 依据《综合复核报告-2026-09-11.md》《综合复核报告-实际使用场景-2026-09-11.md》，逐项对照实际代码核实后修复。全部改动已通过本地验证（pytest 103 通过、E2E 批量导入实测、Kotlin Gradle 编译通过），**尚未部署到线上**（部署需按既有流程 MD5 校验 + py_compile 预检 + supervisorctl restart）。
+
+### 云中继 `cloud_relay_v2.py`
+
+- **[C-01] REST 限流按端点分级**（此前所有 `/api/v1/` 共享 60/min/IP，被扩展授权轮询打爆，线上已实际拦截 `/api/v1/visit` 上门登记）：
+  - 认证/管理类（login/admin×/auth/respond）：60/min/IP（维持严格防爆破）
+  - 高频轮询类（auth/pending）：240/min/IP 独立配额
+  - 业务类（dial/visit/calls/events/stats/devices…）：600/min/IP
+- **[C-02] 批量导入改 POST body**：`/api/v1/visits/batch` 新增 POST 方式（请求体 `{"data":[...]}`），绕开 websockets 对 HTTP 请求行 8192 字节硬上限（GET URL 约 20 行中文即超限，整批静默失败）；GET 兼容保留
+  - `_PeerProtocol.read_http_request()` 放行 POST 方法（websockets 原版硬编码只接受 GET，POST 在解析请求行即被拒 400）；请求体经 `_request_body` ContextVar 传给 handler
+- **[潜伏雷] init_db 全新库初始化必炸修复**：v4.17 引入的 `idx_call_records_dial` 索引建在 `create_call_records` 之前——全新 DB 首次初始化必抛 `no such table`，落入 `:memory:` 降级分支（分支同样先建索引再失败），所有数据落内存库、进程重启即丢。线上因旧库带表未触发。已修正两处分支建表顺序，并用内存 DB 实测验证
+
+### 管理面板 `dashboard.html`
+
+- **[D-2] 未登录/登录过期时停止自动刷新**：锁定态下定时器此前仍每 15 秒触发一轮全 401 的请求，白白消耗限流配额（全员同一出口 IP 时与业务请求互相挤兑）
+- **[C-02] 批量导入改 POST + 每批 20 条**（原 BATCH_SIZE=200 拼 GET URL 必超 8KB 上限）
+
+### Chrome 扩展 `background.js`
+
+- **[X-01] 授权轮询降频**：5 秒 → 30 秒（授权请求云端保留 120 秒，30 秒轮询最坏 30 秒内弹窗，体验可接受）；20 台电脑的轮询量从 ≈240 次/分降至 ≈40 次/分
+- **[X-01] 429 退避**：被限流后轮询间隔逐次加倍（封顶 8 倍），恢复后回落
+- **[G-3] 拨号/挂断/短信不再被"假成功"误导**：PC 端在手机未连接时返回 `200 {success:false, error:'手机未连接'}`，扩展此前只看 HTTP 状态码即报"已拨出/已挂断"——现在读取响应体，`success:false` 时如实报错（dial 失败还会落入云端兜底重试）
+
+### Android `DialService.kt`
+
+- **[P0-B] `logEvent()` 接线**（原函数全仓库零调用，云端 `phone_events` 表永远为空）：拨号结果（ok/error/cancelled）、短信结果全部上报 `/api/v1/events/log`
+- **[P0-B] 通话记录上报可观测性**：READ_CALL_LOG 权限缺失不再裸 return（打 FileLogger 日志）；上报失败记录 HTTP 状态码；异常不再无痕吞掉
+- **[P0-B] 首传水位线改 DESC**：从最新通话记录开始上报（原 ASC 从最老开始爬，存量大的手机要数小时~数天才能报到"今天"，且先入库陈年数据污染时间线）；DESC 下水位线取本批最小 local_id，逐步向老记录补爬
+- 同步策略本身未改：仍要求 WS 已认证在线（isConnected 门控）——离线手机用登记补推通道，通话记录等待重连后自动同步
+
+### 复核实况（未改代码，结论）
+
+- **[A-4] Android 14 前台服务**：核实**已修**——`startForegroundCompat` 按 SDK 选 `specialUse` 类型（34+），manifest 已声明 `FOREGROUND_SERVICE_PHONE_CALL` + `phoneCall|specialUse` 双类型 + `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`，无需再改
+- **[B] 配对码 deviceId**：核实**已实施**（v4.16）——LAN/Cloud 两处 `phone_hello` 均已携带 `deviceId`（复用 device_uuid），云端以 deviceId 作绑定/去重唯一键
+- **[P0-C] 生产库压测数据**：本机 `visits.db` 中 50 台 `StressTest-Phone-*` 均为压测残留；线上 101 台设备中 100 台 `ZZLOADTEST-*` 待管理员确认后清理（清理脚本需登录服务器操作，涉及删数据未擅动）
+- **[主线1 局域网直连]**：核实为死链路（PC 只监听 127.0.0.1），维持报告建议"砍掉入口"待拍板，未动代码
+
+### 验证记录
+
+- pytest：103 通过（2 失败为历史遗留 async 测试需要 pytest-asyncio，与本批改动无关，改动前同样失败）
+- E2E：真启动服务器（隔离内存 DB）POST 30 行批量导入全量入库 + GET 小批量兼容通过
+- 限流分级单元验证：三档配额精确生效、桶互相独立、拒绝不占槽
+- Kotlin：`gradle compileDebugKotlin` 通过（本机验证用，kotlin_version 1.9.20 为缓存版本、已还原）
+- 扩展 JS：`node --check` 通过；面板两段内联脚本提取后 `node --check` 通过
+
+### 管理员拍板后追加修复（v4.21.1，2026-09-11 晚）
+
+**局域网直连修通（功能保留）**
+- `pc-app-Electron/main.js`：HTTP/WS 端口改监听 `0.0.0.0`（原 127.0.0.1 导致手机 UDP 发现后 `ws://<PC局域网IP>:35432` 永远被拒——LAN 直连自始至终不可用）
+- `pc-app-Electron/modules/server.js` WS `verifyClient` 重构：
+  - 带 Origin 的连接（浏览器发起，无法省略）必须可信 → "任意网页静默连 WS 拨号"的防线不变（S1 目标保持）
+  - 无 Origin 放行（Android OkHttp 不发 Origin），身份由 `phone_hello` 的 PIN 校验兜底（配对码错 → auth_fail 断开）
+  - 移除 WS 回环 Host 校验（LAN 手机 Host 是 PC 局域网 IP）
+- HTTP 层保留回环 Host + 可信 Origin 校验（扩展只从本机访问，不受影响；防 DNS rebinding 依旧）
+- Android `ConnectFragment.kt`："检查防火墙"误导文案改为准确指引（同一 WiFi + PC 运行中 + 首次启动允许防火墙）
+- PC Windows 防火墙：首次监听外网卡系统会弹授权框，允许即可；被拒时手机 LAN 仍连不上（属正常安全机制）
+
+**PC 端未捕获异常不再退出（P-1）**
+- `pc-app-Electron/main.js` `uncaughtException` 由"记日志→退出应用"改为"记录日志 + 弹一次提示，程序继续运行"；同类异常去重防弹窗轰炸
+
+**双击防双拨（PC 直连路径补齐）**
+- 复核确认：云端 `/api/v1/dial` 已有 5 秒同号去重（DUPLICATE_DIAL），但 PC 直连 `/dial` 没有——双击浮窗会真拨两次
+- `pc-app-Electron/modules/server.js`：HTTP 拨号入口加 5 秒同号去重（在线直发与离线排队两条路径共用一道闸），行为与云端对齐
+
+**数据清理（管理员拍板：直接删不备份）**
+- 本地 `visits.db`：50 台 `StressTest-Phone-*` 压测设备及其通话/事件/统计残留已清空（phones 余 0）
+- 线上 `101.34.65.254` 100 台 `ZZLOADTEST-*`：本机无 SSH 凭据未执行，留给管理员跑一条命令（见《验证报告-v4.21综合复核修复》第四节）
+
+### 第二梯队修复（v4.21.2，2026-09-11 深夜）
+
+> 依据管理员逐项拍板：8 修、10 配对成功再踢、11 修、12 修、13 修；9 正常不动、14 Go 版不动、15 安全收尾不动。
+
+**C-4 授权握手不再误踢真机（管理员："配对成功再踢下线"）**
+- `cloud_relay_v2.py` 手机握手路径：踢旧机从"授权判定之前"推迟到"授权判定成功之后"（`_kick_old_phones` 在 `auth_ok` 前调用）。待授权设备（默认 PIN 不匹配、等待/被拒）不再顶掉该 PIN 正在线的手机；授权通过的两条路径（WS auth_response / REST auth/respond）本就在通过后才踢，行为统一
+- 实测：B 设备用他人 PIN 连接被拒后，A 仍在组内并可正常收拨号指令
+
+**A-2 切换云服务器立即生效**
+- `ConnectionManager.kt`：`refreshCloudServerList()` 把用户指定的"当前服务器"稳定排序到尝试队首；新增 `switchCloudServer()`——已连接云端时断开并以新服务器立即重连（原先"设为当前"只写偏好、界面切了实际还连旧的）
+- `CloudServerSheet.kt`："设为当前"回调触发 `switchCloudServer()`
+
+**C-1 REST 重端点移入线程池（导出/列表不再卡全员）**
+- `cloud_relay_v2.py` 新增 `_run_db(fn)` 通用助手；6 个重端点 DB/CSV 段迁入共享线程池：`/api/v1/visit`（登记写）、`/api/v1/visits`（列表）、`/api/v1/visits/export`、`/api/v1/devices`、`/api/v1/calls`、`/api/v1/calls/export`。导出 ≤20 万行 + 内存拼 CSV 期间，事件循环继续跑 WS 拨号/心跳（此前全体卡顿的根因）
+- 顺带修复 REST `/api/v1/auth/respond` 中 `conn3` 未定义时 `finally` 抛 NameError 的隐患（该查询同时移入线程池）
+
+**D-8 面板凭据不再进网址（12a）**
+- 服务端 `login` / `admin/add` / `admin/chpwd` 兼容 POST body（`_request_body` 机制），前端登录/加账号/改密码改 POST JSON body——明文凭据不再出现在 URL / 访问日志 / 浏览器历史
+- 两处导出由 `window.open(带token URL)` 改 `fetch` + `Authorization: Bearer` 头 + blob 下载，token 不进地址栏与历史
+
+**面板 13 项打磨**
+- hash 路由（`#/visits` 等）：F5/收藏/分享保留当前页（原先必回首页）
+- 危险操作自定义确认弹窗（替换 3 处原生 `confirm`，回显账号 ID / 记录 ID / 分组 ID）
+- 改密码"手输账号 ID"改下拉选择（loadAdminAccounts 填充）
+- 删除手机页名不副实的"详情"按钮及其空列（列 10→9，真正的历史靠点行展开）
+- 表格最小列宽 92px→72px（1280 屏不再无谓横向滚动）
+- 表头字号 11px→12px；浅色主题次要色 `#5880A8`→`#456B8F`（对比度 ~3.8:1 → ~5.0:1，达 WCAG AA）
+- 定时刷新不再重置用户上下文：`_timerRefresh` 软刷新标记——通话页翻页保留、上门页筛选下拉不重建、手机页已展开行自动恢复（`phoneExpanded`/`phoneRowMap`）
+- 列表请求加序号（`_loadSeq`），慢响应后到不再覆盖新数据（手机/通话/上门）
+- 顶部横幅"成功即灭"改为错误计数（并发下一次成功不再吹灭别的失败提示）；未登录时 401 文案改中性"请先登录"
+- 切页清除"上次刷新 · 已跳过"残留提示
+
 ## 2026-09-11
 
 ### 云端管理面板状态可信度整改（v4.19 + v4.20，合入 9-11autodial-master.zip 分支）

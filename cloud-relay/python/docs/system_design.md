@@ -16,7 +16,7 @@
 | 挑战 | 分析 |
 |------|------|
 | **粘贴文本解析** | CRM 导出的分隔符不确定（Tab/逗号/TSV），需前端纯 JS 实现自动检测分隔符 + 表头识别 |
-| **无 POST body** | websockets 库的 `process_request` 不支持 POST body，API 参数必须走 query string。JSON 数组数据通过 `?data=` query param 传递，对大体积做前端分批 |
+| **POST body 支持** | ~~websockets 库的 `process_request` 不支持 POST body~~ **v4.21 已解除**：`_PeerProtocol.read_http_request()` 放行 POST（原版硬编码只接受 GET），请求体经 `_request_body` ContextVar 传入 handler。`/api/v1/visits/batch` 已改 POST body（请求体 `{"data":[...]}`），绕开 GET URL 8KB 硬上限（websockets `MAX_LINE_LENGTH=8192`）；GET 兼容保留 |
 | **crm_id 去重** | SQLite 支持 UNIQUE 约束，使用 `INSERT OR IGNORE` 实现自然去重；冲突时捕获并计数 skipped |
 | **平滑迁移** | 现有 `init_db()` 已用 `ALTER TABLE ADD COLUMN` 兼容模式；新增 `crm_id` 列走同样路径 |
 | **单文件前端** | `dashboard.html` 无构建工具，所有 JS/CSS 内联或 CDN 引入；新增的导入页面也内联在同一 HTML 中 |
@@ -28,7 +28,7 @@
 | 分隔符检测 | 后端检测 | **前端 JS 检测** | ✅ 前端先行解析可做实时预览，无需 HTTP 往返，用户体验更好 |
 | 前端数据格式 | FormData | **JSON 数组** | ✅ PRD 明确要求 `?data=<JSON数组>`，与现有 `calls/batch` 模式一致 |
 | 去重策略 | SELECT 先查再 INSERT | **INSERT OR IGNORE** | ✅ SQLite UNIQUE 约束 + INSERT OR IGNORE 原子操作，无竞态风险 |
-| 分批策略 | 后端自动分批 | **前端按 200 条切片** | ✅ 前端感知总量更直观，后端逻辑简单；与 PRD "单批上限 200" 对齐 |
+| 分批策略 | 后端自动分批 | **前端按 20 条切片（v4.21）** | ✅ 原方案 200 条/批走 GET URL，实测 websockets 对 HTTP 请求行有 8192 字节硬上限，约 20 行中文即超限整批静默失败；v4.21 改 POST body 后每批 20 条仍有余量，且前端能逐批汇总成功/失败 |
 | 导入页面位置 | 新建独立 HTML | **嵌入 dashboard.html** | ✅ 保持单文件架构；作为 `dashboard.html` 的一个新 Tab 页 |
 | 鉴权 | 无需鉴权 | **需要 admin 鉴权** | ✅ 导入涉及数据库写入，与现有 visit/delete、visit/update 一致，使用 `_check_admin` |
 

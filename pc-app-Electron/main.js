@@ -827,7 +827,10 @@ app.whenReady().then(() => {
     }
   });
 
-  server.listen(PORT, '127.0.0.1', () => {
+  // v4.21: 局域网直连修复——改监听 0.0.0.0。此前 127.0.0.1 导致手机永远连不上
+  // "局域网直连"（UDP 发现拿到 PC 局域网 IP 后 ws://<ip>:35432 被拒）。
+  // 安全边界由 server.js 的 HTTP 回环校验（扩展仍只走本机）与 WS Origin 校验维持。
+  server.listen(PORT, '0.0.0.0', () => {
     console.log('');
     console.log('========================================');
     console.log('       AutoDial PC v6 已启动');
@@ -928,12 +931,26 @@ app.on('window-all-closed', () => {
 });
 
 // 全局异常捕获
+// v4.21: 未捕获异常不再退出整个应用（此前坐席工具"莫名消失"只能重启）。
+// 行为改为：记录日志 + 弹一次提示（不聚焦打断工作，点"知道了"继续运行）。
+// 仅连接数清零这类致命状态除外——当前没有已知致命场景，统一保活。
 process.on('uncaughtException', (err) => {
   console.error('[未捕获异常]', err.message);
   try { fileLog('E', 'Fatal', null, `未捕获异常: ${err.message}\n${err.stack}`); } catch (_) {}
   try { saveSettings(appSettings); } catch (_) {}
-  app.isQuitting = true;
-  app.quit();
+  try {
+    const key = 'fatal-' + String(err.message || '').slice(0, 40);
+    if (global.__lastFatalKey !== key) {
+      global.__lastFatalKey = key;
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'AutoDial 提示',
+        message: '内部出现一个小错误，但程序会继续运行。',
+        detail: `${err.message}\n\n已写入日志，若反复出现请联系管理员。`,
+        buttons: ['知道了']
+      });
+    }
+  } catch (_) {}
 });
 
 process.on('unhandledRejection', (reason) => {

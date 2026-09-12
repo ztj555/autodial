@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Android 14 (targetSdk 34) 起：服务声明了 foregroundServiceType="specialUse" 就必须
+         同时申请 FOREGROUND_SERVICE_SPECIAL_USE，否则 startForeground() 直接抛
+         SecurityException → 开机自启/后台保活全部失效（服务起不来）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -21,8 +25,9 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- allowBackup 关闭：应用数据含 PIN / 云端地址 / 通话记录，不应被系统备份带走 -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -74,8 +79,12 @@
                 android:resource="@xml/file_provider_paths" />
         </provider>
 
-        <!-- 无障碍服务：华为暂关闭，小米需开启 -->
-        <!--
+        <!-- 无障碍服务：用于在小米等机型上自动选择 SIM 卡拨号。
+             DialEngine（DialEngine.kt:178）在小米机型上会调用
+             DialAccessibilityService.expectSimPicker(simSlot)，此声明被注释掉时
+             该回退路径完全失效（服务未注册，无法被系统连接到）。
+             声明存在不会强制启用：用户必须在「设置 → 无障碍」里手动开启后才会运行，
+             因此对不需要该能力的机型没有副作用。 -->
         <service
             android:name=".DialAccessibilityService"
             android:exported="true"
@@ -87,7 +96,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
-        -->
 
     </application>
 </manifest>

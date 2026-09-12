@@ -46,12 +46,16 @@ function createServer(deps) {
     ipcMain            // 可选
   } = deps;
 
-  // ==================== 本地端口访问安全校验（S2修复 + S1加固） ====================
-  // 端口仅绑定 127.0.0.1，要求回环 Host（防 DNS rebinding）+ 可信来源，
-  // 阻止任意网页静默拨号/发短信/挂断/打开窗口。可行来源：Chrome 扩展
-  // (chrome-extension://)、Electron 自身页面(file://)、回环 http(s)://。
-  // S1加固: 空/缺失 Origin 与 "null" 不再视为可信；回环来源用 URL 解析后精确比对
-  // host，杜绝 localhost.evil.com 前缀绕过。
+  // ==================== 本地端口访问安全校验（S2修复 + S1加固 + v4.21 局域网放行） ====================
+  // v4.21 起 HTTP 端口对外监听 0.0.0.0（支持手机局域网 WS 直连），但安全边界分两层：
+  // - HTTP（仅本机扩展调用）：保留回环 Host 校验（防 DNS rebinding）+ 可信来源，
+  //   阻止任意网页静默拨号/发短信/挂断/打开窗口。可行来源：Chrome 扩展
+  //   (chrome-extension://)、Electron 自身页面(file://)、回环 http(s)://。
+  //   S1加固: 空/缺失 Origin 与 "null" 不再视为可信；回环来源用 URL 解析后精确比对
+  //   host，杜绝 localhost.evil.com 前缀绕过。
+  // - WS（手机 LAN 直连入口）：浏览器发起的 WS 握手必然携带 Origin（无法省略），
+  //   带 Origin 的必须可信；无 Origin 的一律放行——Android 手机 App(OkHttp) 不发
+  //   Origin，其身份由协议层 phone_hello 的 PIN 校验兜底（配对码错 → auth_fail 断开）。
   function isTrustedLocalSource(v) {
     const o = String(v || '').trim().toLowerCase();
     if (o === '' || o === 'null') return false;
@@ -86,6 +90,9 @@ function createServer(deps) {
     if (refererPresent && !isTrustedLocalSource(req.headers.referer)) return false;
     return originPresent || refererPresent;
   }
+
+  // v4.21: DUPLICATE_DIAL 状态（number -> 上次拨号时间戳），5 秒窗口同号去重
+  const _lastDialByNumber = new Map();
 
   // ==================== HTTP 服务器 ====================
   const server = http.createServer((req, res) => {
@@ -131,6 +138,24 @@ function createServer(deps) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ success: false, error: '无效的号码格式' }));
         return;
+      }
+
+      // v4.21: DUPLICATE_DIAL——5 秒内同号码去重（与云端 /api/v1/dial 口径一致）。
+      // 此前仅云端路径有去重，PC 直连路径双击会真拨两次。
+      // 放在手机在线/排队两条路径之前，两条路径共用同一道闸。
+      const _now = Date.now();
+      const _last = _lastDialByNumber.get(number) || 0;
+      if (_now - _last < 5000) {
+        fileLog('W', 'HTTP', null, `5秒内重复拨号被拦: ${number}`);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ success: false, code: 'DUPLICATE_DIAL', error: '相同号码正在拨号中' }));
+        return;
+      }
+      _lastDialByNumber.set(number, _now);
+      if (_lastDialByNumber.size > 100) {
+        for (const [k, ts] of _lastDialByNumber) {
+          if (_now - ts >= 5000) _lastDialByNumber.delete(k);
+        }
       }
 
       const active = getActivePhone();
@@ -269,14 +294,18 @@ function createServer(deps) {
   });
 
   // ==================== WebSocket 服务器 ====================
-  // S2修复 + S1加固: WS 同样校验来源（回环 Host + 可信 Origin），阻止页面 WebSocket 拨号；
-  // 空/缺失 Origin 与 "null" 一律拒绝，回环来源精确比对 host。
+  // v4.21: 手机局域网直连入口。校验策略：
+  // - 带 Origin 的连接（浏览器发起，无法省略/伪造省略）必须为可信来源——
+  //   维持 S1 的核心目标"任意网页不能静默连 WS 拨号"；
+  // - 无 Origin 的一律放行（Android 手机 App 用 OkHttp 不发 Origin），
+  //   身份由协议层 phone_hello 的 PIN 校验兜底（配对码错误 → auth_fail + 断开）。
+  // 回环 Host 校验已移除：LAN 手机的 Host 是 PC 的局域网 IP，非回环。
   const wss = new WebSocket.Server({
     server,
     verifyClient: (info) => {
-      const host = String(info.req.headers.host || '').toLowerCase();
-      if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
-      return isTrustedLocalSource(info.origin);
+      const origin = info.req.headers.origin;
+      if (_sourceHeaderPresent(origin) && !isTrustedLocalSource(origin)) return false;
+      return true;
     }
   });
 

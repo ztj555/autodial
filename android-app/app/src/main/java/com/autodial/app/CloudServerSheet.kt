@@ -94,6 +94,9 @@ class CloudServerSheet(private val activity: Activity, private val onChanged: ()
                         addView(action("设为当前") {
                             activity.getSharedPreferences("autodial",0).edit().putString("cloud_server", entry.url).apply()
                             onChanged(); render()
+                            // v4.21.2 (A-2): 切换立即生效——云端已连接时立刻重连到新服务器，
+                            // 此前只写偏好不重连，界面切了、实际还连旧的
+                            DialService._instance?.connectionManager?.switchCloudServer()
                         })
                     }
                     addView(action("测试") {

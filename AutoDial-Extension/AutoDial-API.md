@@ -127,7 +127,7 @@ Header: X-AutoDial-PIN: 13800138000
 | 端点 | 说明 | 鉴权 |
 |------|------|:---:|
 | GET `/api/v1/auth/pending?pin=` | 查询挂起的授权请求（扩展每 5s 轮询，同时登记扩展在线） | — |
-| GET `/api/v1/auth/respond?request_id=&allow=1\|0&pin=` | 响应授权请求（`pin` 须与请求 PIN 一致，防越权；若不带或错误返回 `UNAUTHORIZED`） | — |
+| GET `/api/v1/auth/respond?request_id=&allow=1\|0&pin=` | 响应授权请求。三重归属校验：① `pin` 须与请求 PIN 一致；② 该 PIN 的授权插件须在线（5 分钟内轮询过 `auth/pending`）；③ 响应方 IP 须与该插件的轮询来源 IP 一致。任一不满足返回 `UNAUTHORIZED`。仅校验 pin 挡不住"等待授权的手机自己调 auth/pending + auth/respond 自批" | — |
 | GET `/api/v1/devices` | 设备清单（含在线状态/IP/PIN/姓名） | 🔐 |
 | GET `/api/v1/device-history?device_id=` | 设备 PIN 历史 | 🔐 |
 | GET `/api/v1/device-set-default-pin?device_id=&default_pin=` | 设置设备默认 PIN | 🔐 |
@@ -241,7 +241,9 @@ Header: X-AutoDial-PIN: 13800138000
 
 > v4.14 起：① 密码以 SHA-256（加盐）哈希存储，登录兼容旧明文记录并自动迁移；② 登录接口限频（60s 窗口失败超 5 次返回 `429 RATE_LIMITED`）；③ 敏感**读**端点（`/api/status`、`/api/clients`、`/api/stats`、`/api/logs`、`/api/history`、`/api/v1/pins`、`/api/v1/groups`、`/api/v1/devices`、`/api/v1/device-history`、`/api/v1/calls`、`/api/v1/phone-stats`、`/api/v1/events`、`/api/v1/visits`（无 `pin` 时））同样要求管理员鉴权，防止客户隐私/设备信息泄露。
 >
-> 无 `AUTODIAL_ADMIN_PASS` 环境变量机制。管理员账号存于 SQLite `admin_accounts` 表，首次启动自动创建默认账号（用户名 `18335162275`，初始密码 `123456`），请登录后尽快修改。
+> 初始管理员账号/密码由环境变量决定：`AUTODIAL_ADMIN_USER`（默认 `18335162275`）、`AUTODIAL_ADMIN_PASS`。**未设置 `AUTODIAL_ADMIN_PASS` 时首次启动会生成随机密码并只打印在服务日志里**，请从日志取值或直接注入环境变量（Docker 部署见 `docker-compose.yml`）。账号存于 SQLite `admin_accounts` 表，密码 SHA-256 加盐哈希，登录后请尽快修改。
+>
+> 登录限频按 `(用户名, 客户端 IP)` 维度计数。客户端 IP 默认取 TCP 对端地址；只有当请求确实经过可信反向代理时，才设置 `AUTODIAL_TRUST_PROXY=1` 采信 `X-Forwarded-For`（该头可被客户端伪造，开启前请确认代理一定会覆盖它）。
 
 | 端点 | 说明 | 鉴权 |
 |------|------|------|

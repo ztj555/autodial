@@ -388,7 +388,7 @@ class ConnectFragment : Fragment() {
             guideView.text = "① 输入 11 位手机号（推荐）或 4 位配对码\n" +
                 "② 点击「连接」开始使用\n" +
                 "③ 可按个人习惯切换弹窗、轮选、系统等拨号模式\n" +
-                "④ 连不上时检查电脑防火墙是否放行端口 35432"
+                "④ 局域网直连要求：电脑和手机在同一 WiFi，AutoDial PC 正在运行（电脑首次启动需在防火墙弹窗中允许访问）"
 
             // v7: 云服务器内联列表（纯配置UI，无连接动作）
             cloudServerListContainer = view.findViewById(R.id.cloudServerListContainer)
@@ -714,8 +714,13 @@ class ConnectFragment : Fragment() {
             sendDisconnectCommand()
             return
         }
+        val wasConnecting = connecting
         connecting = false
         pinInput.isEnabled = true
+        // 连接中（还未进入"等待授权"）点取消，同样要下发 DISCONNECT。
+        // 此前这里只改本地标志位，DialService/ConnectionManager 仍在后台继续建连，
+        // 结果按钮显示"未连接"而实际连接已经建立（状态错乱）。
+        if (wasConnecting) sendDisconnectCommand()
         updateConnectionUI(false, null)
     }
 
@@ -744,7 +749,7 @@ class ConnectFragment : Fragment() {
             // v4.16: 已进入"等待授权中"时不再覆盖提示文案
             if (!DialService.isConnected && !authWaiting && isAdded) {
                 val colors2 = ThemeManager.getColors(requireContext())
-                statusText.text = "连接中，请稍候...\n超时？检查防火墙或连接策略"
+                statusText.text = "连接中，请稍候...\n若持续超时：确认 AutoDial PC 正在运行且与手机在同一网络"
                 statusText.setTextColor(Color.parseColor(colors2.primary))
             }
         }
@@ -1038,10 +1043,10 @@ class ConnectFragment : Fragment() {
                     "connection_failed" -> {
                         statusText.text = "连接失败"
                         statusText.setTextColor(Color.parseColor(colors.red))
-                        NotifyHelper.connToast(requireActivity(), "无法连接到电脑，请检查：\n1. 电脑端是否已打开\n2. 手机和电脑是否在同一WiFi\n3. 电脑防火墙是否放行了端口", Toast.LENGTH_LONG)
+                        NotifyHelper.connToast(requireActivity(), "无法连接到电脑，请检查：\n1. AutoDial PC 是否正在运行\n2. 手机和电脑是否在同一WiFi\n3. 电脑首次启动时是否允许了防火墙访问", Toast.LENGTH_LONG)
                         discoveryHint.text = "⚠️ 连接失败，请检查电脑端是否已打开且在同一网络"
                         discoveryHint.visibility = View.VISIBLE
-                        connectionMode.text = "检查防火墙 · WiFi · 连接策略"
+                        connectionMode.text = "检查电脑端 · WiFi · 连接策略"
                         connectionMode.visibility = View.VISIBLE
                         connectionMode.setTextColor(Color.parseColor(colors.text2))
                     }
@@ -1248,7 +1253,12 @@ class ConnectFragment : Fragment() {
                             .putString("connection_strategy", "auto")
                             .apply()
                         val intent = DialService.newIntent(requireContext()).apply {
-                            action = "CONNECT"; putExtra("ip", server); putExtra("pin", pin)
+                            // 注意：不能把云服务器地址塞进 "ip"。
+                            // "ip" 是局域网直连专用字段（ConnectionManager 会把它当
+                            // lastLanIp 并写入 prefs["ip"]），塞进 ws://host:port 会直接
+                            // 污染该字段，之后局域网直连全部失效。云地址已写入 cloud_server，
+                            // 不传 ip 时 DialService 会保留原有 LAN IP。
+                            action = "CONNECT"; putExtra("pin", pin)
                         }
                         requireActivity().startService(intent)
                         Toast.makeText(requireActivity(), "正在连接 $server ...", Toast.LENGTH_SHORT).show()

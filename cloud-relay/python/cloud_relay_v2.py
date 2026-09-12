@@ -28,6 +28,8 @@ _db_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix='db')
 
 import websockets
 from websockets.legacy.server import serve
+from websockets.legacy import http as ws_http
+from websockets.exceptions import InvalidMessage
 
 # ==================== 配置 ====================
 DEFAULT_PORT = 35430
@@ -88,6 +90,13 @@ log = setup_logging()
 # 否则与脚本同目录（Windows 桌面部署）
 DB_PATH = os.environ.get('AUTODIAL_DB_PATH') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'visits.db')
 
+# 内存降级库：`:memory:` 每次 connect 都会新建一个独立空库，44 处 _connect_db()
+# 彼此看不到对方建的表 → 降级不是"重启丢数据"而是"整个后端直接不可用"。
+# 改用 shared-cache 内存库 + 常驻 anchor 连接（anchor 一关库即被回收，故永不关闭），
+# 让所有连接共享同一个内存库，降级才真正可用。
+_MEM_DB_URI = 'file:autodial_memdb?mode=memory&cache=shared'
+_mem_anchor = None
+
 def _connect_db():
     """创建 SQLite 连接并统一设置连接级参数。
 
@@ -95,7 +104,10 @@ def _connect_db():
     其余 39 处 _connect_db() 在 Python 3.8-3.10 下默认立即报
     'database is locked'。统一入口后每个连接都带 5s 锁等待。
     """
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    if DB_PATH == ':memory:':
+        conn = sqlite3.connect(_MEM_DB_URI, uri=True, timeout=5.0)
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=5.0)
     try:
         conn.execute('PRAGMA busy_timeout=5000')
     except Exception:
@@ -103,8 +115,8 @@ def _connect_db():
     return conn
 
 def init_db():
-    """初始化 visits 表及索引，失败时降级到内存数据库"""
-    global DB_PATH
+    """初始化 visits 表及索引，失败时降级到共享内存数据库"""
+    global DB_PATH, _mem_anchor
     create_visits = '''CREATE TABLE IF NOT EXISTS visits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         pin TEXT NOT NULL,
@@ -198,13 +210,17 @@ def init_db():
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
         # v4.17: 去重查询走索引，数据量大后去重不再全表扫
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_mobile ON visits(mobile)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
         c.execute(create_admin_accounts)
         c.execute(create_phones)
         c.execute(create_call_records)
+        # v4.21: 索引必须建在 create_call_records 之后——v4.17 曾把该索引放在建表前，
+        # 全新 DB 首次初始化必抛 "no such table: main.call_records_raw"，
+        # 走进 :memory: 降级分支（分支里同样先建索引再失败，最终所有数据落内存库，
+        # 进程重启全部丢失）。线上库是旧库带表才一直没炸，属"潜伏雷"。
+        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_phone_events)
         c.execute(create_phone_daily)
         c.execute(create_pending_visits)
@@ -231,20 +247,24 @@ def init_db():
     except Exception as e:
         log.error(f'Database initialization failed: {e}. Using in-memory fallback.')
         DB_PATH = ':memory:'
-        conn = _connect_db()
+        # anchor 连接常驻不关闭：shared-cache 内存库在最后一个连接关闭时会被销毁，
+        # 关掉它等于降级库凭空消失（其余连接又各自看到独立空库）。
+        # 注意：本分支的建表语句必须与上方 try 分支保持同步（改一处要改两处）。
+        _mem_anchor = _connect_db()
+        conn = _mem_anchor
         c = conn.cursor()
         c.execute(create_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_pin ON visits(pin)')
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_created ON visits(created_at)')
         # v4.17: 去重查询走索引，数据量大后去重不再全表扫
         c.execute('CREATE INDEX IF NOT EXISTS idx_visits_mobile ON visits(mobile)')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_advisor)
         c.execute('CREATE INDEX IF NOT EXISTS idx_advisor_updated ON advisor_names(updated_at)')
         c.execute(create_groups)
         c.execute(create_admin_accounts)
         c.execute(create_phones)
         c.execute(create_call_records)
+        c.execute('CREATE INDEX IF NOT EXISTS idx_call_records_dial ON call_records_raw(dial_time)')
         c.execute(create_phone_events)
         c.execute(create_phone_daily)
         c.execute(create_pending_visits)
@@ -265,7 +285,8 @@ def init_db():
         # 为 crm_id 建唯一索引（SQLite ALTER TABLE 不支持 UNIQUE 列约束，需单独建索引）
         try: c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_crm_id ON visits(crm_id)'); conn.commit()
         except: pass
-        conn.close()
+        # 不 close：见上方 anchor 注释。_mem_anchor 常驻，保证共享内存库不被回收。
+        log.warning(f'DEGRADED: 已降级到共享内存库，数据不落盘、进程重启即丢，请检查 DB 文件与磁盘权限: {e}')
 
 init_db()
 
@@ -280,13 +301,24 @@ def _hash_pwd(pwd):
 # 即锁死管理员登录（管理端 DoS）。仅单线程事件循环内访问，无需加锁。
 _login_failures = {}  # (username, client_ip) -> [失败时间戳]
 
+# 是否信任反向代理转发的来源 IP 头。
+# X-Forwarded-For / X-Real-IP 由客户端可任意伪造，默认不采信——否则登录限频形同
+# 虚设（每次换一个假 IP 就能无限试密码）。只有确认前面有可信反代时才开启。
+_TRUST_PROXY_HEADERS = (os.environ.get('AUTODIAL_TRUST_PROXY') or '').strip().lower() in ('1', 'true', 'yes')
+
 def _login_client_ip(hdrs):
-    """从请求头提取客户端 IP（兼容反向代理部署），无则返回 unknown"""
-    for h in ('x-forwarded-for', 'x-real-ip'):
-        v = (hdrs.get(h) or '').strip()
-        if v:
-            return v.split(',')[0].strip()
-    return 'unknown'
+    """提取客户端 IP。
+
+    默认取 TCP 对端地址（_peer_ip，由协议层写入，不可伪造）；
+    仅当显式设置 AUTODIAL_TRUST_PROXY=1 时才采信 X-Forwarded-For。
+    """
+    if _TRUST_PROXY_HEADERS:
+        for h in ('x-forwarded-for', 'x-real-ip'):
+            v = (hdrs.get(h) or '').strip()
+            if v:
+                return v.split(',')[0].strip()
+    peer = _peer_ip.get()
+    return peer or 'unknown'
 
 def _prune_login_failures(now_ts):
     """移除全部过期条目（防 dict 无界增长）"""
@@ -367,6 +399,7 @@ def cleanup_memory():
                   if (now - t).total_seconds() > 3600]
     for p in stale_pins:
         del last_ext_activity[p]
+        last_ext_ip.pop(p, None)
     if stale_pins:
         log.info(f'MEM_CLEANUP: removed {len(stale_pins)} stale ext_activity entries')
 
@@ -421,6 +454,15 @@ def cleanup_memory():
                     pass
             _schedule_async(_timeout_reject())
             log.info(f'AUTH_TIMEOUT id={rid} device={dn} pin={p}')
+
+    # 8. _admin_sessions: 清理已过期会话
+    # 此前只在 _check_admin 命中同一个 token 时才惰性删除，无人访问的旧 token
+    # 会永久留在 dict 里（只增不减）。
+    expired_tokens = [t for t, exp in list(_admin_sessions.items()) if exp <= now_ts]
+    for t in expired_tokens:
+        _admin_sessions.pop(t, None)
+    if expired_tokens:
+        log.info(f'MEM_CLEANUP: removed {len(expired_tokens)} expired admin sessions')
 
 def record_message(pin, msg_type, bytes_count):
     """记录消息统计"""
@@ -564,18 +606,50 @@ def check_rate_limit(client_ip: str, pin: str = '') -> bool:
 # legacy process_request 回调拿不到对端地址，改用协议子类在握手时捕获并放入 ContextVar
 _peer_ip: contextvars.ContextVar = contextvars.ContextVar('peer_ip', default='')
 
-MAX_REST_PER_MINUTE = 60  # 每个 IP 每分钟 REST 请求数（localhost 豁免）
+# v4.21: POST body 同理经 ContextVar 传递（process_request 在 read_http_request 之后
+# 运行，请求体留在协议实例的 StreamReader 中，由 _PeerProtocol 统一读取）
+_request_body: contextvars.ContextVar = contextvars.ContextVar('request_body', default='')
+
+# v4.21: 限流按端点分级。原"所有 /api/v1/ 共享 60/min/IP"会把同一办公室（共用出口 IP）
+# 的业务请求一起拦掉（线上已发生 /api/v1/visit 被 429）。
+# 分级原则：
+#   - 认证/管理类：严格（防爆破），维持 60/min/IP
+#   - 高频轮询类（扩展授权轮询）：单独配额且阈值高（正常心跳流量，不算滥用）
+#   - 业务类（拨号/登记/上报/查询）：放宽到 600/min/IP，仍能兜底防滥用
+MAX_REST_AUTH_PER_MINUTE = 60
+MAX_REST_POLL_PER_MINUTE = 240
+MAX_REST_BIZ_PER_MINUTE = 600
+
+# 轮询类端点（扩展后台例行查询，非用户操作）
+_REST_POLL_PATHS = {'/api/v1/auth/pending'}
+
+# 认证/管理类端点：失败即封爆破面，按严格阈值
+_REST_AUTH_PATHS = {
+    '/api/v1/login', '/api/v1/admin/add', '/api/v1/admin/del',
+    '/api/v1/admin/chpwd', '/api/v1/admin/accounts', '/api/v1/auth/respond',
+}
+
 _rest_attempts: dict[str, list] = defaultdict(list)
 
-def check_rest_rate_limit(client_ip: str) -> bool:
-    """REST 端点全局限频，返回 True 表示应拒绝（429）。堵 PIN 枚举/管理口令爆破/接口滥用。"""
+def _rest_limit_for(path: str) -> int:
+    if path in _REST_POLL_PATHS:
+        return MAX_REST_POLL_PER_MINUTE
+    if path in _REST_AUTH_PATHS:
+        return MAX_REST_AUTH_PER_MINUTE
+    return MAX_REST_BIZ_PER_MINUTE
+
+def check_rest_rate_limit(client_ip: str, path: str = '') -> bool:
+    """REST 端点限频，返回 True 表示应拒绝（429）。堵 PIN 枚举/管理口令爆破/接口滥用。
+    v4.21: 按"端点分级"计配额——认证类严格、轮询类独立、业务类放宽。"""
     if not client_ip or client_ip in ('127.0.0.1', '::1', 'localhost'):
         return False
     now = datetime.now()
-    _rest_attempts[client_ip] = [t for t in _rest_attempts[client_ip] if now - t < timedelta(minutes=1)]
-    if len(_rest_attempts[client_ip]) >= MAX_REST_PER_MINUTE:
+    key = f'{client_ip}|{_rest_limit_for(path)}'
+    _rest_attempts[key] = [t for t in _rest_attempts[key] if now - t < timedelta(minutes=1)]
+    limit = _rest_limit_for(path)
+    if len(_rest_attempts[key]) >= limit:
         return True
-    _rest_attempts[client_ip].append(now)
+    _rest_attempts[key].append(now)
     return False
 
 class _PeerProtocol(websockets.legacy.server.WebSocketServerProtocol):
@@ -588,6 +662,40 @@ class _PeerProtocol(websockets.legacy.server.WebSocketServerProtocol):
         kwargs.pop('process_request', None)
         super().__init__(*args, **kwargs)
         self.process_request = self._process_request_with_peer
+        self.http_method = 'GET'
+
+    async def read_http_request(self):
+        """v4.21: 放行 POST 方法（REST 大负载走请求体）。
+
+        websockets 原版 read_http_request 调 read_request()，其中硬编码
+        method != b"GET" 即抛 ValueError("unsupported HTTP method")，POST 请求
+        在解析请求行时就被拒（网页端会收到 400）。这里复刻原版读取逻辑但不限
+        method；WS 握手请求 method 必为 GET，行为不变。"""
+        try:
+            request_line = await self.reader.readline()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            raise InvalidMessage('did not receive a valid HTTP request') from exc
+        if len(request_line) > ws_http.MAX_LINE_LENGTH + 2:
+            raise InvalidMessage('HTTP request line too long')
+        if not request_line.endswith(b'\r\n'):
+            raise InvalidMessage('HTTP request line without CRLF')
+        request_line = request_line[:-2]
+        try:
+            method, raw_path, version = request_line.split(b' ', 2)
+        except ValueError:
+            raise InvalidMessage('invalid HTTP request line') from None
+        if version != b'HTTP/1.1':
+            raise InvalidMessage('unsupported HTTP version')
+        try:
+            headers = await ws_http.read_headers(self.reader)
+        except Exception as exc:
+            raise InvalidMessage('invalid HTTP headers') from exc
+        self.http_method = method.decode('ascii', 'replace').upper()
+        self.path = raw_path.decode('ascii', 'surrogateescape')
+        self.request_headers = headers
+        return self.path, headers
 
     async def _process_request_with_peer(self, path, request_headers):
         try:
@@ -595,6 +703,22 @@ class _PeerProtocol(websockets.legacy.server.WebSocketServerProtocol):
             _peer_ip.set(ra[0] if isinstance(ra, tuple) else str(ra))
         except Exception:
             pass
+        # v4.21: 读取 POST body（websockets 不解析请求体，只留原始字节在 self.reader）。
+        # batch 等大负载端点改走 POST body，绕开 GET URL 8KB 硬上限。
+        hdrs = dict(request_headers)
+        try:
+            content_length = int(hdrs.get('content-length', '0') or '0')
+        except ValueError:
+            content_length = 0
+        if self.http_method == 'POST' and content_length > 0:
+            try:
+                body = await self.reader.readexactly(content_length)
+                _request_body.set(body.decode('utf-8', errors='replace'))
+            except (asyncio.IncompleteReadError, ValueError) as e:
+                log.warning(f'POST_BODY_READ_FAIL: {e}')
+                _request_body.set('')
+        else:
+            _request_body.set('')
         return await health_check_handler(path, request_headers)
 
 # ==================== 消息转发 ====================
@@ -629,7 +753,7 @@ async def forward_to_pcs(pin, message, exclude_ws=None):
 async def forward_to_phones(pin, message, exclude_ws=None):
     group = pin_groups.get(pin)
     if not group:
-        return
+        return 0
     data = json.dumps(message, ensure_ascii=False)
     target_device = message.get('targetDevice')
     sent_count = 0
@@ -653,16 +777,24 @@ async def forward_to_phones(pin, message, exclude_ws=None):
         log.info(f'ROUTED to {sent_count} phone(s) matching targetDevice={target_device} pin={pin}')
     if sent_count == 0 and target_device:
         log.warning(f'NO phone matched targetDevice={target_device} pin={pin} (available: {[ws_meta.get(p, {}).get("device_name", "?") for p in group.phones]})')
+    # 返回实际送达数。调用方必须据此判断"是否真的发出去了"：连接已死但还留在
+    # group.phones 里的"僵尸手机"会让 send 抛异常 → 既没送达也没落 pending，
+    # 这条登记就无痕丢失了。
+    return sent_count
 
 # ==================== WebSocket 处理 ====================
 server_instance = None
 ws_connections = set()
 EXT_ACTIVITY_TIMEOUT = 300  # 5分钟内收到过扩展REST请求视为在线
 last_ext_activity = {}  # pin -> datetime 记录扩展最后活跃时间
+last_ext_ip = {}        # pin -> 发起轮询的对端 IP（授权响应归属校验用，见 auth/respond）
 
 def track_ext_activity(pin):
-    """记录扩展活跃时间（每次REST请求调用）"""
+    """记录扩展活跃时间与来源 IP（每次REST请求调用）"""
+    if not pin:
+        return
     last_ext_activity[pin] = datetime.now()
+    last_ext_ip[pin] = _peer_ip.get() or ''
 
 def is_ext_online(pin):
     """扩展是否在线（5分钟内有REST请求）"""
@@ -733,17 +865,21 @@ async def handle_connection(ws, path=None):
                 # S2修复: 每次重新握手先清除授权标记，防止旧会话授权状态被带到新 PIN
                 meta['authorized'] = False
                 group = get_group(pin)
-                # Fix B4: 同 PIN 只允许一台手机在线，踢掉旧连接
-                # v4.15: 先从组内移出再 close，避免 close 等待期间旧连接的 finally
-                # 触发 remove_from_group 误删整组（幽灵分组竞态）
-                for old_phone in list(group.phones):
-                    if old_phone != ws:
-                        group.phones.discard(old_phone)
-                        try:
-                            await old_phone.close(4001, 'duplicate_reconnect')
-                        except Exception:
-                            pass
-                is_first_device = len(group.pcs) == 0 and len(group.phones) == 0
+                # C-4 修复（v4.21.2，管理员拍板"配对成功再踢下线"）：同 PIN 只允许一台手机在线，
+                # 但踢旧机从"授权判定之前"推迟到"授权判定成功之后"。
+                # 此前无条件先踢：待授权设备（默认 PIN 不匹配、等待浏览器插件授权，甚至授权被拒）
+                # 也会先顶掉该 PIN 正在线的手机 → 员工"莫名其妙掉线"。
+                # 幽灵分组竞态防备保留：先从组内移出再 close（旧连接 finally 不会误删整组）。
+                async def _kick_old_phones():
+                    for old_phone in list(group.phones):
+                        if old_phone != ws:
+                            group.phones.discard(old_phone)
+                            try:
+                                await old_phone.close(4001, 'duplicate_reconnect')
+                            except Exception:
+                                pass
+                # is_first_device 语义不变：组内无 PC 且无"将被踢掉的"其他手机
+                is_first_device = len(group.pcs) == 0 and not any(p != ws for p in group.phones)
 
                 # ===== 设备-PIN 绑定授权检查 =====
                 # v4.16 修复B: 绑定/查询/去重一律用 device_id；面向用户的消息继续传 device_name
@@ -833,6 +969,11 @@ async def handle_connection(ws, path=None):
                     continue  # 跳过后续处理，等待 PC 授权
 
                 # S2修复: 授权通过（default_pin 匹配），标记连接为已授权，此后消息才允许转发给 PC
+                # C-4: 配对成功此刻才踢旧机。注意：踢旧机会把同 PIN 的其他手机移出
+                # group.phones，导致下面"通知已有手机"分支永远遍历到空集合（通知形同虚设）。
+                # 所以先快照，通知时用快照。
+                _pre_join_phones = [p for p in list(group.phones) if p is not ws]
+                await _kick_old_phones()  # C-4: 配对成功此刻才踢旧机
                 meta['authorized'] = True
                 group.phones.add(ws)
                 pc_online = len(group.pcs) > 0
@@ -869,18 +1010,20 @@ async def handle_connection(ws, path=None):
                         if w != ws:
                             wm = ws_meta.get(w, {})
                             existing_devices.append(wm.get('device_name', '?'))
-                    # 通知已有手机
-                    for phone_ws in list(group.phones):
-                        if phone_ws != ws:
-                            try:
-                                await phone_ws.send(json.dumps({
-                                    'type': 'new_device_join',
-                                    'deviceName': meta['device_name'],
-                                    'role': 'phone',
-                                    'pin': pin
-                                }))
-                            except Exception:
-                                pass
+                    # 通知已有手机（用加入前的快照——踢旧机已经把 group.phones 清空了，
+                    # 直接遍历 group.phones 这个分支永远进不来）
+                    for phone_ws in _pre_join_phones:
+                        if phone_ws is ws:
+                            continue
+                        try:
+                            await phone_ws.send(json.dumps({
+                                'type': 'new_device_join',
+                                'deviceName': meta['device_name'],
+                                'role': 'phone',
+                                'pin': pin
+                            }))
+                        except Exception:
+                            pass
                     # 通知已有 PC
                     for pc_ws in list(group.pcs):
                         try:
@@ -905,14 +1048,18 @@ async def handle_connection(ws, path=None):
                     pushed = 0
                     for vid, visit in pending_rows:
                         try:
-                            await forward_to_phones(pin, {
+                            sent = await forward_to_phones(pin, {
                                 'type': 'visit_record',
                                 'data': visit
                             })
-                            _db_delete_pending_visit(vid)
-                            pushed += 1
                         except Exception:
-                            pass  # 发送失败保留记录，下次重试
+                            continue  # 发送异常，保留 pending 下次重试
+                        if not sent:
+                            # 未真正送达就不要删 pending——此前删库与"送达"脱钩，
+                            # 补推失败也照样删，登记从此消失。
+                            continue
+                        _db_delete_pending_visit(vid)
+                        pushed += 1
                     log.info(f'phone_hello pin={pin}: pushed {pushed}/{len(pending_rows)} pending visits')
                 continue
 
@@ -1275,6 +1422,23 @@ def _safe_int(value, default=0):
     except (TypeError, ValueError):
         return default
 
+def _safe_limit(value, default, maximum):
+    """安全的分页 limit：夹到 [1, maximum]。
+
+    只做上限检查是不够的——SQLite 里 `LIMIT -1` 表示"不设上限"，传 limit=-1
+    会把整张表一次返回（/api/v1/calls、/api/v1/events 曾如此，等于给别人一个
+    "一键拖走全部通话记录/事件"的开关，同时把事件循环和内存打满）。
+    """
+    n = _safe_int(value, default)
+    if n < 1:
+        return default
+    return min(n, maximum)
+
+def _safe_offset(value):
+    """安全的分页 offset：负数一律归零（SQLite OFFSET -1 等价于 0，但语义模糊）。"""
+    n = _safe_int(value, 0)
+    return n if n > 0 else 0
+
 def _schedule_async(coro):
     """调度 async 任务：事件循环内用 create_task，跨线程用 run_coroutine_threadsafe"""
     global loop
@@ -1289,6 +1453,15 @@ def _schedule_async(coro):
         asyncio.run_coroutine_threadsafe(coro, loop)
     else:
         log.warning('Cannot schedule async task: event loop not running')
+
+
+async def _run_db(fn):
+    """v4.21.2 (C-1): 把 REST 端点里同步的 DB 查询/CSV 拼接段丢进共享线程池执行，
+    事件循环不被 20 万行 fetchall+内存拼 CSV 卡住（导出期间拨号/心跳停摆的根因）。
+    用法：把原来 try 块里的同步段包成无参闭包，返回 ('json', status, body)
+    / ('csv', filename, bytes) / ('err', status, body) 标记，调用方 await _run_db(...) 后展开。"""
+    loop_ = asyncio.get_running_loop()
+    return await loop_.run_in_executor(_db_executor, fn)
 
 # 会话令牌管理（简单实现，重启全部失效）
 _admin_sessions = {}  # token -> expiry_timestamp
@@ -1397,14 +1570,22 @@ def _db_delete_pending_visit(vid):
         log.error(f'PENDING_VISIT_DB_DEL failed id={vid}: {e}')
 
 def _push_visit_to_phone(pin, visit_record):
-    """推送 visit_record 给对应 pin 的手机，离线则落库待补推"""
+    """推送 visit_record 给对应 pin 的手机，离线或发送失败则落库待补推"""
     group = pin_groups.get(pin)
     if group and group.phones:
-        try:
-            _schedule_async(forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record}))
-        except Exception as e:
-            log.warning(f'VISIT push failed pin={pin}: {e}')
-            _db_add_pending_visit(pin, visit_record)
+        async def _push():
+            try:
+                sent = await forward_to_phones(pin, {'type': 'visit_record', 'data': visit_record})
+            except Exception as e:
+                log.warning(f'VISIT push failed pin={pin}: {e}')
+                _db_add_pending_visit(pin, visit_record)
+                return
+            if not sent:
+                # 组里有手机，但一条都没发出去（连接已死、集合尚未清理）。
+                # 之前这里"异常被吞 + 不落 pending"，登记就直接丢了。
+                _db_add_pending_visit(pin, visit_record)
+                log.warning(f'VISIT push reached 0 phone, queued for resend pin={pin}')
+        _schedule_async(_push())
     else:
         _db_add_pending_visit(pin, visit_record)
         log.info(f'VISIT queued (offline) pin={pin}')
@@ -1438,8 +1619,9 @@ async def health_check_handler(path, request_headers):
     
     parsed = urlparse(path)
 
-    # v4.18: REST 端点全局限频（60 次/分钟/IP；localhost 豁免）。WS 握手路径不受影响。
-    if parsed.path.startswith('/api/v1/') and check_rest_rate_limit(_peer_ip.get()):
+    # v4.18: REST 端点限频（localhost 豁免）。v4.21 起按端点分级：
+    # 认证类 60/min/IP、轮询类 240/min/IP、业务类 600/min/IP。WS 握手路径不受影响。
+    if parsed.path.startswith('/api/v1/') and check_rest_rate_limit(_peer_ip.get(), parsed.path):
         log.warning(f'REST_RATE_LIMITED ip={_peer_ip.get() or "?"} path={parsed.path}')
         return (429, JSON_HDR, _err_json('RATE_LIMITED', '请求过于频繁，请稍后再试'))
     path = parsed.path
@@ -1557,9 +1739,9 @@ async def health_check_handler(path, request_headers):
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
         qs = parse_qs(parsed.query)
-        n = _safe_int(qs.get('n', ['100'])[0], 100)
+        n = _safe_limit(qs.get('n', ['100'])[0], 100, 1000)
         q = qs.get('q', [''])[0]
-        logs = get_logs(min(n, 1000))
+        logs = get_logs(n)
         if q:
             logs = [l for l in logs if q.lower() in l.lower()]
         body = json.dumps({
@@ -1743,6 +1925,7 @@ async def health_check_handler(path, request_headers):
     # ===== 管理员标记 =====
 
     # 管理员登录: GET /api/v1/login?user=xxx&pass=xxx
+    # v4.21.2 (D-8): 兼容 POST body（{"user":..., "pass":...}）——凭据不进网址
     if path == '/api/v1/login':
         # S6修复 + S5加固: 登录失败限频（60 秒窗口内每 (username, client_ip) 最多 5 次），
         # 防口令爆破且不再因他人失败而锁死管理员登录
@@ -1750,6 +1933,15 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         user = qs.get('user', [''])[0].strip()
         pwd = qs.get('pass', [''])[0].strip()
+        body_raw = _request_body.get()
+        if body_raw:
+            try:
+                _body_obj = json.loads(body_raw)
+                if isinstance(_body_obj, dict):
+                    user = str(_body_obj.get('user', user)).strip()
+                    pwd = str(_body_obj.get('pass', pwd)).strip()
+            except json.JSONDecodeError:
+                pass
         client_ip = _login_client_ip(hdrs)
         fail_key = (user, client_ip)
         if len(_login_failures) > 2000:
@@ -1817,12 +2009,22 @@ async def health_check_handler(path, request_headers):
                 conn.close()
 
     # 添加管理账号: GET /api/v1/admin/add?user=xxx&pass=xxx
+    # v4.21.2 (D-8): 兼容 POST body（{"user":..., "pass":...}）——凭据不进网址
     if path == '/api/v1/admin/add':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
         qs = parse_qs(parsed.query)
         username = qs.get('user', [''])[0].strip()
         password = qs.get('pass', [''])[0].strip()
+        body_raw = _request_body.get()
+        if body_raw:
+            try:
+                _body_obj = json.loads(body_raw)
+                if isinstance(_body_obj, dict):
+                    username = str(_body_obj.get('user', username)).strip()
+                    password = str(_body_obj.get('pass', password)).strip()
+            except json.JSONDecodeError:
+                pass
         if not username or not password:
             return (200, JSON_HDR, _err_json('MISSING_PARAM', '账号和密码不能为空'))
         if len(username) < 4:
@@ -1881,6 +2083,15 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         aid = qs.get('id', [''])[0].strip()
         newpass = qs.get('newpass', [''])[0].strip()
+        body_raw = _request_body.get()
+        if body_raw:
+            try:
+                _body_obj = json.loads(body_raw)
+                if isinstance(_body_obj, dict):
+                    aid = str(_body_obj.get('id', aid)).strip()
+                    newpass = str(_body_obj.get('newpass', newpass)).strip()
+            except json.JSONDecodeError:
+                pass
         if not aid or not newpass:
             return (200, JSON_HDR, _err_json('MISSING_PARAM', 'id 和新密码不能为空'))
         if len(newpass) < 4:
@@ -1933,6 +2144,18 @@ async def health_check_handler(path, request_headers):
         # 安全修复: 响应者必须携带与请求一致的 PIN，防止等待授权的手机自批/他人越权
         if caller_pin != auth_req['pin']:
             return (200, JSON_HDR, _err_json('UNAUTHORIZED', 'PIN 不匹配，无法响应此授权请求'))
+        # 安全修复增强: 光校验 PIN 不够——等待授权的手机自己知道这个 PIN，
+        # 它先调一次 /api/v1/auth/pending（同样会登记扩展活跃）再调 auth/respond
+        # 就能给自己放行，整个授权流程形同虚设。要求响应方来自"刚刚轮询过
+        # auth/pending 的那个 IP"，把响应权绑回真正持有插件的机器。
+        if not is_ext_online(caller_pin):
+            log.warning(f'AUTH_RESPOND_REJECT(no ext) id={req_id} pin={caller_pin}')
+            return (200, JSON_HDR, _err_json('UNAUTHORIZED', '该 PIN 的授权插件不在线，无法响应此授权请求'))
+        caller_ip = _peer_ip.get() or ''
+        ext_ip = last_ext_ip.get(caller_pin) or ''
+        if ext_ip and caller_ip and ext_ip != caller_ip:
+            log.warning(f'AUTH_RESPOND_REJECT(ip) id={req_id} pin={caller_pin} ext_ip={ext_ip} caller_ip={caller_ip}')
+            return (200, JSON_HDR, _err_json('UNAUTHORIZED', '响应方 IP 与该 PIN 的授权插件不一致'))
         _pending_auths.pop(req_id, None)
         phone_ws = auth_req['ws']
         device_name = auth_req['device_name']
@@ -1956,18 +2179,21 @@ async def health_check_handler(path, request_headers):
             if phone_meta is not None:
                 phone_meta['authorized'] = True
             pc_online = len(group.pcs) > 0
-            # 查询手机主人姓名
+            # 查询手机主人姓名（v4.21.2: 移线程池 + 修 conn3 未定义的 finally 隐患）
             owner_name = ''
             try:
-                conn3 = _connect_db()
-                c3 = conn3.cursor()
-                c3.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
-                row3 = c3.fetchone()
-                if row3: owner_name = row3[0]
-            except Exception: pass
-            finally:
-                try: conn3.close()
-                except Exception: pass
+                def _query_owner_rest():
+                    conn3 = _connect_db()
+                    try:
+                        c3 = conn3.cursor()
+                        c3.execute('SELECT name FROM advisor_names WHERE pin=?', (default_pin,))
+                        row3 = c3.fetchone()
+                        return row3[0] if row3 else ''
+                    finally:
+                        conn3.close()
+                owner_name = await asyncio.get_running_loop().run_in_executor(_db_executor, _query_owner_rest)
+            except Exception:
+                pass
             # 通过 _schedule_async 调度异步任务（自动检测事件循环上下文）
             async def _send_auth_ok():
                 try:
@@ -2235,17 +2461,32 @@ async def health_check_handler(path, request_headers):
                 conn.close()
 
     # 批量导入: GET /api/v1/visits/batch?data=<JSON数组>&token=<admin_token>
+    # v4.21: 新增 POST body 方式（请求体 JSON：{"data": [...]}），绕开 GET URL
+    # 8KB 硬上限（websockets MAX_LINE_LENGTH）；GET 兼容保留（小批量仍可用）。
     if path == '/api/v1/visits/batch':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
-        qs = parse_qs(parsed.query)
-        data_str = qs.get('data', [''])[0]
-        if not data_str:
-            return (200, JSON_HDR, _err_json('MISSING_DATA', '缺少 data 参数'))
-        try:
-            records = json.loads(data_str)
-        except json.JSONDecodeError as e:
-            return (400, JSON_HDR, _err_json('INVALID_JSON', f'data JSON格式错误: {e}'))
+        body_raw = _request_body.get()
+        if body_raw:
+            try:
+                body_obj = json.loads(body_raw)
+            except json.JSONDecodeError as e:
+                return (400, JSON_HDR, _err_json('INVALID_JSON', f'请求体 JSON格式错误: {e}'))
+            if not isinstance(body_obj, dict) or 'data' not in body_obj:
+                return (400, JSON_HDR, _err_json('INVALID_JSON', '请求体须为 {"data": [...]}'))
+            records = body_obj['data']
+            if not isinstance(records, list):
+                return (400, JSON_HDR, _err_json('INVALID_JSON', 'data 必须为 JSON 数组'))
+            data_str = None
+        else:
+            qs = parse_qs(parsed.query)
+            data_str = qs.get('data', [''])[0]
+            if not data_str:
+                return (200, JSON_HDR, _err_json('MISSING_DATA', '缺少 data 参数'))
+            try:
+                records = json.loads(data_str)
+            except json.JSONDecodeError as e:
+                return (400, JSON_HDR, _err_json('INVALID_JSON', f'data JSON格式错误: {e}'))
         if not isinstance(records, list):
             return (400, JSON_HDR, _err_json('INVALID_JSON', 'data 必须为 JSON 数组'))
 
@@ -2334,51 +2575,60 @@ async def health_check_handler(path, request_headers):
             return (200, JSON_HDR, _err_json('INVALID_FIELDS', '字段超长'))
 
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        conn = None
-        try:
-            conn = _connect_db()
-            c = conn.cursor()
-            # v4.17: 去重三级——① crm_id 唯一索引（重发/补推精确去重）
-            # ② 有 visit_time：mobile+visit_time 精确匹配
-            # ③ 回退：同号 2 小时内（原"当日去重"会静默吞掉同客户当天第二次真实上门）
-            if crm_id:
-                c.execute('SELECT id FROM visits WHERE crm_id = ? LIMIT 1', (crm_id,))
-            elif visit_time:
+
+        # v4.21.2 (C-1): DB 段移入线程池——员工登记是最高频 REST 写操作
+        def _visit_insert_sync():
+            conn = None
+            try:
+                conn = _connect_db()
+                c = conn.cursor()
+                # v4.17: 去重三级——① crm_id 唯一索引（重发/补推精确去重）
+                # ② 有 visit_time：mobile+visit_time 精确匹配
+                # ③ 回退：同号 2 小时内（原"当日去重"会静默吞掉同客户当天第二次真实上门）
+                if crm_id:
+                    c.execute('SELECT id FROM visits WHERE crm_id = ? LIMIT 1', (crm_id,))
+                elif visit_time:
+                    c.execute(
+                        'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
+                        (mobile, visit_time)
+                    )
+                else:
+                    cutoff_2h = (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
+                    c.execute(
+                        'SELECT id FROM visits WHERE mobile = ? AND created_at >= ? LIMIT 1',
+                        (mobile, cutoff_2h)
+                    )
+                if c.fetchone():
+                    return ('json', 200, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
                 c.execute(
-                    'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
-                    (mobile, visit_time)
+                    'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
                 )
-            else:
-                cutoff_2h = (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
-                c.execute(
-                    'SELECT id FROM visits WHERE mobile = ? AND created_at >= ? LIMIT 1',
-                    (mobile, cutoff_2h)
-                )
-            if c.fetchone():
-                conn.close()
-                return (200, JSON_HDR, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
-            c.execute(
-                'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
-            )
-            # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
-            # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
-            # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
-            if kefu_tel and kefu_tel.strip():
-                c.execute(
-                    'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
-                    'ON CONFLICT(pin) DO NOTHING',
-                    (pin, kefu_tel.strip(), now_str)
-                )
-            conn.commit()
-            row_id = c.lastrowid
-        except Exception as e:
-            log.error(f'INSERT visit error: {e}')
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
+                # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
+                # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
+                # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
+                if kefu_tel and kefu_tel.strip():
+                    c.execute(
+                        'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
+                        'ON CONFLICT(pin) DO NOTHING',
+                        (pin, kefu_tel.strip(), now_str)
+                    )
+                conn.commit()
+                return ('rowid', c.lastrowid)
+            except Exception as e:
+                log.error(f'INSERT visit error: {e}')
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+        res = await _run_db(_visit_insert_sync)
+        if res[0] == 'err':
+            return (res[1], JSON_HDR, res[2])
+        if res[0] == 'json':
+            return (res[1], JSON_HDR, res[2])
+        row_id = res[1]
 
         # 客户端已直接提交 CRM，云端只做记录 + WS 推送，不再重复提交 CRM
         visit_record = {'id': row_id, 'pin': pin, 'name': name, 'mobile': mobile,
@@ -2416,82 +2666,90 @@ async def health_check_handler(path, request_headers):
             page_size = min(max(int(qs.get('page_size', ['50'])[0] or 50), 1), 200)
         except (TypeError, ValueError):
             page_size = 50
-        conn = None
-        try:
-            conn = _connect_db()
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            where = []
-            args = []
-            if group_id:
-                try:
-                    gid = int(group_id)
-                except (TypeError, ValueError):
-                    return (400, JSON_HDR, _err_json('INVALID_GROUP', '分组 ID 无效'))
-                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
-                group_pins = [r['pin'] for r in c.fetchall()]
-                if group_pins:
-                    where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
-                    args += group_pins
-                else:
-                    where.append('1=0')
-            elif pin:
-                where.append('pin=?')
-                args.append(pin)
-            if days_param:
-                try:
-                    days_n = int(days_param)
-                except (TypeError, ValueError):
-                    days_n = 0
-                if days_n > 0:
-                    cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
-                    where.append('created_at >= ?')
-                    args.append(cutoff)
-            if source_f == 'unsynced':
-                where.append('IFNULL(crm_synced,0) = 0')
-            elif source_f:
-                where.append('source = ?')
-                args.append(source_f)
-            if d_from:
-                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
-                args.append(d_from)
-            if d_to:
-                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
-                args.append(d_to + 'T23:59:59')
-            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-            total = 0
-            if page_no:
-                c.execute(f'SELECT COUNT(*) FROM visits {wsql}', args)
-                total = c.fetchone()[0]
-                c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT ? OFFSET ?',
-                          args + [page_size, (page_no - 1) * page_size])
-            elif where:
-                # 原有行为：pin / group 筛选返回全量（手机端同步依赖）
-                c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC', args)
-            else:
-                c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
-            rows = [dict(r) for r in c.fetchall()]
-            # 补全顾问姓名（kefu_tel 可能是手机号或姓名，查 advisor_names 表）
+        # v4.21.2 (C-1): DB 段移入线程池——面板 15s 轮询 + 手机同步的高频读
+        def _visits_list_sync():
+            conn = None
             try:
-                kefu_tels = list(set(r.get('kefu_tel','') for r in rows if r.get('kefu_tel','')))
-                if kefu_tels:
-                    ph = ','.join(['?'] * len(kefu_tels))
-                    c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
-                    name_map = {r2['pin']: r2['name'] for r2 in c.fetchall()}
-                    for r in rows:
-                        r['kefu_name'] = name_map.get(r.get('kefu_tel',''), '')
-            except Exception: pass
-            if page_no:
-                return (200, JSON_HDR, json.dumps(
-                    {'ok': True, 'total': total, 'page': page_no, 'page_size': page_size, 'rows': rows},
-                    ensure_ascii=False).encode('utf-8'))
-            return (200, JSON_HDR, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
-        except Exception as e:
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                where = []
+                args = []
+                if group_id:
+                    try:
+                        gid = int(group_id)
+                    except (TypeError, ValueError):
+                        return ('err', 400, _err_json('INVALID_GROUP', '分组 ID 无效'))
+                    c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
+                    group_pins = [r['pin'] for r in c.fetchall()]
+                    if group_pins:
+                        where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
+                        args += group_pins
+                    else:
+                        where.append('1=0')
+                elif pin:
+                    where.append('pin=?')
+                    args.append(pin)
+                if days_param:
+                    try:
+                        days_n = int(days_param)
+                    except (TypeError, ValueError):
+                        days_n = 0
+                    if days_n > 0:
+                        cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
+                        where.append('created_at >= ?')
+                        args.append(cutoff)
+                if source_f == 'unsynced':
+                    where.append('IFNULL(crm_synced,0) = 0')
+                elif source_f:
+                    where.append('source = ?')
+                    args.append(source_f)
+                if d_from:
+                    where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
+                    args.append(d_from)
+                if d_to:
+                    where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
+                    args.append(d_to + 'T23:59:59')
+                wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+
+                total = 0
+                if page_no:
+                    c.execute(f'SELECT COUNT(*) FROM visits {wsql}', args)
+                    total = c.fetchone()[0]
+                    c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT ? OFFSET ?',
+                              args + [page_size, (page_no - 1) * page_size])
+                elif where:
+                    # 原有行为：pin / group 筛选返回全量（手机端同步依赖）
+                    c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC', args)
+                else:
+                    c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
+                rows = [dict(r) for r in c.fetchall()]
+                # 补全顾问姓名（kefu_tel 可能是手机号或姓名，查 advisor_names 表）
+                try:
+                    kefu_tels = list(set(r.get('kefu_tel','') for r in rows if r.get('kefu_tel','')))
+                    if kefu_tels:
+                        ph = ','.join(['?'] * len(kefu_tels))
+                        c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
+                        name_map = {r2['pin']: r2['name'] for r2 in c.fetchall()}
+                        for r in rows:
+                            r['kefu_name'] = name_map.get(r.get('kefu_tel',''), '')
+                except Exception: pass
+                if page_no:
+                    return ('json', 200, json.dumps(
+                        {'ok': True, 'total': total, 'page': page_no, 'page_size': page_size, 'rows': rows},
+                        ensure_ascii=False).encode('utf-8'))
+                return ('json', 200, json.dumps(rows, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+        res = await _run_db(_visits_list_sync)
+        if res[0] == 'err':
+            return (res[1], JSON_HDR, res[2])
+        return (res[1], JSON_HDR, res[2])
 
     # v4.18: 服务端 CSV 导出（完整数据，不再只导屏幕上已渲染的行）
     # GET /api/v1/visits/export?token=xxx[&pin=][&group=][&days=][&source=][&d_from=][&d_to=]
@@ -2505,86 +2763,106 @@ async def health_check_handler(path, request_headers):
         source_f = qs.get('source', [''])[0]
         d_from = qs.get('d_from', [''])[0].strip()[:10]
         d_to = qs.get('d_to', [''])[0].strip()[:10]
-        conn = None
-        try:
-            conn = _connect_db()
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            where = []
-            args = []
-            if group_id:
-                try:
-                    gid = int(group_id)
-                except (TypeError, ValueError):
-                    return (400, JSON_HDR, _err_json('INVALID_GROUP', '分组 ID 无效'))
-                c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
-                group_pins = [r['pin'] for r in c.fetchall()]
-                if group_pins:
-                    where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
-                    args += group_pins
-                else:
-                    where.append('1=0')
-            elif pin:
-                where.append('pin=?')
-                args.append(pin)
-            if days_param:
-                try:
-                    days_n = int(days_param)
-                except (TypeError, ValueError):
-                    days_n = 0
-                if days_n > 0:
-                    cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
-                    where.append('created_at >= ?')
-                    args.append(cutoff)
-            if source_f == 'unsynced':
-                where.append('IFNULL(crm_synced,0) = 0')
-            elif source_f:
-                where.append('source = ?')
-                args.append(source_f)
-            if d_from:
-                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
-                args.append(d_from)
-            if d_to:
-                where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
-                args.append(d_to + 'T23:59:59')
-            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
-            c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT 200000', args)
-            rows = [dict(r) for r in c.fetchall()]
-        except Exception as e:
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
 
-        import csv as _csv
-        import io as _io
-        buf = _io.StringIO()
-        buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
-        w = _csv.writer(buf)
-        w.writerow(['ID', '客户姓名', '手机号', '顾问电话', '顾问姓名', '事由', '来源', 'CRM同步', '登记时间', '来访时间'])
-        for r in rows:
-            cells = [
-                r.get('id', ''),
-                r.get('name', ''), r.get('mobile', ''), r.get('kefu_tel', ''),
-                r.get('kefu_name', ''), r.get('visit_type', ''),
-                {'phone': '手机', 'crm_sync': 'CRM同步'}.get(r.get('source', ''), '插件'),
-                '已同步' if r.get('crm_synced') else '未同步',
-                r.get('created_at', ''), r.get('visit_time', ''),
-            ]
-            # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
-            safe_cells = []
-            for v in cells:
-                s = str(v if v is not None else '')
-                if s[:1] in ('=', '+', '-', '@'):
-                    s = "'" + s
-                safe_cells.append(s)
-            w.writerow(safe_cells)
-        filename = 'visits_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+        # v4.21.2 (C-1): 查询 + ≤20 万行 fetchall + 内存拼 CSV 全段移入线程池，
+        # 导出期间事件循环继续跑 WS 拨号/心跳（此前整段同步，全员卡顿根因）
+        def _export_visits_sync():
+            conn = None
+            try:
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                where = []
+                args = []
+                if group_id:
+                    try:
+                        gid = int(group_id)
+                    except (TypeError, ValueError):
+                        return ('err', 400, _err_json('INVALID_GROUP', '分组 ID 无效'))
+                    c.execute('SELECT pin FROM advisor_names WHERE group_id=?', (gid,))
+                    group_pins = [r['pin'] for r in c.fetchall()]
+                    if group_pins:
+                        where.append('pin IN (%s)' % ','.join(['?'] * len(group_pins)))
+                        args += group_pins
+                    else:
+                        where.append('1=0')
+                elif pin:
+                    where.append('pin=?')
+                    args.append(pin)
+                if days_param:
+                    try:
+                        days_n = int(days_param)
+                    except (TypeError, ValueError):
+                        days_n = 0
+                    if days_n > 0:
+                        cutoff = (datetime.now() - timedelta(days=days_n)).strftime('%Y-%m-%dT%H:%M:%S')
+                        where.append('created_at >= ?')
+                        args.append(cutoff)
+                if source_f == 'unsynced':
+                    where.append('IFNULL(crm_synced,0) = 0')
+                elif source_f:
+                    where.append('source = ?')
+                    args.append(source_f)
+                if d_from:
+                    where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) >= ?")
+                    args.append(d_from)
+                if d_to:
+                    where.append("(CASE WHEN IFNULL(visit_time,'') != '' THEN visit_time ELSE created_at END) <= ?")
+                    args.append(d_to + 'T23:59:59')
+                wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+                c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT 200000', args)
+                rows = [dict(r) for r in c.fetchall()]
+                # 补全顾问姓名：visits 表没有 kefu_name 列，直接 r.get('kefu_name')
+                # 恒为空字符串 → 导出的"顾问姓名"整列空白。这里按 kefu_tel（顾问电话/
+                # PIN）关联 advisor_names 补上。
+                kefu_tels = sorted({str(r.get('kefu_tel') or '').strip() for r in rows} - {''})
+                name_map = {}
+                if kefu_tels:
+                    ph = ','.join('?' * len(kefu_tels))
+                    c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
+                    name_map = {p: n for p, n in c.fetchall()}
+                for r in rows:
+                    r['kefu_name'] = name_map.get(str(r.get('kefu_tel') or '').strip(), '')
+            except Exception as e:
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+            import csv as _csv
+            import io as _io
+            buf = _io.StringIO()
+            buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
+            w = _csv.writer(buf)
+            w.writerow(['ID', '客户姓名', '手机号', '顾问电话', '顾问姓名', '事由', '来源', 'CRM同步', '登记时间', '来访时间'])
+            for r in rows:
+                cells = [
+                    r.get('id', ''),
+                    r.get('name', ''), r.get('mobile', ''), r.get('kefu_tel', ''),
+                    r.get('kefu_name', ''), r.get('visit_type', ''),
+                    {'phone': '手机', 'crm_sync': 'CRM同步'}.get(r.get('source', ''), '插件'),
+                    '已同步' if r.get('crm_synced') else '未同步',
+                    r.get('created_at', ''), r.get('visit_time', ''),
+                ]
+                # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
+                safe_cells = []
+                for v in cells:
+                    s = str(v if v is not None else '')
+                    if s[:1] in ('=', '+', '-', '@'):
+                        s = "'" + s
+                    safe_cells.append(s)
+                w.writerow(safe_cells)
+            filename = 'visits_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+            return ('csv', filename, buf.getvalue().encode('utf-8'))
+
+        kind, a, b = await _run_db(_export_visits_sync)
+        if kind == 'err':
+            return (a, JSON_HDR, b)
         return (200, [
             ('Content-Type', 'text/csv; charset=utf-8'),
-            ('Content-Disposition', f'attachment; filename={filename}'),
+            ('Content-Disposition', f'attachment; filename={a}'),
             ('Access-Control-Allow-Origin', '*'),
-        ], buf.getvalue().encode('utf-8'))
+        ], b)
 
     # 删除: GET /api/v1/visit/delete?id=N
     if path == '/api/v1/visit/delete':
@@ -2653,52 +2931,58 @@ async def health_check_handler(path, request_headers):
     if path == '/api/v1/devices':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
-        conn = None
-        try:
-            conn = _connect_db()
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
-            rows = [dict(r) for r in c.fetchall()]
-            # 标注在线状态 + IP + 当前PIN
-            # v4.16 修复B: 在线状态按 device_id 匹配（旧 meta 无 device_id 时回退 device_name）
-            online_map = {}      # device_id -> {ip, pin}
+
+        # v4.21.2 (C-1): DB 段移入线程池（面板手机管理页轮询端点）
+        def _devices_list_sync():
+            conn = None
             try:
-                snapshot = list(ws_meta.items())
-            except Exception:
-                snapshot = []
-            for _ws, _meta in snapshot:
-                if _meta.get('role') == 'phone' and _meta.get('device_name'):
-                    _did = _meta.get('device_id') or _meta['device_name']
-                    online_map[_did] = {
-                        'ip': _meta.get('ip', ''),
-                        'pin': _meta.get('pin', '')
-                    }
-            # 收集所有 PIN 用于查询姓名
-            all_pins = set()
-            for row in rows:
-                did = row.get('device_id', '')
-                row['is_online'] = did in online_map
-                row['current_ip'] = online_map.get(did, {}).get('ip', '')
-                pin = online_map.get(did, {}).get('pin', '') or row.get('last_pin', '')
-                row['current_pin'] = pin
-                row['current_name'] = ''
-                if pin:
-                    all_pins.add(pin)
-            # 批量查询姓名
-            if all_pins:
-                placeholders = ','.join(['?'] * len(all_pins))
-                c.execute(f"SELECT pin, name FROM advisor_names WHERE pin IN ({placeholders})", list(all_pins))
-                pin_name_map = {r['pin']: r['name'] for r in c.fetchall()}
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute('SELECT * FROM phones ORDER BY last_seen DESC')
+                rows = [dict(r) for r in c.fetchall()]
+                # 标注在线状态 + IP + 当前PIN
+                # v4.16 修复B: 在线状态按 device_id 匹配（旧 meta 无 device_id 时回退 device_name）
+                online_map = {}      # device_id -> {ip, pin}
+                try:
+                    snapshot = list(ws_meta.items())
+                except Exception:
+                    snapshot = []
+                for _ws, _meta in snapshot:
+                    if _meta.get('role') == 'phone' and _meta.get('device_name'):
+                        _did = _meta.get('device_id') or _meta['device_name']
+                        online_map[_did] = {
+                            'ip': _meta.get('ip', ''),
+                            'pin': _meta.get('pin', '')
+                        }
+                # 收集所有 PIN 用于查询姓名
+                all_pins = set()
                 for row in rows:
-                    if row.get('current_pin') and row['current_pin'] in pin_name_map:
-                        row['current_name'] = pin_name_map[row['current_pin']]
-            return (200, JSON_HDR, json.dumps({'ok': True, 'devices': rows}, ensure_ascii=False).encode('utf-8'))
-        except Exception as e:
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
+                    did = row.get('device_id', '')
+                    row['is_online'] = did in online_map
+                    row['current_ip'] = online_map.get(did, {}).get('ip', '')
+                    pin_ = online_map.get(did, {}).get('pin', '') or row.get('last_pin', '')
+                    row['current_pin'] = pin_
+                    row['current_name'] = ''
+                    if pin_:
+                        all_pins.add(pin_)
+                # 批量查询姓名
+                if all_pins:
+                    placeholders = ','.join(['?'] * len(all_pins))
+                    c.execute(f"SELECT pin, name FROM advisor_names WHERE pin IN ({placeholders})", list(all_pins))
+                    pin_name_map = {r['pin']: r['name'] for r in c.fetchall()}
+                    for row in rows:
+                        if row.get('current_pin') and row['current_pin'] in pin_name_map:
+                            row['current_name'] = pin_name_map[row['current_pin']]
+                return ('json', 200, json.dumps({'ok': True, 'devices': rows}, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+        res = await _run_db(_devices_list_sync)
+        return (res[1], JSON_HDR, res[2])
 
     # API: 设备PIN历史 GET /api/v1/device-history?device_id=xxx
     if path == '/api/v1/device-history':
@@ -2802,49 +3086,54 @@ async def health_check_handler(path, request_headers):
         date_from = qs.get('date_from', [''])[0]
         date_to = qs.get('date_to', [''])[0]
         number = qs.get('number', [''])[0]
-        limit = min(_safe_int(qs.get('limit', ['200'])[0], 200), 1000)
-        offset = _safe_int(qs.get('offset', ['0'])[0], 0)
+        limit = _safe_limit(qs.get('limit', ['200'])[0], 200, 1000)
+        offset = _safe_offset(qs.get('offset', ['0'])[0])
 
-        conn = None
-        try:
-            conn = _connect_db()
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            where = []
-            params = []
-            if device_id:
-                where.append('cr.device_id = ?'); params.append(device_id)
-            if pin:
-                where.append('p.last_pin = ?'); params.append(pin)
-            if number:
-                where.append('cr.number LIKE ?'); params.append(f'%{number}%')
-            if date_from:
-                try:
-                    d = datetime.strptime(date_from, '%Y-%m-%d')
-                    where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
-                except Exception: pass  # invalid date format, skip filter
-            if date_to:
-                try:
-                    d = datetime.strptime(date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
-                    where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
-                except Exception: pass  # invalid date format, skip filter
-            w = ' AND '.join(where) if where else '1=1'
-            c.execute(f'''SELECT cr.*, p.last_pin as pin, p.device_model, p.app_version
-                         FROM call_records_raw cr
-                         LEFT JOIN phones p ON cr.device_id = p.device_id
-                         WHERE {w} ORDER BY cr.dial_time DESC LIMIT ? OFFSET ?''',
-                      params + [limit, offset])
-            rows = [dict(r) for r in c.fetchall()]
-            c.execute(f'SELECT COUNT(*) FROM call_records_raw cr LEFT JOIN phones p ON cr.device_id=p.device_id WHERE {w}', params)
-            total = c.fetchone()[0]
-            return (200, JSON_HDR, json.dumps({
-                'ok': True, 'calls': rows, 'total': total, 'limit': limit, 'offset': offset
-            }, ensure_ascii=False).encode('utf-8'))
-        except Exception as e:
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
+        # v4.21.2 (C-1): DB 段移入线程池（面板通话记录页轮询端点）
+        def _calls_list_sync():
+            conn = None
+            try:
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                where = []
+                params = []
+                if device_id:
+                    where.append('cr.device_id = ?'); params.append(device_id)
+                if pin:
+                    where.append('p.last_pin = ?'); params.append(pin)
+                if number:
+                    where.append('cr.number LIKE ?'); params.append(f'%{number}%')
+                if date_from:
+                    try:
+                        d = datetime.strptime(date_from, '%Y-%m-%d')
+                        where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
+                    except Exception: pass  # invalid date format, skip filter
+                if date_to:
+                    try:
+                        d = datetime.strptime(date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
+                        where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
+                    except Exception: pass  # invalid date format, skip filter
+                w = ' AND '.join(where) if where else '1=1'
+                c.execute(f'''SELECT cr.*, p.last_pin as pin, p.device_model, p.app_version
+                             FROM call_records_raw cr
+                             LEFT JOIN phones p ON cr.device_id = p.device_id
+                             WHERE {w} ORDER BY cr.dial_time DESC LIMIT ? OFFSET ?''',
+                          params + [limit, offset])
+                rows = [dict(r) for r in c.fetchall()]
+                c.execute(f'SELECT COUNT(*) FROM call_records_raw cr LEFT JOIN phones p ON cr.device_id=p.device_id WHERE {w}', params)
+                total = c.fetchone()[0]
+                return ('json', 200, json.dumps({
+                    'ok': True, 'calls': rows, 'total': total, 'limit': limit, 'offset': offset
+                }, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+        res = await _run_db(_calls_list_sync)
+        return (res[1], JSON_HDR, res[2])
 
     # v4.19: 通话记录 CSV 导出（导出当前筛选条件下的完整结果集，不再只导当前页 50 行）
     # GET /api/v1/calls/export?token=xxx[&device_id=][&pin=][&date_from=][&date_to=][&number=]
@@ -2857,84 +3146,92 @@ async def health_check_handler(path, request_headers):
         e_date_from = qs.get('date_from', [''])[0]
         e_date_to = qs.get('date_to', [''])[0]
         e_number = qs.get('number', [''])[0]
-        conn = None
-        try:
-            conn = _connect_db()
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            where = []
-            params = []
-            if e_device_id:
-                where.append('cr.device_id = ?'); params.append(e_device_id)
-            if e_pin:
-                where.append('p.last_pin = ?'); params.append(e_pin)
-            if e_number:
-                where.append('cr.number LIKE ?'); params.append(f'%{e_number}%')
-            if e_date_from:
-                try:
-                    d = datetime.strptime(e_date_from, '%Y-%m-%d')
-                    where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
-                except Exception:
-                    pass
-            if e_date_to:
-                try:
-                    d = datetime.strptime(e_date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
-                    where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
-                except Exception:
-                    pass
-            wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
-            c.execute(f'''SELECT cr.*, p.device_model, p.app_version
-                         FROM call_records_raw cr
-                         LEFT JOIN phones p ON cr.device_id = p.device_id
-                         {wsql} ORDER BY cr.dial_time DESC LIMIT 200000''', params)
-            rows = [dict(r) for r in c.fetchall()]
-        except Exception as e:
-            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
-        finally:
-            if conn:
-                conn.close()
 
-        import csv as _csv
-        import io as _io
-        _CALL_TYPES = {0: '未知', 1: '呼入', 2: '呼出', 3: '未接'}
-        buf = _io.StringIO()
-        buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
-        _cw = _csv.writer(buf)
-        _cw.writerow(['设备ID', '号码', '通话时间', '时长(秒)', '类型', 'SIM卡', '机型', '版本'])
-        for r in rows:
-            ts = r.get('dial_time')
+        # v4.21.2 (C-1): 查询 + ≤20 万行 fetchall + CSV 拼接全段移入线程池
+        def _export_calls_sync():
+            conn = None
             try:
-                tstr = datetime.fromtimestamp(int(ts) / 1000).strftime('%Y-%m-%d %H:%M:%S') if ts else ''
-            except (TypeError, ValueError, OSError):
-                tstr = str(ts if ts is not None else '')
-            try:
-                ct = int(r.get('call_type'))
-            except (TypeError, ValueError):
-                ct = -1
-            cells = [
-                r.get('device_id', ''),
-                r.get('number', ''),
-                tstr,
-                r.get('duration', 0),
-                _CALL_TYPES.get(ct, '未知'),
-                'SIM' + str((r.get('sim_slot') or 0) + 1),
-                r.get('device_model', ''),
-                r.get('app_version', ''),
-            ]
-            # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
-            safe_cells = []
-            for v in cells:
-                s = str(v if v is not None else '')
-                if s[:1] in ('=', '+', '-', '@'):
-                    s = "'" + s
-                safe_cells.append(s)
-            _cw.writerow(safe_cells)
-        filename = 'calls_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                where = []
+                params = []
+                if e_device_id:
+                    where.append('cr.device_id = ?'); params.append(e_device_id)
+                if e_pin:
+                    where.append('p.last_pin = ?'); params.append(e_pin)
+                if e_number:
+                    where.append('cr.number LIKE ?'); params.append(f'%{e_number}%')
+                if e_date_from:
+                    try:
+                        d = datetime.strptime(e_date_from, '%Y-%m-%d')
+                        where.append('cr.dial_time >= ?'); params.append(int(d.timestamp() * 1000))
+                    except Exception:
+                        pass
+                if e_date_to:
+                    try:
+                        d = datetime.strptime(e_date_to + 'T23:59:59', '%Y-%m-%dT%H:%M:%S')
+                        where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
+                    except Exception:
+                        pass
+                wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
+                c.execute(f'''SELECT cr.*, p.device_model, p.app_version
+                             FROM call_records_raw cr
+                             LEFT JOIN phones p ON cr.device_id = p.device_id
+                             {wsql} ORDER BY cr.dial_time DESC LIMIT 200000''', params)
+                rows = [dict(r) for r in c.fetchall()]
+            except Exception as e:
+                return ('err', 500, _err_json('DB_ERROR', str(e)))
+            finally:
+                if conn:
+                    conn.close()
+
+            import csv as _csv
+            import io as _io
+            _CALL_TYPES = {0: '未知', 1: '呼入', 2: '呼出', 3: '未接'}
+            buf = _io.StringIO()
+            buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
+            _cw = _csv.writer(buf)
+            _cw.writerow(['设备ID', '号码', '通话时间', '时长(秒)', '类型', 'SIM卡', '机型', '版本'])
+            for r in rows:
+                ts = r.get('dial_time')
+                try:
+                    tstr = datetime.fromtimestamp(int(ts) / 1000).strftime('%Y-%m-%d %H:%M:%S') if ts else ''
+                except (TypeError, ValueError, OSError):
+                    tstr = str(ts if ts is not None else '')
+                try:
+                    ct = int(r.get('call_type'))
+                except (TypeError, ValueError):
+                    ct = -1
+                cells = [
+                    r.get('device_id', ''),
+                    r.get('number', ''),
+                    tstr,
+                    r.get('duration', 0),
+                    _CALL_TYPES.get(ct, '未知'),
+                    'SIM' + str((r.get('sim_slot') or 0) + 1),
+                    r.get('device_model', ''),
+                    r.get('app_version', ''),
+                ]
+                # 防 CSV 公式注入：以 =+-@ 开头的单元格前置单引号
+                safe_cells = []
+                for v in cells:
+                    s = str(v if v is not None else '')
+                    if s[:1] in ('=', '+', '-', '@'):
+                        s = "'" + s
+                    safe_cells.append(s)
+                _cw.writerow(safe_cells)
+            filename = 'calls_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.csv'
+            return ('csv', filename, buf.getvalue().encode('utf-8'))
+
+        kind, a, b = await _run_db(_export_calls_sync)
+        if kind == 'err':
+            return (a, JSON_HDR, b)
         return (200, [
             ('Content-Type', 'text/csv; charset=utf-8'),
-            ('Content-Disposition', f'attachment; filename={filename}'),
+            ('Content-Disposition', f'attachment; filename={a}'),
             ('Access-Control-Allow-Origin', '*'),
-        ], buf.getvalue().encode('utf-8'))
+        ], b)
 
     # API: 踢出客户端 GET /api/v1/kick?pin=&role=
     if path == '/api/v1/kick':
@@ -2988,7 +3285,7 @@ async def health_check_handler(path, request_headers):
         qs = parse_qs(parsed.query)
         device_id = qs.get('device_id', [''])[0]
         event_type = qs.get('event_type', [''])[0]
-        limit = min(_safe_int(qs.get('limit', ['100'])[0], 100), 500)
+        limit = _safe_limit(qs.get('limit', ['100'])[0], 100, 500)
         conn = None
         try:
             conn = _connect_db()
@@ -3025,13 +3322,21 @@ async def health_check_handler(path, request_headers):
 
 # ==================== 服务器启停 ====================
 _heartbeat_task = None  # C4修复: 保存心跳任务引用，防止重启时累积多个
+# C4修复扩展: 记录全部周期任务，重启前统一取消，否则每次拉起一遍服务器都会
+# 多叠一层 periodic_save / periodic_snapshot / periodic_cleanup。
+_periodic_tasks = []
 
 async def run_server():
-    global server_instance, _heartbeat_task
+    global server_instance, _heartbeat_task, loop
     log.info(f'Starting server on port {PORT}...')
-    
-    # 自动配置防火墙规则（放到 executor 中避免阻塞事件循环）
+
+    # P0-Fix: 必须把事件循环登记到全局 loop。
+    # headless 路径（Docker entrypoint）只走 asyncio.run(run_server())，从不经过
+    # run_server_thread()；此前这里用局部变量接收 get_running_loop()，全局 loop 恒为
+    # None，于是所有 _schedule_async（REST 拨号 / 挂断 / 登记推送 / 踢人 / 授权回调）
+    # 都落到 else 分支被静默丢弃 —— Docker 实例核心链路"看着在跑，实际什么都没做"。
     loop = asyncio.get_running_loop()
+    # 自动配置防火墙规则（放到 executor 中避免阻塞事件循环）
     # P0-Fix: 扩大默认线程池，防止 sync process_request 因线程池饱和而排队超时
     loop.set_default_executor(ThreadPoolExecutor(max_workers=32, thread_name_prefix='ws-http'))
     await loop.run_in_executor(None, configure_firewall)
@@ -3055,26 +3360,31 @@ async def run_server():
         # 通知托盘状态更新
         update_tray_status(True)
 
+        # C4修复: 取消旧周期任务再创建新的，防止服务器重启时任务叠加（内存/DB 双写）
+        for _old in list(_periodic_tasks):
+            _old.cancel()
+        _periodic_tasks.clear()
+
         # Fix ⏳4: periodically persist stats every 5 minutes
         async def periodic_save():
             while True:
                 await asyncio.sleep(300)
                 save_stats()
-        asyncio.create_task(periodic_save())
+        _periodic_tasks.append(asyncio.create_task(periodic_save()))
 
         # 连接数历史快照（每30秒记录一次，供仪表盘趋势图）
         async def periodic_snapshot():
             while True:
                 await asyncio.sleep(30)
                 snapshot_connection_history()
-        asyncio.create_task(periodic_snapshot())
+        _periodic_tasks.append(asyncio.create_task(periodic_snapshot()))
 
         # 内存清理（每10分钟清理一次无界数据结构）
         async def periodic_cleanup():
             while True:
                 await asyncio.sleep(600)
                 cleanup_memory()
-        asyncio.create_task(periodic_cleanup())
+        _periodic_tasks.append(asyncio.create_task(periodic_cleanup()))
 
         # 保持运行
         await asyncio.Future()  # 永不完成
@@ -3223,6 +3533,62 @@ def run_server_thread():
         log.error(f'Traceback: {traceback.format_exc()}')
         update_tray_status(False)
 
+def run_headless():
+    """headless 启动入口（Docker / 无桌面环境）。
+
+    与 run_server_thread 的区别与存在理由：
+    1) 显式登记全局 loop（run_server 内部也会登记，这里是双保险）；
+    2) 接管 SIGTERM/SIGINT：`docker stop` 默认发 SIGTERM。此前 import signal 从未
+       使用过，容器重启一律硬杀 —— 统计来不及落盘、WS 连接不打招呼就断、周期任务
+       残留到下次启动叠加。现在改为触发 落盘 + 关闭全部连接 + 停止服务器。
+    """
+    global loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    def _on_signal(signum, _frame):
+        log.info(f'Received signal {signum}, shutting down gracefully...')
+        try:
+            asyncio.run_coroutine_threadsafe(shutdown_gracefully(), loop)
+        except Exception as e:
+            log.error(f'graceful shutdown failed: {e}')
+
+    # Windows 下 SIGTERM 语义受限，注册失败直接忽略
+    for _sig_name in ('SIGTERM', 'SIGINT'):
+        _sig = getattr(signal, _sig_name, None)
+        if _sig is None:
+            continue
+        try:
+            signal.signal(_sig, _on_signal)
+        except (ValueError, OSError, AttributeError):
+            pass
+
+    try:
+        loop.run_until_complete(run_server())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        import traceback
+        log.error(f'Server error: {e}')
+        log.error(f'Traceback: {traceback.format_exc()}')
+        sys.exit(1)
+
+async def shutdown_gracefully():
+    """优雅关闭：落盘统计 → 取消周期任务 → 关闭连接并停服 → 停事件循环。"""
+    try:
+        save_stats()
+    except Exception as e:
+        log.error(f'save_stats on shutdown failed: {e}')
+    for t in list(_periodic_tasks):
+        t.cancel()
+    _periodic_tasks.clear()
+    try:
+        await stop_server()
+    except Exception as e:
+        log.error(f'stop_server on shutdown failed: {e}')
+    log.info('Graceful shutdown complete')
+    asyncio.get_running_loop().stop()
+
 # ==================== 主入口 ====================
 def main():
     # Fix Q4: check if another instance is already running
@@ -3256,6 +3622,11 @@ def main():
 
     # Fix ⏳4: restore persisted stats from previous runs
     load_stats()
+
+    # 无桌面环境（Docker / Windows 服务化）直接走 headless：不创建托盘、接管 SIGTERM
+    if (os.environ.get('AUTODIAL_HEADLESS') or '').strip().lower() in ('1', 'true', 'yes'):
+        run_headless()
+        return
 
     # 启动服务器线程
     server_thread = threading.Thread(target=run_server_thread, daemon=True)

@@ -208,7 +208,7 @@ cd pc-app-Electron && npm install && npm start
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| GET | `/api/v1/dial?number=xxx` | 拨号 → `ACCEPTED` / `PHONE_OFFLINE` / `PC_CONNECTED` |
+| GET | `/api/v1/dial?number=xxx` | 拨号 → `ACCEPTED` / `PHONE_OFFLINE`（`PC_CONNECTED` 已于 v4.15 移除，不再返回） |
 | GET | `/api/v1/hangup` | 挂断 → `ACCEPTED` |
 | GET | `/api/v1/status` | 查询 PC/手机/扩展在线状态 |
 
@@ -217,7 +217,7 @@ cd pc-app-Electron && npm install && npm start
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/api/v1/visit?name=...&mobile=...&kefu_tel=...&visit_type=...&visit_time=...` | 一键登记（支持visit_time去重） |
-| GET | `/api/v1/visits?pin=...` | 查询登记列表（API 仅支持 `pin`/`group` 参数；`unsynced`、日期筛选是 dashboard 前端过滤，直接调 API 无效；无 pin 时需管理员令牌） |
+| GET | `/api/v1/visits?pin=...&group=...&days=...&source=...&d_from=...&d_to=...&page=...&page_size=...` | 查询登记列表。服务端已支持 `days`（最近 N 天）、`source`（`plugin`/`phone`/`crm_sync`/`unsynced`）、`d_from`/`d_to`（按 `COALESCE(visit_time, created_at)` 比较）以及 `page`/`page_size` 服务端分页；无 `pin`/`group` 筛选时需管理员令牌（v4.21 起上述筛选均已下推到服务端，不再依赖前端过滤） |
 | GET | `/api/v1/visit/update?id=N&...` | 更新登记记录（🔐 管理员） |
 | GET | `/api/v1/visit/delete?id=N` | 删除登记记录（🔐 管理员） |
 
@@ -291,7 +291,7 @@ cd pc-app-Electron && npm install && npm start
 | `INVALID_PIN` | PIN 格式无效（非 4 位或 11 位数字） |
 | `INVALID_NUMBER` | 号码为空或不合法（非 3~20 位数字） |
 | `PHONE_OFFLINE` | 手机未连接云中继 |
-| `PC_CONNECTED` | PC 在线，应走本地直连 |
+| ~~`PC_CONNECTED`~~ | **已于 v4.15 移除**：同 PIN 任意 PC 在线不再拒绝云端拨号（扩展仍保留该分支仅为兼容旧版服务端，当前服务端不会返回） |
 | `DUPLICATE_DIAL` | 5 秒内同号码重复拨号 |
 | `MISSING_FIELDS` | 缺少必填字段 |
 | `MISSING_PIN` | 缺少 PIN 参数 |
@@ -320,9 +320,9 @@ cd pc-app-Electron && npm install && npm start
 扩展拨号:
 1. 尝试 HTTP 127.0.0.1:35432 (PC 直连，可达性探测 500ms 超时)
 2. PC 不可达 → 云中继 /api/v1/dial (Header PIN)
-   ├─ PC_CONNECTED → 提示切回本地
    ├─ PHONE_OFFLINE → 提示手机离线
    └─ ACCEPTED → 拨号成功
+（v4.15 起服务端不再返回 PC_CONNECTED；扩展端旧分支仅为兼容旧版服务端保留）
 ```
 
 > ⚠️ 注意：500ms 超时仅覆盖 PC 可达性探测（ping）；实际的拨号/挂断/登记 fetch 请求当前未设置超时，PC 端 TCP 建连成功但不回包时请求可能长时间挂起。

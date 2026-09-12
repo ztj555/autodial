@@ -19,7 +19,7 @@
             --hero-border: #BFD9F2;
             --hero-top: #EDF4FC;
             --text: #162840;
-            --text-2: #5880A8;
+            --text-2: #456B8F;
             --primary: #2B6CC4;
             --primary-light: #4A90E0;
             --primary-dark: #1A56A8;
@@ -261,7 +261,7 @@
         .data-table th, .data-table td { padding: 11px 12px; text-align: left; }
         .data-table th {
             background: var(--input-bg); color: var(--text-2);
-            font-size: 11px; font-weight: 600; letter-spacing: .05em;
+            font-size: 12px; font-weight: 600; letter-spacing: .04em;
             text-transform: uppercase;
             white-space: nowrap;
         }
@@ -626,8 +626,8 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
                         </button>
                     </div>
-                    <table class="data-table"><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th><th>操作</th></tr></thead>
-                    <tbody id="phones-list"><tr><td colspan="10" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <table class="data-table"><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th></tr></thead>
+                    <tbody id="phones-list"><tr><td colspan="9" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -715,7 +715,7 @@
                             </button>
                         </div>
                     </div>
-                    <table class="data-table"><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>更新时间</th><th>操作</th></tr></thead>
+                    <table class="data-table"><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>更新时间</th></tr></thead>
                     <tbody id="pins-list"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
@@ -740,7 +740,7 @@
                 <div class="card">
                     <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>修改密码</div>
                     <div class="tool-row">
-                        <div class="filter-group"><label>账号ID</label><input type="number" class="input" id="chpwd-id" placeholder="账号ID" style="width:100px;"></div>
+                        <div class="filter-group"><label>选择账号</label><select class="input" id="chpwd-id" style="width:170px;"><option value="">加载中...</option></select></div>
                         <div class="filter-group"><label>新密码</label><input type="password" class="input" id="chpwd-newpass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:190px;"></div>
                         <button class="btn btn-primary" onclick="chpwdAdminAccount()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
@@ -818,6 +818,18 @@
         </main>
     </div>
 
+    <!-- ==================== 通用确认弹窗（替换原生 confirm，可回显对象名） ==================== -->
+    <div class="modal-overlay z-top" id="confirm-modal">
+        <div class="modal" style="max-width:400px;">
+            <h3><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 16.5v.5"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div><span id="confirm-title">确认操作</span></h3>
+            <div id="confirm-message" style="font-size:13.5px;line-height:1.7;color:var(--text);"></div>
+            <div class="form-actions">
+                <button class="btn btn-outline" id="confirm-cancel">取消</button>
+                <button class="btn btn-danger" id="confirm-ok">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 编辑上门记录弹窗 ==================== -->
     <div class="modal-overlay" id="visit-edit-modal">
         <div class="modal">
@@ -893,6 +905,8 @@
         let refreshTimer = null;
         let lastRefresh = null;
         let refreshPaused = false;   // v4.20: 自动刷新暂停开关（供长时间填写表格时使用）
+        let _timerRefresh = false;   // v4.21.2: 定时刷新标记（软刷新，不重置分页/筛选/展开）
+        let _loadSeq = { phones: 0, calls: 0, visits: 0 };  // v4.21.2: 列表请求序号（防慢响应覆盖）
 
         // ==================== SVG 图标（Phosphor 风格：24 viewBox / stroke 1.8 / round） ====================
         const ICONS = {
@@ -1055,12 +1069,6 @@
         document.addEventListener('click', function(e) {
             var t = e.target;
             if (!t || !t.closest) return;
-            var detailBtn = t.closest('[data-action="show-phone-detail"]');
-            if (detailBtn) {
-                e.stopPropagation();
-                showPhoneDetail(detailBtn.getAttribute('data-device'), detailBtn.getAttribute('data-name'));
-                return;
-            }
             var editBtn = t.closest('[data-action="open-edit-modal"]');
             if (editBtn) {
                 openEditModal(
@@ -1107,12 +1115,31 @@
             const t = document.createElement('div');
             t.className = 'toast ' + (type || 'info');
             const icn = type === 'success' ? 'check' : type === 'error' ? 'warning' : 'info';
-            t.innerHTML = ic(icn, 16) + '<span>' + msg + '</span><span class="toast-close" onclick="this.parentNode.remove()">' + ic('x', 14) + '</span>';
+            t.innerHTML = ic(icn, 16) + '<span>' + esc(msg) + '</span><span class="toast-close" onclick="this.parentNode.remove()">' + ic('x', 14) + '</span>';
             document.getElementById('toast-container').appendChild(t);
             setTimeout(function() {
                 t.classList.add('hide');
                 setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 220);
             }, 3200);
+        }
+
+        // ==================== 通用确认弹窗（v4.21.2: 替代原生 confirm，回显对象名） ====================
+        function confirmDialog(message, title) {
+            return new Promise(function(resolve) {
+                const overlay = document.getElementById('confirm-modal');
+                document.getElementById('confirm-title').textContent = title || '确认操作';
+                document.getElementById('confirm-message').textContent = message;
+                const okBtn = document.getElementById('confirm-ok');
+                const cancelBtn = document.getElementById('confirm-cancel');
+                overlay.classList.add('active');
+                function done(val) {
+                    overlay.classList.remove('active');
+                    okBtn.onclick = null; cancelBtn.onclick = null;
+                    resolve(val);
+                }
+                okBtn.onclick = function() { done(true); };
+                cancelBtn.onclick = function() { done(false); };
+            });
         }
 
         // ==================== 侧边栏（移动端） ====================
@@ -1131,6 +1158,8 @@
         let visitChart = null;
 
         // ==================== Navigation ====================
+        // v4.21.2 (13): hash 路由——F5/收藏/分享保留当前页（#/visits 等），
+        // 原先无路由 F5 必回首页，高频页每次都要重新导航。
         function showPage(id) {
             document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
             document.querySelectorAll('.side-item').forEach(function(b) { b.classList.remove('active'); });
@@ -1145,10 +1174,17 @@
             const tt = document.getElementById('topbar-title');
             if (tt) tt.textContent = titles[id] || '首页总览';
 
+            if (('#/' + id) !== location.hash) {
+                try { history.replaceState(null, '', '#/' + id); } catch (e) { location.hash = '/' + id; }
+            }
+            // v4.21.2 (13): 切页时重置"上次刷新"提示，避免"已跳过"残留到别的页面
+            const lr = document.getElementById('last-refresh');
+            if (lr) lr.textContent = '-';
+
             if (id === 'dashboard') loadDashboard();
             else if (id === 'phones') loadPhones();
             else if (id === 'calls') loadCalls();
-            else if (id === 'visits') { loadVisits(); loadPinDropdown(); setTimeout(renderVisitChart, 300); }
+            else if (id === 'visits') { loadVisits(); if (!_timerRefresh) loadPinDropdown(); setTimeout(renderVisitChart, 300); }
             else if (id === 'pins') loadPins();
             else if (id === 'admin-accounts') loadAdminAccounts();
             else if (id === 'logs') { loadLogs(); loadLogStats(); }
@@ -1173,8 +1209,12 @@
 
         async function doLogin(user, pass) {
             try {
-                const r = await fetch(API_BASE + '/api/v1/login?user=' +
-                    encodeURIComponent(user) + '&pass=' + encodeURIComponent(pass));
+                // v4.21.2 (D-8): 凭据走 POST body，不再放进网址（防进访问日志/浏览器历史）
+                const r = await fetch(API_BASE + '/api/v1/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                    body: JSON.stringify({ user: user, pass: pass })
+                });
                 const d = await r.json();
                 if (d.ok) { setSessionToken(d.token); location.reload(); }
                 else toast('登录失败: ' + (d.message || '账号或密码错误'), 'error');
@@ -1202,6 +1242,15 @@
                         '<td class="td-muted">' + (a.created_at ? new Date(a.created_at).toLocaleString('zh-CN') : '-') + '</td>' +
                         '<td><button class="btn btn-danger btn-sm" data-action="delete-admin" data-id="' + escA(a.id) + '">' + ic('trash', 12) + ' 删除</button></td></tr>';
                 }).join('');
+                // v4.21.2 (13): 改密码下拉选择账号——免去手输数字 ID
+                const sel = document.getElementById('chpwd-id');
+                if (sel) {
+                    const prev = sel.value;
+                    sel.innerHTML = d.accounts.map(function(a) {
+                        return '<option value="' + escA(a.id) + '">' + esc('#' + a.id + ' · ' + (a.username || '')) + '</option>';
+                    }).join('');
+                    if (prev && d.accounts.some(function(a) { return String(a.id) === prev; })) sel.value = prev;
+                }
             } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
         }
 
@@ -1212,7 +1261,12 @@
             if (u.length < 4) { toast('账号至少4位', 'error'); return; }
             if (p.length < 4) { toast('密码至少4位', 'error'); return; }
             try {
-                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/admin/add?user=' + encodeURIComponent(u) + '&pass=' + encodeURIComponent(p)));
+                // v4.21.2 (D-8): 凭据走 POST body
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/admin/add'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                    body: JSON.stringify({ user: u, pass: p })
+                });
                 const d = await r.json();
                 if (d.ok) { document.getElementById('new-admin-user').value = ''; document.getElementById('new-admin-pass').value = ''; loadAdminAccounts(); toast('账号添加成功', 'success'); }
                 else toast('添加失败: ' + (d.message || '未知错误'), 'error');
@@ -1220,7 +1274,8 @@
         }
 
         async function delAdminAccount(id) {
-            if (!confirm('确定删除此管理账号？删除后无法恢复。\n\n注意：不能删除最后一个管理账号。')) return;
+            // v4.21.2 (13): 自定义确认弹窗回显账号 ID
+            if (!(await confirmDialog('将删除管理账号 #' + id + '，删除后无法恢复。\n\n注意：不能删除最后一个管理账号。', '删除管理账号'))) return;
             try {
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/admin/del?id=' + id));
                 const d = await r.json();
@@ -1232,10 +1287,15 @@
         async function chpwdAdminAccount() {
             const id = document.getElementById('chpwd-id').value.trim();
             const np = document.getElementById('chpwd-newpass').value.trim();
-            if (!id || !np) { showAdminMsg('请填写账号ID和新密码', 'error'); return; }
+            if (!id || !np) { showAdminMsg('请选择账号并填写新密码', 'error'); return; }
             if (np.length < 4) { showAdminMsg('密码至少4位', 'error'); return; }
             try {
-                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/admin/chpwd?id=' + id + '&newpass=' + encodeURIComponent(np)));
+                // v4.21.2 (D-8): 新密码走 POST body
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/admin/chpwd'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                    body: JSON.stringify({ id: id, newpass: np })
+                });
                 const d = await r.json();
                 if (d.ok) { showAdminMsg('密码修改成功！', 'success'); document.getElementById('chpwd-newpass').value = ''; }
                 else showAdminMsg('修改失败: ' + (d.message || '未知错误'), 'error');
@@ -1251,32 +1311,47 @@
         // ==================== Helpers ====================
         // v4.19: 统一请求层——请求失败 / 限流 / 登录过期不再被静默吞掉，
         // 改为顶部横幅明确告知，避免"请求失败"被渲染成"暂无数据"造成误判。
+        // v4.21.2 (13): 成功不再"无条件吹灭"横幅——并发请求下，一次成功会把别的
+        // 失败提示清掉。改为错误计数：失败 +1，成功 -1，计数归零才收起。
         let apiBannerShown = false;
+        let apiErrCount = 0;
+        let apiLastErrAt = 0;
         function setApiBanner(msg, isAuthError) {
             const el = document.getElementById('api-banner');
             if (!el) return;
             if (!msg) {
-                if (apiBannerShown) { el.style.display = 'none'; el.innerHTML = ''; }
-                apiBannerShown = false;
+                if (isAuthError !== 'success') return;  // 内部约定：仅成功路径传 'success' 才考虑收起
+                // 距上次失败超过 3 秒才收起：并发下刚发生的失败不会被同时完成的成功"吹灭"；
+                // 且服务恢复数秒后横幅会自动消失，不会因历史失败计数长期残留。
+                if (Date.now() - apiLastErrAt > 3000) {
+                    apiErrCount = 0;
+                    if (apiBannerShown) { el.style.display = 'none'; el.innerHTML = ''; apiBannerShown = false; }
+                }
                 return;
             }
-            const btn = isAuthError
+            apiErrCount++;
+            apiLastErrAt = Date.now();
+            const btn = isAuthError === true
                 ? '<button class="btn btn-outline btn-sm" onclick="showLogin()">重新登录</button>'
                 : '<button class="btn btn-outline btn-sm" onclick="refreshAll()">重试</button>';
-            el.innerHTML = '<span class="api-banner-ico">' + ic('warning', 15) + '</span><span>' + msg + '</span>' + btn;
+            // 必须转义：msg 可能夹带服务端返回的、可被外部影响的内容（如登记数据
+            // 触发的报错文案）。直接 innerHTML 拼接等于给自己开了一条反射型 XSS。
+            el.innerHTML = '<span class="api-banner-ico">' + ic('warning', 15) + '</span><span>' + esc(msg) + '</span>' + btn;
             el.style.display = 'flex';
             apiBannerShown = true;
         }
 
         async function apiGet(url) {
-            const token = getSessionToken();
-            const sep = url.includes('?') ? '&' : '?';
-            const tokenUrl = token ? url + sep + 'token=' + encodeURIComponent(token) : url;
+            // 凭据一律走 Authorization 头，不再拼进 URL。
+            // token 出现在 URL 里会被浏览器历史、服务器 access log、代理日志、
+            // Referer 头到处留痕，等于把会话凭据写在信封外面。
+            const hdrs = authHeaders();
             try {
-                const r = await fetch(API_BASE + tokenUrl);
+                const r = await fetch(API_BASE + url, { headers: hdrs });
                 if (r.status === 401) {
                     clearSessionToken();
-                    setApiBanner('登录已过期，请重新登录后再查看数据（当前列表内容可能不是最新的）。', true);
+                    // v4.21.2 (13): 未登录/锁定态下不喊"登录已过期"，用中性文案
+                    setApiBanner(isLoggedIn() ? '登录已过期，请重新登录后再查看数据（当前列表内容可能不是最新的）。' : '请先登录后再查看数据。', true);
                     return null;
                 }
                 if (r.status === 429) {
@@ -1287,7 +1362,7 @@
                     setApiBanner('服务端返回异常（HTTP ' + r.status + '），当前显示的数据可能不是最新的。', false);
                     return null;
                 }
-                setApiBanner('');
+                setApiBanner('', 'success');
                 return await r.json();
             } catch(e) {
                 setApiBanner('无法连接到服务器，请检查网络或服务进程；当前显示的数据可能已过期。', false);
@@ -1295,12 +1370,35 @@
             }
         }
 
-        /** 为 URL 附加管理 token（供直接 fetch 调用的 endpoint 使用） */
-        function withToken(url) {
+        /** 管理会话的请求头（凭据只走 Authorization，绝不进 URL） */
+        function authHeaders() {
             const token = getSessionToken();
-            if (!token) return url;
-            const sep = url.includes('?') ? '&' : '?';
-            return url + sep + 'token=' + encodeURIComponent(token);
+            return token ? { 'Authorization': 'Bearer ' + token } : {};
+        }
+
+        /** 为同源 API 请求自动附加 Authorization 头。
+         *  页面里大量 `fetch(withToken(url))` 直接调用原生 fetch，逐个改 headers
+         *  容易漏；这里统一包一层，保证"凭据不再出现在 URL"没有死角。
+         *  `withToken` 保留为兼容用的恒等函数（老调用点无需改动）。 */
+        const _nativeFetch = window.fetch.bind(window);
+        window.fetch = function(input, init) {
+            const url = (typeof input === 'string') ? input : ((input && input.url) || '');
+            if (url.indexOf('/api/') !== -1) {
+                init = init || {};
+                const headers = new Headers(init.headers || {});
+                const token = getSessionToken();
+                if (token && !headers.has('Authorization')) {
+                    headers.set('Authorization', 'Bearer ' + token);
+                }
+                init.headers = headers;
+            }
+            return _nativeFetch(input, init);
+        };
+
+        /** @deprecated 恒等函数。凭据改由上面的 fetch 包装统一注入 Authorization 头，
+         *  保留仅为兼容历史调用点，不要再往 URL 上拼 token。 */
+        function withToken(url) {
+            return url;
         }
 
         function cssVar(n) {
@@ -1449,10 +1547,20 @@
         // v4.19: 手机搜索原来每按一个键就全量请求一次（与通话页的防抖不一致），
         // 统一改为 400ms 防抖，既省服务端压力也避免限流误伤。
         let phoneSearchTimer = null;
+        // 设备列表分页：每台设备会渲染「主行 + 展开详情行」，全量渲染在设备多时明显卡顿
+        let phonePage = 1;
+        let phoneFilterKey = '';
+        const PHONE_PAGE_SIZE = 50;
+        function phonePageGo(delta) {
+            phonePage = Math.max(1, phonePage + delta);
+            loadPhones();
+        }
         function phoneSearchDebounce() { clearTimeout(phoneSearchTimer); phoneSearchTimer = setTimeout(loadPhones, 400); }
 
         async function loadPhones() {
+            const seq = ++_loadSeq.phones;
             const d = await apiGet('/api/v1/devices');
+            if (seq !== _loadSeq.phones) return;  // v4.21.2: 慢响应后到不覆盖新数据
             const statusFilter = document.getElementById('phone-status-filter')?.value || '';
             const search = (document.getElementById('phone-search')?.value || '').toLowerCase();
             let devices = d?.devices || [];
@@ -1473,15 +1581,26 @@
             document.getElementById('phone-count').textContent = devices.length;
             const tbody = document.getElementById('phones-list');
             if (devices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无设备数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无设备数据</td></tr>';
                 return;
             }
-            tbody.innerHTML = devices.map(function(dev, idx) {
+            // 分页：筛选条件变化时回到第一页（否则过滤后页码可能越界、显示空白）
+            const filterKey = statusFilter + '|' + search;
+            if (filterKey !== phoneFilterKey) { phoneFilterKey = filterKey; phonePage = 1; }
+            const totalPages = Math.max(1, Math.ceil(devices.length / PHONE_PAGE_SIZE));
+            if (phonePage > totalPages) phonePage = totalPages;
+            const pageStart = (phonePage - 1) * PHONE_PAGE_SIZE;
+            const pageDevices = devices.slice(pageStart, pageStart + PHONE_PAGE_SIZE);
+
+            phoneRowMap = {};
+            const rowsHtml = pageDevices.map(function(dev, i) {
+                const idx = pageStart + i;
                 const online = dev.is_online;
                 const dotCls = online ? 'on' : 'off';
                 const dotLabel = online ? '在线' : '离线';
                 const rowId = 'phone-row-' + idx;
                 const detailId = 'phone-detail-' + idx;
+                if (dev.device_id) phoneRowMap[dev.device_id] = { rowId: rowId, detailId: detailId };
                 const dpin = dev.default_pin || '';
                 return '<tr class="expandable" id="' + rowId + '" data-action="toggle-phone-history" data-row="' + escA(rowId) + '" data-detail="' + escA(detailId) + '" data-device="' + escA(dev.device_id||'') + '">' +
                     '<td><span class="expand-arrow" id="' + rowId + '-arrow">' + ic('chevron', 12) + '</span></td>' +
@@ -1499,14 +1618,37 @@
                     '<td><strong>' + esc(dev.current_name||'-') + '</strong></td>' +
                     '<td>' + esc(dev.current_pin||dev.last_pin||'-') + '</td>' +
                     '<td class="td-muted">' + (dev.last_seen ? timeAgo(dev.last_seen) : '-') + '</td>' +
-                    '<td><button class="btn btn-primary btn-sm" data-action="show-phone-detail" data-device="' + escA(dev.device_id||'') + '" data-name="' + escA(dev.current_name||'') + '">详情</button></td>' +
                 '</tr>' +
-                '<tr class="expand-detail" id="' + detailId + '"><td colspan="10"><div class="text-muted" style="text-align:center;">点击展开查看历史记录...</div></td></tr>';
+                '<tr class="expand-detail" id="' + detailId + '"><td colspan="9"><div class="text-muted" style="text-align:center;">点击展开查看历史记录...</div></td></tr>';
             }).join('');
+
+            // 分页脚注直接渲染在表格内，避免改动页面布局结构
+            const pagerHtml = totalPages > 1
+                ? '<tr><td colspan="9" class="td-muted" style="text-align:center;padding:8px;">' +
+                  '第 ' + phonePage + ' / ' + totalPages + ' 页（共 ' + devices.length + ' 台设备）' +
+                  '<button class="btn btn-outline btn-sm" style="margin-left:10px;" onclick="phonePageGo(-1)"' + (phonePage <= 1 ? ' disabled' : '') + '>上一页</button>' +
+                  '<button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="phonePageGo(1)"' + (phonePage >= totalPages ? ' disabled' : '') + '>下一页</button>' +
+                  '</td></tr>'
+                : '';
+            tbody.innerHTML = rowsHtml + pagerHtml;
+
+            // v4.21.2 (13): 恢复刷新前已展开的设备行（并用缓存重绘历史内容）
+            phoneExpanded.forEach(function(did) {
+                var m = phoneRowMap[did];
+                if (!m) return;
+                var detailRow = document.getElementById(m.detailId);
+                var arrow = document.getElementById(m.rowId + '-arrow');
+                var parentRow = document.getElementById(m.rowId);
+                if (detailRow) { detailRow.classList.add('show'); if (arrow) arrow.classList.add('open'); if (parentRow) parentRow.classList.add('expanded'); }
+                if (detailRow && phoneHistoryCache[did]) renderPhoneHistoryDetail(detailRow, phoneHistoryCache[did]);
+            });
         }
 
         // 存储已加载的历史数据
         let phoneHistoryCache = {};
+        // v4.21.2 (13): 记录已展开的设备，刷新后恢复展开状态（原先每 15s 刷新把展开行折叠）
+        let phoneExpanded = new Set();
+        let phoneRowMap = {};   // deviceId -> {rowId, detailId}
 
         async function togglePhoneHistory(rowId, detailId, deviceId) {
             const detailRow = document.getElementById(detailId);
@@ -1517,10 +1659,13 @@
                 detailRow.classList.remove('show');
                 if (arrow) arrow.classList.remove('open');
                 if (parentRow) parentRow.classList.remove('expanded');
+                // v4.21.2 (13): 记录折叠，刷新后不再自动展开
+                if (deviceId) phoneExpanded.delete(deviceId);
             } else {
                 detailRow.classList.add('show');
                 if (arrow) arrow.classList.add('open');
                 if (parentRow) parentRow.classList.add('expanded');
+                if (deviceId) phoneExpanded.add(deviceId);
 
                 if (!deviceId) return;
                 if (phoneHistoryCache[deviceId]) {
@@ -1556,9 +1701,8 @@
             detailRow.cells[0].innerHTML = html;
         }
 
-        function showPhoneDetail(deviceId, name) {
-            toast('设备: ' + deviceId + '，当前登录人: ' + (name || '未知') + '。点击设备行可展开查看历史PIN记录。', 'info');
-        }
+        // v4.21.2 (13): 已删除 showPhoneDetail()——原"详情"按钮名不副实（只弹 toast），
+        // 真正的历史记录靠点击设备行展开，该按钮与列一并移除。
 
         async function setDeviceDefaultPin(deviceId, defaultPin) {
             const dp = (defaultPin || '').trim();
@@ -1591,10 +1735,12 @@
         // ==================== 通话记录 ====================
         let callsOffset = 0;
         async function loadCalls() {
-            callsOffset = 0;
+            // v4.21.2 (13): 定时软刷新不重置页码（用户切换筛选/防抖搜索仍重置）
+            if (!_timerRefresh) callsOffset = 0;
             await _loadCallsInternal();
         }
         async function _loadCallsInternal() {
+            const seq = ++_loadSeq.calls;
             const device_id = document.getElementById('call-device-filter')?.value || '';
             const date_from = document.getElementById('call-date-from')?.value || '';
             const date_to = document.getElementById('call-date-to')?.value || '';
@@ -1606,6 +1752,7 @@
             if (number) url += '&number=' + encodeURIComponent(number);
 
             const d = await apiGet(url);
+            if (seq !== _loadSeq.calls) return;  // v4.21.2: 慢响应后到不覆盖新数据
             document.getElementById('calls-total').textContent = d?.total || 0;
             const tbody = document.getElementById('calls-list');
             if (!d || !d.calls || d.calls.length === 0) {
@@ -1646,6 +1793,36 @@
             });
         }
 
+        // v4.21.2 (D-8): 导出改 fetch + Authorization 头 + blob 下载——
+        // token 不再拼进 URL（原先 window.open(带token的URL) 会进浏览器地址栏与历史）
+        async function downloadWithToken(url, fallbackName) {
+            const token = getSessionToken();
+            try {
+                const r = await fetch(url, token ? { headers: { 'Authorization': 'Bearer ' + token } } : {});
+                if (r.status === 401) {
+                    clearSessionToken();
+                    setApiBanner('登录已过期，请重新登录后再导出。', true);
+                    return false;
+                }
+                if (!r.ok) { toast('导出失败（HTTP ' + r.status + '）', 'error'); return false; }
+                const blob = await r.blob();
+                const cd = r.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename=([^;\s]+)/);
+                const name = m ? m[1] : fallbackName;
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function() { URL.revokeObjectURL(a.href); }, 4000);
+                return true;
+            } catch (e) {
+                toast('导出失败：网络错误', 'error');
+                return false;
+            }
+        }
+
         function exportCallsCSV() {
             // v4.19: 改为服务端导出——导出"当前筛选条件下的全部匹配记录"，
             // 不再只导屏幕上这一页 50 行（此前对账会静默少数据，且无任何提示）
@@ -1659,8 +1836,9 @@
             if (date_to) params.push('date_to=' + encodeURIComponent(date_to));
             if (number) params.push('number=' + encodeURIComponent(number));
             const url = VISIT_API_BASE + '/api/v1/calls/export' + (params.length ? '?' + params.join('&') : '');
-            window.open(withToken(url), '_blank');
-            toast('已按当前筛选条件导出全部匹配记录', 'success');
+            downloadWithToken(url, 'calls.csv').then(function(ok) {
+                if (ok) toast('已按当前筛选条件导出全部匹配记录', 'success');
+            });
         }
 
         // ==================== 系统日志 ====================
@@ -1771,6 +1949,7 @@
         }
 
         async function loadVisits() {
+            const seq = ++_loadSeq.visits;
             const pinFilter = document.getElementById('visit-filter-pin')?.value || '';
             const groupFilter = document.getElementById('visit-filter-group')?.value || '';
             const tbody = document.getElementById('visits-list');
@@ -1794,7 +1973,20 @@
                     tbody.innerHTML = '<tr><td colspan="11" class="empty-state">登录已过期，请重新登录</td></tr>';
                     return;
                 }
+                // 补上统一请求层里已有的 429 / 非 2xx 提示：此前本函数自己 fetch，
+                // 被限流或服务端异常时页面只显示"查询失败"，用户不知道是限流还是断网。
+                if (res.status === 429) {
+                    setApiBanner('请求过于频繁，已被服务端限流（HTTP 429），稍后会自动重试。', false);
+                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">已被限流，请稍后重试</td></tr>';
+                    return;
+                }
+                if (!res.ok) {
+                    setApiBanner('服务端返回异常（HTTP ' + res.status + '），当前显示的数据可能不是最新的。', false);
+                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">服务端异常（HTTP ' + res.status + '）</td></tr>';
+                    return;
+                }
                 const data = await res.json();
+                if (seq !== _loadSeq.visits) return;  // v4.21.2: 慢响应后到不覆盖新数据
                 if (Array.isArray(data)) {
                     // 兼容旧版服务端：返回数组时退回全量渲染（无分页）
                     visitTotal = data.length;
@@ -1810,7 +2002,10 @@
                 visitTotal = data.total || 0;
                 renderVisitRows(data.rows);
                 renderVisitPager();
-            } catch(e) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:var(--red);">请求失败</td></tr>'; }
+            } catch(e) {
+                setApiBanner('无法连接到服务器，请检查网络或服务进程；当前显示的数据可能已过期。', false);
+                tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:var(--red);">请求失败</td></tr>';
+            }
         }
 
         async function loadPinDropdown() {
@@ -1863,7 +2058,8 @@
         }
 
         async function deleteVisit(id) {
-            if (!confirm('确定删除此上门记录？不可撤销。')) return;
+            // v4.21.2 (13): 自定义确认弹窗回显记录 ID
+            if (!(await confirmDialog('将删除上门记录 #' + id + '，不可撤销。', '删除上门记录'))) return;
             try {
                 const res = await fetch(withToken(VISIT_API_BASE + '/api/v1/visit/delete?id=' + encodeURIComponent(id)));
                 const data = await res.json();
@@ -1885,8 +2081,9 @@
             if (dFrom) url += '&d_from=' + encodeURIComponent(dFrom);
             if (dTo) url += '&d_to=' + encodeURIComponent(dTo);
             if (src) url += '&source=' + encodeURIComponent(src);
-            window.open(withToken(url), '_blank');
-            toast('已按当前筛选条件导出全部匹配记录', 'success');
+            downloadWithToken(url, 'visits.csv').then(function(ok) {
+                if (ok) toast('已按当前筛选条件导出全部匹配记录', 'success');
+            });
         }
 
         async function renderVisitChart() {
@@ -2055,7 +2252,9 @@
             const selected = importParsedRows.filter(function(_, i) { return importChecked[i]; });
             if (selected.length === 0) { toast('没有选中任何记录', 'error'); return; }
 
-            const BATCH_SIZE = 200;
+            // v4.21: 改为 POST body + 每批 20 条。原 BATCH_SIZE=200 拼 GET URL，
+            // 但 websockets 库对 HTTP 请求行有 8KB 硬上限，约 20 行即超限，整批静默失败。
+            const BATCH_SIZE = 20;
             const totalBatches = Math.ceil(selected.length / BATCH_SIZE);
             let totalInserted = 0, totalSkipped = 0, allErrors = [];
 
@@ -2064,11 +2263,14 @@
 
             for (let b = 0; b < totalBatches; b++) {
                 const batch = selected.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-                const dataJson = encodeURIComponent(JSON.stringify(batch));
-                const url = withToken(VISIT_API_BASE + '/api/v1/visits/batch?data=' + dataJson);
+                const url = withToken(VISIT_API_BASE + '/api/v1/visits/batch');
 
                 try {
-                    const res = await fetch(url);
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                        body: JSON.stringify({ data: batch })
+                    });
                     const result = await res.json();
                     if (result.ok) {
                         totalInserted += result.inserted;
@@ -2113,11 +2315,11 @@
                 ]);
                 if (prRes.status === 401 || grRes.status === 401) {
                     setApiBanner('登录已过期，请重新登录后再查看人员数据。', true);
-                    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">登录已过期，请重新登录</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">登录已过期，请重新登录</td></tr>';
                     return;
                 }
                 const pr = await prRes.json(), gr = await grRes.json();
-                if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">无数据</td></tr>'; return; }
+                if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">无数据</td></tr>'; return; }
                 const sel = document.getElementById('pin-group-filter');
                 sel.innerHTML = '<option value="">全部</option>';
                 const groups = gr.groups || [];
@@ -2125,7 +2327,7 @@
                 const groupFilter = sel.value;
                 let pins = pr.pins;
                 if (groupFilter) pins = pins.filter(function(p) { return p.group_id == groupFilter; });
-                if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无人员</td></tr>'; return; }
+                if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">暂无人员</td></tr>'; return; }
                 tbody.innerHTML = pins.map(function(p) {
                     const g = groups.find(function(g) { return g.id == p.group_id; });
                     return '<tr><td>' + esc(p.pin||'') + '</td>' +
@@ -2136,9 +2338,9 @@
                         '<td><select class="cell-input" data-action="set-pin-group" data-pin="' + escA(p.pin||'') + '" style="padding:5px 8px;">' +
                             '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
                         '</select></td>' +
-                        '<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td><td></td></tr>';
+                        '<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td></tr>';
                 }).join('');
-            } catch(e) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
         }
 
         async function setPinGroup(pin, gid) {
@@ -2175,7 +2377,8 @@
         async function delGroup() {
             const gid = document.getElementById('pin-group-filter').value;
             if (!gid) { toast('请选择要删除的分组', 'error'); return; }
-            if (!confirm('删除分组不会删除人员数据，仅取消关联。确定？')) return;
+            // v4.21.2 (13): 自定义确认弹窗
+            if (!(await confirmDialog('删除分组不会删除人员数据，仅取消关联。确定删除分组 #' + gid + '？', '删除分组'))) return;
             try {
                 const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/group/del?id='+encodeURIComponent(gid)));
                 const d = await r.json();
@@ -2201,7 +2404,8 @@
             document.querySelectorAll('table.data-table').forEach(function(t) {
                 if (t.parentNode && t.parentNode.classList.contains('table-wrap')) return;
                 const cols = t.querySelectorAll('thead th').length || 6;
-                t.style.minWidth = (cols * 92) + 'px';
+                // v4.21.2 (13): 每列最小宽 92px→72px——1280 屏也不再无谓横向滚动
+                t.style.minWidth = (cols * 72) + 'px';
                 const wrap = document.createElement('div');
                 wrap.className = 'table-wrap';
                 t.parentNode.insertBefore(wrap, t);
@@ -2256,12 +2460,22 @@
             const page = document.querySelector('.page.active');
             if (!page) return;
             if (fromTimer && refreshPaused) return;
+            // v4.21: 未登录（含登录过期）时停止定时刷新——锁定态下每轮必然 401，
+            // 白白消耗服务端限流配额，还可能与全员业务请求抢同一 IP 配额。
+            if (fromTimer && !isLoggedIn()) {
+                markRefreshSkipped('未登录 · 自动刷新已停');
+                return;
+            }
             if (fromTimer && isBusyEditing()) {
                 markRefreshSkipped('已跳过（正在填写）');
                 return;
             }
             const id = page.id.replace('page-', '');
+            // v4.21.2 (13): 定时刷新走"软刷新"——不重置分页/筛选/展开状态
+            // （原 showPage 会 loadCalls 重置页码、loadPinDropdown 重置筛选、loadPhones 折叠展开行）
+            _timerRefresh = !!fromTimer;
             showPage(id);
+            setTimeout(function() { _timerRefresh = false; }, 0);
         }
 
         function startAutoRefresh() {
@@ -2275,7 +2489,13 @@
         buildThemeMenu();
         applyTheme(getThemeId());
         wrapDataTables();
-        loadDashboard();
+        // v4.21.2 (13): 按 hash 恢复上次页面（F5 不再回首页）；无 hash 默认首页
+        (function() {
+            const h = (location.hash || '').replace(/^#\/?/, '');
+            const valid = ['dashboard', 'phones', 'calls', 'visits', 'pins', 'admin-accounts', 'logs', 'settings'];
+            if (h && valid.includes(h)) showPage(h);
+            else loadDashboard();
+        })();
         loadCallDeviceOptions();
         startAutoRefresh();
     </script>

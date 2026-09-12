@@ -95,7 +95,10 @@ class DialService : Service() {
     private var lastDisconnectReason: String? = null  // 用于防止 kicked 被 disconnected 覆盖
     private var screenOnReceiver: BroadcastReceiver? = null
     private var syncRunnable: Runnable? = null  // 数据同步定时任务
-    private var lastSyncedCallId: Long = 0      // 已同步的最后一条呼叫记录ID
+    // 高位水位线：已上报的最新通话记录 _ID（用于"向上补新"）。
+    // 低位水位线（历史回填边界）单独存在 SharedPreferences 的 sync_floor_call_id，
+    // 两者配合保证"新记录不漏、老记录能补"（详见 syncCallRecords）。
+    private var lastSyncedCallId: Long = 0
     private val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private val pendingDialQueue = ArrayDeque<String>()
@@ -322,6 +325,9 @@ class DialService : Service() {
 
     internal fun onDialResult(number: String, status: String) {
         _sendResultToPC(number, status)
+        // v4.21: logEvent 接线——此前该函数零调用，云端 phone_events 表永远为空。
+        // 拨号结果（ok/error/cancelled）全部上报，管理面板"行为日志"才有数据。
+        logEvent("dial", "$number:$status")
     }
 
     internal fun setPendingDialNumber(number: String?) {
@@ -434,17 +440,24 @@ class DialService : Service() {
                     }
                 }
                 "CONNECT" -> {
-                    val ip = intent.getStringExtra("ip") ?: ""
+                    // 防御：带 "://" 的是云服务器地址，不是局域网 IP。放行会被写进
+                    // prefs["ip"] 并成为 lastLanIp，导致局域网直连尝试连到非法主机。
+                    val ipRaw = intent.getStringExtra("ip") ?: ""
+                    val ip = if (ipRaw.contains("://")) "" else ipRaw
                     val pin = intent.getStringExtra("pin") ?: ""
                     if (pin.isNotEmpty()) {
+                        val connPrefs = getSharedPreferences("autodial", MODE_PRIVATE)
                         lastPin = pin
-                        lastIp = ip
+                        // 只有确实带了合法 IP 时才覆盖 LAN IP，否则保留原值
+                        // （此前无条件覆盖：传空值或云地址都会清掉/污染已保存的局域网 IP）
+                        if (ip.isNotEmpty()) {
+                            lastIp = ip
+                            connPrefs.edit().putString("ip", ip).putString("pin", pin).apply()
+                        } else {
+                            connPrefs.edit().putString("pin", pin).apply()
+                        }
                         manualConnecting = true
-                        getSharedPreferences("autodial", MODE_PRIVATE).edit()
-                            .putString("ip", ip).putString("pin", pin).apply()
-                        val strategy = ConnectionStrategy.readFromPrefs(
-                            getSharedPreferences("autodial", MODE_PRIVATE)
-                        )
+                        val strategy = ConnectionStrategy.readFromPrefs(connPrefs)
                         connectionManager.connect(pin, ip, strategy)
                     }
                 }
@@ -523,6 +536,8 @@ class DialService : Service() {
             sendToPC(JSONObject().apply {
                 put("type", "sms_result"); put("number", number); put("status", status)
             })
+            // v4.21: logEvent 接线——短信结果也上报云端行为日志
+            logEvent("sms", "$number:$status")
         } catch (_: Exception) {}
     }
 
@@ -844,7 +859,11 @@ class DialService : Service() {
     private fun syncCallRecords() {
         try {
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_CALL_LOG)
-                != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // v4.21: 权限缺失不再裸 return——打日志（此前完全无痕，云端 calls=0 无从排查）
+                FileLogger.w("DialService", "syncCallRecords 跳过：READ_CALL_LOG 权限未授予，请在系统设置授权")
+                return
+            }
             val prefs = getSharedPreferences("autodial", MODE_PRIVATE)
             val deviceId = PrefCtrl(this@DialService).getDeviceId()
             val pin = prefs.getString("pin", "") ?: return
@@ -852,48 +871,127 @@ class DialService : Service() {
             if (serverUrl.isEmpty()) return
             val baseUrl = normalizeHttpUrl(serverUrl)
 
-            val cursor = contentResolver.query(
-                android.provider.CallLog.Calls.CONTENT_URI,
-                arrayOf(android.provider.CallLog.Calls._ID, android.provider.CallLog.Calls.NUMBER,
-                    android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.DURATION,
-                    android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.PHONE_ACCOUNT_ID),
-                "${android.provider.CallLog.Calls._ID} > ?",
-                arrayOf(lastSyncedCallId.toString()),
-                "${android.provider.CallLog.Calls._ID} ASC LIMIT 20"
-            ) ?: return
-            val records = JSONArray()
-            var maxId = lastSyncedCallId
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(0)
-                maxId = id
-                val simSlot = try {
-                    val accountId = cursor.getString(5) ?: ""
-                    if (accountId.contains("@0")) 0 else if (accountId.contains("@1")) 1 else 0
-                } catch (_: Exception) { 0 }
-                records.put(JSONObject().apply {
-                    put("local_id", id)
-                    put("number", cursor.getString(1) ?: "")
-                    put("dial_time", cursor.getLong(2))
-                    put("duration", cursor.getLong(3))
-                    put("call_type", cursor.getInt(4))
-                    put("sim_slot", simSlot)
-                })
+            // ===== 双向水位线 =====
+            // 修复：旧逻辑在 DESC 排序下把"本批最小 id"当水位线，查询条件却是 `_ID > 水位线`。
+            // 水位线落到 81 后，下一轮 `_ID > 81` 又把最近 20 条（82..100）捞回来，每轮只前移
+            // 1 条 —— 永远在"最近 20 条"里打转，id <= 80 的老记录一条都传不上去。
+            // 正确做法是两条水位线各自朝"未覆盖的方向"单调推进：
+            //   highId  已上报的最新 id：_ID >  highId  ASC ，向上补新
+            //   floorId 回填边界       ：_ID <  floorId DESC，向下补旧
+            // 云端 call_records_raw 以 (device_id, local_id) 为主键且 INSERT OR IGNORE，
+            // 重复上报是幂等的，因此版本升级后少量重报不会产生脏数据。
+            var highId = prefs.getLong("last_synced_call_id", -1L)
+            var floorId = prefs.getLong("sync_floor_call_id", -1L)
+            if (highId < 0L || floorId < 0L) {
+                val maxId = currentMaxCallLogId()
+                // 首次（含旧版本升级）：从"当前最新"向两侧扩张。floorId 取 maxId + 1，
+                // 保证 id == maxId 的那条也在第一轮回填范围内。
+                if (highId < 0L) highId = maxId
+                if (floorId < 0L) floorId = maxId + 1L
+                prefs.edit()
+                    .putLong("last_synced_call_id", highId)
+                    .putLong("sync_floor_call_id", floorId)
+                    .apply()
             }
-            cursor.close()
-            if (records.length() == 0) return
+            lastSyncedCallId = highId
 
-            // 限制单批最多 20 条，避免 URL 超长（URL 约 4KB，20条约 2KB，远低于限制）
+            // 1) 向上补新：每轮最多 20 条新产生的记录
+            val (newBatch, newHigh) = readCallLogBatch(highId, ascending = true)
+            if (newBatch.length() > 0 && uploadCallBatch(baseUrl, deviceId, pin, newBatch)) {
+                highId = newHigh
+                lastSyncedCallId = highId
+                prefs.edit().putLong("last_synced_call_id", highId).apply()
+            }
+
+            // 2) 向下补旧：每轮最多 20 条历史记录，逐轮把更老的补齐，直到 _ID < 1 触底
+            if (floorId > 0L) {
+                val (oldBatch, newFloor) = readCallLogBatch(floorId, ascending = false)
+                if (oldBatch.length() > 0 && uploadCallBatch(baseUrl, deviceId, pin, oldBatch)) {
+                    floorId = newFloor
+                    prefs.edit().putLong("sync_floor_call_id", floorId).apply()
+                }
+            }
+        } catch (e: Exception) {
+            FileLogger.e("DialService", "syncCallRecords 异常: ${e.message}")
+        }
+    }
+
+    /** 查询通话记录的最大 _ID（无记录返回 0），用于首次确定水位线起点 */
+    private fun currentMaxCallLogId(): Long {
+        try {
+            contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls._ID),
+                null, null,
+                "${android.provider.CallLog.Calls._ID} DESC LIMIT 1"
+            )?.use { c -> if (c.moveToFirst()) return c.getLong(0) }
+        } catch (e: Exception) {
+            FileLogger.w("DialService", "查询最大通话记录 id 失败: ${e.message}")
+        }
+        return 0L
+    }
+
+    /**
+     * 读取一批通话记录（每批最多 20 条，避免 URL 超长：20 条约 2KB，上限约 4KB）。
+     *
+     * @param anchor    水位线锚点
+     * @param ascending true = 向上补新（_ID > anchor，ASC）；false = 向下补旧（_ID < anchor，DESC）
+     * @return Pair(本批记录, 推进后的水位线)。空批时水位线不变。
+     */
+    private fun readCallLogBatch(anchor: Long, ascending: Boolean): Pair<JSONArray, Long> {
+        val idCol = android.provider.CallLog.Calls._ID
+        val selection = if (ascending) "$idCol > ?" else "$idCol < ?"
+        val order = if (ascending) "$idCol ASC LIMIT 20" else "$idCol DESC LIMIT 20"
+        val records = JSONArray()
+        var boundary = anchor
+        val cursor = contentResolver.query(
+            android.provider.CallLog.Calls.CONTENT_URI,
+            arrayOf(idCol, android.provider.CallLog.Calls.NUMBER,
+                android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.DURATION,
+                android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.PHONE_ACCOUNT_ID),
+            selection, arrayOf(anchor.toString()), order
+        ) ?: return Pair(records, boundary)
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(0)
+            // ASC 取本批最大 id、DESC 取本批最小 id —— 两个方向都朝未覆盖区域推进
+            if (ascending) { if (id > boundary) boundary = id } else { if (id < boundary) boundary = id }
+            val simSlot = try {
+                val accountId = cursor.getString(5) ?: ""
+                if (accountId.contains("@0")) 0 else if (accountId.contains("@1")) 1 else 0
+            } catch (_: Exception) { 0 }
+            records.put(JSONObject().apply {
+                put("local_id", id)
+                put("number", cursor.getString(1) ?: "")
+                put("dial_time", cursor.getLong(2))
+                put("duration", cursor.getLong(3))
+                put("call_type", cursor.getInt(4))
+                put("sim_slot", simSlot)
+            })
+        }
+        cursor.close()
+        return Pair(records, boundary)
+    }
+
+    /** 上报一批通话记录，成功返回 true（失败保留水位线，下轮重试） */
+    private fun uploadCallBatch(baseUrl: String, deviceId: String, pin: String, records: JSONArray): Boolean {
+        if (records.length() == 0) return true
+        return try {
             val dataStr = java.net.URLEncoder.encode(records.toString(), "UTF-8")
             val urlStr = "$baseUrl/api/v1/calls/batch?device_id=${java.net.URLEncoder.encode(deviceId, "UTF-8")}" +
                 "&pin=${java.net.URLEncoder.encode(pin, "UTF-8")}&data=$dataStr"
             val conn = java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 5000; conn.readTimeout = 5000
-            if (conn.responseCode in 200..299) {
-                lastSyncedCallId = maxId
-                prefs.edit().putLong("last_synced_call_id", maxId).apply()
+            val ok = conn.responseCode in 200..299
+            if (!ok) {
+                // 上报失败不再无痕——记录状态码便于排查（限流/未注册等）
+                FileLogger.w("DialService", "syncCallRecords 上报失败: HTTP ${conn.responseCode}")
             }
             conn.disconnect()
-        } catch (_: Exception) {}
+            ok
+        } catch (e: Exception) {
+            FileLogger.e("DialService", "syncCallRecords 上报异常: ${e.message}")
+            false
+        }
     }
 
     private fun syncDailyStats() {
