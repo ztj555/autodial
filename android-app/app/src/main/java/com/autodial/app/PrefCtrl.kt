@@ -117,6 +117,10 @@ class PrefCtrl(private val context: Context) {
     fun setLastCallHintDuration(seconds: Int) = prefs.edit().putInt("last_call_hint_duration", seconds).apply()
     fun getNotifyConnState(): Boolean = prefs.getBoolean("notify_conn_state", true)
     fun setNotifyConnState(show: Boolean) = prefs.edit().putBoolean("notify_conn_state", show).apply()
+
+    /** v4.23 (A-9): 电池优化引导弹窗上次弹出时间——7 天冷却，避免每次启动都骚扰 */
+    fun getBatteryOptPromptAt(): Long = prefs.getLong("battery_opt_prompt_at", 0L)
+    fun setBatteryOptPromptAt(ts: Long) = prefs.edit().putLong("battery_opt_prompt_at", ts).apply()
     fun getNotifyRegister(): Boolean = prefs.getBoolean("notify_register", true)
     fun setNotifyRegister(show: Boolean) = prefs.edit().putBoolean("notify_register", show).apply()
     fun getNavigationOrder(): String = prefs.getString("navigation_order", "call_first") ?: "call_first"

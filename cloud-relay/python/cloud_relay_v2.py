@@ -25,6 +25,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 # P0-Fix: 专用线程池，避免 DB 查询占用 websockets process_request 的默认线程池
 _db_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix='db')
+# v4.23 (Y-4): 来访去重是"SELECT 判重→INSERT"两步，_db_executor 8 线程可并发进入，
+# 存在 check-then-insert 竞态（双拨同号并发登记可各插一条）。用进程内锁把判重+写入
+# 原子化——双实例(35430/35440)各自独立 DB，跨进程竞态不存在，进程内锁足够；
+# 员工登记频率极低，串行化无感知。（crm_id 路径另有唯一索引兜底）
+_visit_insert_lock = threading.Lock()
 
 import websockets
 from websockets.legacy.server import serve
@@ -1690,26 +1695,7 @@ async def health_check_handler(path, request_headers):
         # S3修复: 敏感信息端点需管理员鉴权（此前裸奔泄露在线状态）
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
-        # 今日拨号数和登记数
-        today_dials = 0
-        today_visits = 0
-        recent_active = []
-        try:
-            conn = _connect_db()
-            c = conn.cursor()
-            today_str = datetime.now().strftime('%Y-%m-%d')
-            c.execute("SELECT COUNT(*) FROM call_records_raw WHERE date(server_time)=?", (today_str,))
-            row = c.fetchone()
-            if row:
-                today_dials = row[0]
-            c.execute("SELECT COUNT(*) FROM visits WHERE date(created_at)=?", (today_str,))
-            row = c.fetchone()
-            if row:
-                today_visits = row[0]
-            conn.close()
-        except Exception:
-            pass
-        # 最近活跃人员（从在线连接中提取，取最近3个不同PIN）
+        # 最近活跃人员（从在线连接中提取，取最近3个不同PIN）——纯内存操作，先取快照
         seen_pins = set()
         active_list = []
         try:
@@ -1726,19 +1712,40 @@ async def health_check_handler(path, request_headers):
                     'role': _meta.get('role', ''),
                     'connected_at': _meta.get('connected_at', '')
                 })
-        # 尝试从 advisor_names 补全姓名
-        if active_list:
+        # v4.23 (Y-12): DB 查询原先直接跑在事件循环协程里，DB 卡顿时会拖住全部连接。
+        # 合并为一个同步函数丢进 _db_executor 卸载（与 visits 上报同等待遇）。
+        def _status_db_sync():
+            today_dials = 0
+            today_visits = 0
+            advisor_names_map = {}
             try:
                 conn = _connect_db()
                 c = conn.cursor()
-                for a in active_list:
-                    c.execute("SELECT name FROM advisor_names WHERE pin=?", (a['pin'],))
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                c.execute("SELECT COUNT(*) FROM call_records_raw WHERE date(server_time)=?", (today_str,))
+                row = c.fetchone()
+                if row:
+                    today_dials = row[0]
+                c.execute("SELECT COUNT(*) FROM visits WHERE date(created_at)=?", (today_str,))
+                row = c.fetchone()
+                if row:
+                    today_visits = row[0]
+                # 尝试从 advisor_names 补全姓名
+                for _p in seen_pins:
+                    c.execute("SELECT name FROM advisor_names WHERE pin=?", (_p,))
                     row = c.fetchone()
                     if row:
-                        a['name'] = row[0]
+                        advisor_names_map[_p] = row[0]
                 conn.close()
             except Exception:
                 pass
+            return today_dials, today_visits, advisor_names_map
+
+        today_dials, today_visits, advisor_names_map = await _run_db(_status_db_sync)
+        for a in active_list:
+            _n = advisor_names_map.get(a['pin'])
+            if _n:
+                a['name'] = _n
         active_list.sort(key=lambda x: x.get('connected_at', ''), reverse=True)
         recent_active = active_list[:3]
 
@@ -2666,50 +2673,53 @@ async def health_check_handler(path, request_headers):
 
         # v4.21.2 (C-1): DB 段移入线程池——员工登记是最高频 REST 写操作
         def _visit_insert_sync():
-            conn = None
-            try:
-                conn = _connect_db()
-                c = conn.cursor()
-                # v4.17: 去重三级——① crm_id 唯一索引（重发/补推精确去重）
-                # ② 有 visit_time：mobile+visit_time 精确匹配
-                # ③ 回退：同号 2 小时内（原"当日去重"会静默吞掉同客户当天第二次真实上门）
-                if crm_id:
-                    c.execute('SELECT id FROM visits WHERE crm_id = ? LIMIT 1', (crm_id,))
-                elif visit_time:
+            # v4.23 (Y-4): 判重与写入必须原子——否则 8 线程池里两个并发请求
+            # 可能同时通过 SELECT 判重、各插一条（同号 2 小时窗口路径尤甚）
+            with _visit_insert_lock:
+                conn = None
+                try:
+                    conn = _connect_db()
+                    c = conn.cursor()
+                    # v4.17: 去重三级——① crm_id 唯一索引（重发/补推精确去重）
+                    # ② 有 visit_time：mobile+visit_time 精确匹配
+                    # ③ 回退：同号 2 小时内（原"当日去重"会静默吞掉同客户当天第二次真实上门）
+                    if crm_id:
+                        c.execute('SELECT id FROM visits WHERE crm_id = ? LIMIT 1', (crm_id,))
+                    elif visit_time:
+                        c.execute(
+                            'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
+                            (mobile, visit_time)
+                        )
+                    else:
+                        cutoff_2h = (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
+                        c.execute(
+                            'SELECT id FROM visits WHERE mobile = ? AND created_at >= ? LIMIT 1',
+                            (mobile, cutoff_2h)
+                        )
+                    if c.fetchone():
+                        return ('json', 200, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
                     c.execute(
-                        'SELECT id FROM visits WHERE mobile = ? AND visit_time = ? LIMIT 1',
-                        (mobile, visit_time)
+                        'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
+                        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
                     )
-                else:
-                    cutoff_2h = (datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S')
-                    c.execute(
-                        'SELECT id FROM visits WHERE mobile = ? AND created_at >= ? LIMIT 1',
-                        (mobile, cutoff_2h)
-                    )
-                if c.fetchone():
-                    return ('json', 200, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
-                c.execute(
-                    'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
-                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
-                )
-                # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
-                # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
-                # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
-                if kefu_tel and kefu_tel.strip():
-                    c.execute(
-                        'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
-                        'ON CONFLICT(pin) DO NOTHING',
-                        (pin, kefu_tel.strip(), now_str)
-                    )
-                conn.commit()
-                return ('rowid', c.lastrowid)
-            except Exception as e:
-                log.error(f'INSERT visit error: {e}')
-                return ('err', 500, _err_json('DB_ERROR', str(e)))
-            finally:
-                if conn:
-                    conn.close()
+                    # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
+                    # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
+                    # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
+                    if kefu_tel and kefu_tel.strip():
+                        c.execute(
+                            'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
+                            'ON CONFLICT(pin) DO NOTHING',
+                            (pin, kefu_tel.strip(), now_str)
+                        )
+                    conn.commit()
+                    return ('rowid', c.lastrowid)
+                except Exception as e:
+                    log.error(f'INSERT visit error: {e}')
+                    return ('err', 500, _err_json('DB_ERROR', str(e)))
+                finally:
+                    if conn:
+                        conn.close()
 
         res = await _run_db(_visit_insert_sync)
         if res[0] == 'err':

@@ -909,12 +909,20 @@ class ConnectFragment : Fragment() {
         view?.findViewById<TextView>(R.id.otherSectionSubtitle)?.text = "$mode · 动画${if (animOn) "开启" else "关闭"}"
     }
 
-    /** 每次启动时如未设置电池优化，弹窗引导直到设置好为止 */
+    /**
+     * 未设置电池优化时弹窗引导。v4.23 (A-9)：原版每次启动都弹，用户点"稍后"后
+     * 依旧每次骚扰。改为 7 天冷却——弹出即记录时间，7 天内不再自动弹；
+     * 「其他设置」里的电池优化入口始终可用，用户可随时手动设置。
+     */
     private fun checkBatteryOptFirstTime() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         if (!isAdded) return
         val pm = requireActivity().getSystemService(Context.POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(requireActivity().packageName)) return
+        // 7 天内已弹过则不再自动弹
+        val lastPromptAt = prefCtrl.getBatteryOptPromptAt()
+        if (lastPromptAt > 0 && System.currentTimeMillis() - lastPromptAt < 7L * 24 * 60 * 60 * 1000) return
+        prefCtrl.setBatteryOptPromptAt(System.currentTimeMillis())
         AlertDialog.Builder(requireActivity())
             .setTitle("电池优化建议")
             .setMessage("建议将电池优化设为「无限制」，避免后台连接被系统中断。\n\n是否现在设置？")
