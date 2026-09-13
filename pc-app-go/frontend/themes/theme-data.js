@@ -880,7 +880,8 @@ const THEME_DATA = [
     nameEn: 'Forest Green',
     category: 'comfort',
     keywords: ["自然","安静","护眼"],
-    defaultMode: 'dark',
+    // v5.5: defaultMode 由 dark 改 light（原深色档 bg #0E1810 近乎纯黑，观感发闷）
+    defaultMode: 'light',
     style: {
       radiusSm: '8px',
       radiusMd: '14px',
@@ -990,7 +991,8 @@ const THEME_DATA = [
       bg3: '#E8F4E8',
       text: '#1E3A1E',
       text2: '#5E8A5E',
-      green: '#00E676',
+      // v5.5: 亮白档的成功色原为荧光绿 #00E676，白底上偏刺眼 → 换为 #2FA75F
+      green: '#2FA75F',
       red: '#E53935',
       floatbarBg: 'rgba(255, 255, 255, 0.65)',
       floatbarBorder: 'rgba(76, 175, 80, 0.18)',

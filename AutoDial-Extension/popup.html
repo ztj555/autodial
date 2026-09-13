@@ -97,21 +97,24 @@ body::-webkit-scrollbar-track { background: transparent; }
 .status-dot {
   width: 11px; height: 11px; border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45);
+  box-shadow: 0 0 0 3px rgba(var(--green-rgb),.16), 0 0 8px rgba(var(--green-rgb),.45);
   animation: pulse 2s ease-in-out infinite;
 }
 .status-dot.offline {
   background: var(--red);
-  box-shadow: 0 0 0 3px rgba(240,62,62,.14), 0 0 8px rgba(240,62,62,.4);
+  box-shadow: 0 0 0 3px rgba(var(--red-rgb),.14), 0 0 8px rgba(var(--red-rgb),.4);
   animation: none;
 }
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45); }
-  50% { box-shadow: 0 0 0 6px rgba(64,192,87,.08), 0 0 12px rgba(64,192,87,.35); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--green-rgb),.16), 0 0 8px rgba(var(--green-rgb),.45); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--green-rgb),.08), 0 0 12px rgba(var(--green-rgb),.35); }
 }
 .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hero-title { font-size: 15px; font-weight: 700; }
 .hero-sub { font-size: 12px; color: var(--text-2); }
+/* v5.5: 状态副标题配色改由主题变量驱动（原为 popup.js 内联硬编码 #40C057/#5880A8/#F03E3E） */
+.hero-sub.ok { color: var(--green); }
+.hero-sub.err { color: var(--red); }
 
 /* ===== 按钮（手机端 primaryBtn 渐变 + ghost/danger pill） ===== */
 .btn {
@@ -140,10 +143,10 @@ body::-webkit-scrollbar-track { background: transparent; }
 .btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: var(--primary); }
 .btn-danger {
   background: var(--surface); color: var(--red);
-  border: 1px solid rgba(240,62,62,.3); border-radius: var(--r-pill);
+  border: 1px solid rgba(var(--red-rgb),.3); border-radius: var(--r-pill);
   padding: 10px 12px;
 }
-.btn-danger:hover { background: rgba(240,62,62,.06); }
+.btn-danger:hover { background: rgba(var(--red-rgb),.06); }
 .btn-row { display: flex; gap: 8px; margin-top: 10px; }
 .btn-row .btn { flex: 1; }
 .btn-sm {
@@ -229,6 +232,28 @@ input:focus {
 .field-status, .server-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--text-2); }
 .field-status.ok, .server-status.ok { color: var(--green); }
 .field-status.err, .server-status.err { color: var(--red); }
+
+/* ===== 外观（主题切换）常驻卡片 ===== */
+.theme-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 10px 12px;
+  box-shadow: var(--shadow-card);
+}
+.theme-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.theme-head .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.theme-name { margin-left: auto; font-size: 11px; color: var(--text-2); }
+.swatches { display: flex; gap: 7px; }
+.swatch-btn {
+  width: 27px; height: 27px; flex-shrink: 0;
+  border-radius: 50%; border: none; padding: 0; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+  transition: transform .12s, box-shadow .15s;
+}
+.swatch-btn:hover { transform: scale(1.12); }
+/* 选中态：外圈主题强调色光环 + 内圈卡片底描边，任何主题下都能看清 */
+.swatch-btn.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary), 0 1px 3px rgba(0,0,0,.16);
+}
 </style>
 </head>
 <body>
@@ -256,10 +281,6 @@ input:focus {
         <div id="cloudStatus" class="hero-sub">连接中…</div>
       </div>
     </div>
-    <button id="syncBtn" class="btn btn-primary">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      同步登记列表
-    </button>
   </div>
 
   <div class="info-card">
@@ -290,8 +311,8 @@ input:focus {
 </div>
 
 <!-- ===== 设置页（PIN + 服务器） ===== -->
-<div id="setupPanel">
-  <div class="hint-card">
+<div id="setupPanel" style="display:none">
+  <div class="hint-card" id="setupHintCard">
     <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
     <span id="setupHint">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
   </div>
@@ -309,19 +330,23 @@ input:focus {
       <span id="serverStatus" class="field-status"></span>
     </div>
 
-    <div class="group-divider"></div>
+    <!-- v5.5: 「配对码」整组（含其上方分割线）收进 #pinGroup —
+         「修改服务器」时整块隐藏，不再残留一个没有输入框的"配对码"空标题 -->
+    <div id="pinGroup">
+      <div class="group-divider"></div>
 
-    <div class="group">
-      <div class="section-head">
-        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <span class="section-title">配对码</span>
-        <span class="section-sub">4位或11位数字</span>
+      <div class="group">
+        <div class="section-head">
+          <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+          <span class="section-title">配对码</span>
+          <span class="section-sub">4位或11位数字</span>
+        </div>
+        <div class="input-row">
+          <input id="pinInput" placeholder="输入配对码" maxlength="11" />
+          <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
+        </div>
+        <span id="pinStatus" class="field-status"></span>
       </div>
-      <div class="input-row">
-        <input id="pinInput" placeholder="输入配对码" maxlength="11" />
-        <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
-      </div>
-      <span id="pinStatus" class="field-status"></span>
     </div>
 
     <div class="group-divider"></div>
@@ -339,10 +364,20 @@ input:focus {
     </div>
   </div>
 
-  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none">
+  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none;margin-bottom:12px">
     <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     返回
   </button>
+</div>
+
+<!-- ===== 外观（主题切换）——常驻，两个面板下都可见 ===== -->
+<div class="theme-card" id="themeCard">
+  <div class="theme-head">
+    <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.7-9-7.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15" cy="8" r="1.2" fill="currentColor"/></svg></span>
+    <span class="section-title">外观</span>
+    <span id="themeName" class="theme-name"></span>
+  </div>
+  <div class="swatches" id="swatches"></div>
 </div>
 
 <script src="themes.js"></script>

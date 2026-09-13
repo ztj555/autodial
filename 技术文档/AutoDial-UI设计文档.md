@@ -113,9 +113,10 @@
 
 ### 2.1 popup.html（结构级重做，360px）
 
-- 结构：Topbar（图标底座 34 + AutoDial + v5 pill）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态 + 主按钮「同步登记列表」内置；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「清除 PIN」danger pill
-- 三张设置卡合并为一张分组卡（对齐手机端 settingGroup/settingRow）；主按钮移入 Hero 大盘底部；版本徽章 v4→v5；面板切换加 `.panel-in` 动画（不改 JS display 逻辑）
-- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus myPhone myMgrName cloudAddr syncBtn editServerBtn clearPinBtn setupHint serverInput testServerBtn serverStatus backToStatusBtn pinInput savePinBtn pinStatus mgrNameInput saveMgrNameBtn mgrNameStatus`
+- 结构：Topbar（图标底座 34 + AutoDial + v5 pill）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「清除 PIN」danger pill → **常驻「外观」卡片 `#themeCard`**（9 套主题色块横排，两个面板下都可见）
+- 三张设置卡合并为一张分组卡（对齐手机端 settingGroup/settingRow）；主按钮移入 Hero 大盘底部；版本徽章 v4→v5；面板切换加 `.panel-in` 动画
+- **v5.5 补充**：面板显隐改由唯一出口 `renderPanel(mode)` 决定（`status` / `setup` 完整设置含配对码 / `server` 仅云中继与姓名带返回按钮），「配对码」整组收进 `#pinGroup` 整块显隐；状态副标题配色改走 `.hero-sub.ok/.err`（不再内联硬编码天空蓝值）；半透明同色走 `--green-rgb` / `--red-rgb`；CSS 变量映射收口到 `themes.js` 的 `AD_APPLY_THEME(id)`
+- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus myPhone myMgrName cloudAddr editServerBtn clearPinBtn setupHint setupHintCard serverInput testServerBtn serverStatus backToStatusBtn pinInput savePinBtn pinStatus pinGroup mgrNameInput saveMgrNameBtn mgrNameStatus themeCard swatches themeName`
 
 ### 2.2 auth.html
 
@@ -132,6 +133,7 @@
 - 右键菜单/主题菜单：圆角 14px、「16px SVG + 文字」flex 行、hover 底 accent14、危险项 t.red；主题菜单 active=行底 accent1A + 右侧 ✓
 - 位置提示去掉 monospace；设置弹窗圆角 16px、标题行「20px 图标底座 + 15/700 + ×」
 - **主题数据收口**：新建 `themes.js`（`AD_THEMES` = 原 EXT_THEMES 搬入）；manifest `js: ["themes.js","content-script.js"]`（顺序敏感）；content-script 改 `const EXT_THEMES = AD_THEMES`；popup/auth 引入 themes.js 同步变暗；storage key `__ad_theme`
+- **v5.5 主题相关**：① `themes.js` 新增 `AD_APPLY_THEME(id)`（CSS 变量映射的唯一权威实现，`theme-init.js` / `auth.js` / `popup.js` 共用）；② popup 底部「外观」卡片可运行时换肤；③ content-script 顶层加 `chrome.storage.onChanged` 监听，弹窗换主题后悬浮挂件实时跟随；④ 半透明同色改用 `--green-rgb` / `--red-rgb`；⑤ **`forest-green` 由墨绿深色改为「森林晨雾」浅色**（`bg #0E1810` 近乎纯黑、观感发闷），五端同步：扩展 `themes.js` / `ThemeManager.kt`（`defaultMode` dark→light）/ `pc-app-go` / `pc-app-Electron` / `dashboard.html`
 - **冻结清单**：content-script id（`__ad_float`、`__ad_dial_label`、`__ad_hangup`、`__ad_manual`、`.__ad_manual_paste`、`.__ad_manual_dial`、`__ad_ctxmenu`、`__ad_ctxmenu_overlay`、`__ad_thememenu`、`__ad_position_tip`、`__ad_settings`、`__ad_settings_overlay`）；storage key（`cloud_api`、`cloud_apis_fetched`、`self_phone`、`pin`、`manager_name`、`__ad_theme`、`__ad_hangup_size`）；拖拽边缘 DRAG_EDGE 0.18、缩放 36–100、`window.__adv2` 防重入；`background.js` 一行不改
 
 ---

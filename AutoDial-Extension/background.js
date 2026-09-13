@@ -763,134 +763,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// ==================== 右键菜单：同步登记列表 ====================
+// ==================== 右键菜单 ====================
+// v5.4: 「🔁 一键同步上门数据 / 同步登记列表（当前页）」三个右键菜单项已随该功能移除。
+// 保留一次 removeAll()，用于清掉旧版本遗留在浏览器中的菜单项（覆盖升级后菜单未随
+// 扩展一起清理的边缘场景），执行后本扩展不再注册任何右键菜单。
+chrome.contextMenus.removeAll();
 
-chrome.contextMenus.removeAll(() => {
-  // 1) 一键同步（任意 CRM 页面右键 → 自动跳转列表页并同步）
-  chrome.contextMenus.create({
-    id: 'oneClickSync',
-    title: '🔁 一键同步上门数据',
-    contexts: ['page'],
-    documentUrlPatterns: ['*://guwen.zhudaicms.com/*']
-  });
-
-  // 2) 同步当前页（仅在列表页显示，手动控制范围）
-  chrome.contextMenus.create({
-    id: 'syncVisitList',
-    title: '同步登记列表（当前页）',
-    contexts: ['page'],
-    documentUrlPatterns: ['*://guwen.zhudaicms.com/manage/kefu_reportformlist/*']
-  });
-
-  // 3) 扩展图标右键菜单
-  chrome.contextMenus.create({
-    id: 'oneClickSyncAction',
-    title: '🔁 一键同步上门数据',
-    contexts: ['action']
-  });
-});
-
-const VISIT_LIST_URL = 'https://guwen.zhudaicms.com/manage/kefu_reportformlist/list_user_visit.html';
-
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const menuId = info.menuItemId;
-
-  // 一键同步：自动找到/打开列表页 → 触发 syncVisitList
-  if (menuId === 'oneClickSync' || menuId === 'oneClickSyncAction') {
-    chrome.tabs.query({ url: '*://guwen.zhudaicms.com/*' }, (tabs) => {
-      const target = tabs.find(t => t.url && t.url.includes('list_user_visit'));
-      if (target) {
-        chrome.tabs.update(target.id, { active: true });
-        chrome.tabs.sendMessage(target.id, { type: 'syncVisitList' });
-        return;
-      }
-      if (tabs.length > 0) {
-        chrome.tabs.update(tabs[0].id, { url: VISIT_LIST_URL, active: true });
-      } else {
-        chrome.tabs.create({ url: VISIT_LIST_URL });
-      }
-    });
-    return;
-  }
-
-  // 同步当前页（仅在列表页可用）
-  if (menuId === 'syncVisitList') {
-    chrome.tabs.sendMessage(tab.id, { type: 'syncVisitList' });
-  }
-});
-
-// 管理员检查 + 同步处理
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // 批量同步登记记录到云端
-  if (msg.type === 'batchSyncVisits') {
-    const pin = msg.pin;
-    const visits = msg.visits; // array of visit objects
-    getCloudApi().then(apiUrl => {
-      // 逐条提交（简单可靠）
-      let synced = 0;
-      let skipped = 0;
-      let failed = 0;
-      const promises = visits.map(v => {
-        const params = new URLSearchParams({
-          name: v.name, mobile: v.mobile,
-          kefu_tel: v.advisor_name || pin,
-          visit_type: v.visit_type || '贷款咨询',
-          visit_time: v.visit_time || '',
-          source: 'crm_sync',
-          // 必须带 crm_id：云端按 crm_id 唯一去重（同一物理来访只入一次库）。
-          // 此前批量同步漏传 → 重复点"同步"会把同一条来访反复写进云端。
-          crm_id: v.crm_id || ''
-        });
-        return fetch(`${apiUrl}/api/v1/visit?${params.toString()}`, {
-          headers: { 'X-AutoDial-PIN': pin }
-        }).then(r => r.json()).then(d => {
-          if (d.skipped) { skipped++; }
-          else if (d.ok) { synced++; }
-          else { failed++; }
-        }).catch(() => { failed++; });
-      });
-      return Promise.all(promises).then(() => ({ synced, skipped, failed, total: visits.length }));
-    }).then(r => {
-      sendResponse({ ok: true, synced: r.synced, skipped: r.skipped, failed: r.failed, total: r.total });
-    }).catch(e => {
-      sendResponse({ ok: false, error: e.message });
-    });
-    return true;
-  }
-
-  // popup 点击"同步登记列表"按钮 → 找到 CRM tab 并发送消息
-  if (msg.type === 'triggerSync') {
-    chrome.tabs.query({ url: '*://guwen.zhudaicms.com/*' }, (tabs) => {
-      // 1) 没有 CRM 页面 → 打开新标签页到登记列表
-      if (tabs.length === 0) {
-        chrome.tabs.create({ url: VISIT_LIST_URL }, () => {
-          sendResponse({ ok: false, result: '已打开登记列表页，加载完成后请重新点击同步按钮' });
-        });
-        return;
-      }
-      // 2) 已有 CRM 页面，找是否在来访列表页
-      let target = tabs.find(t => t.url && t.url.includes('list_user_visit'));
-      if (target) {
-        // 已在列表页 → 直接同步
-        chrome.tabs.sendMessage(target.id, { type: 'syncVisitList' }, (resp) => {
-          if (resp && resp.ok) {
-            sendResponse({ ok: true, result: '✅ 已同步 ' + resp.synced + '/' + resp.total + ' 条' });
-          } else if (resp && resp.error) {
-            sendResponse({ ok: false, result: resp.error });
-          } else {
-            sendResponse({ ok: false, result: '同步失败，请刷新页面后重试' });
-          }
-        });
-      } else {
-        // 3) 在 CRM 但不在列表页 → 自动跳转
-        chrome.tabs.update(tabs[0].id, { url: VISIT_LIST_URL, active: true }, () => {
-          sendResponse({ ok: false, result: '正在跳转到登记列表页，加载完成后请重新点击同步' });
-        });
-      }
-    });
-    return true;
-  }
-});
+// v5.4: 原先此处为「批量同步登记记录到云端」(batchSyncVisits) 与 popup「同步登记列表」
+// 触发 (triggerSync) 两个消息处理器，随该功能一并移除。
+// 云端接口（/api/v1/visit、/api/v1/visits 等）保持不变；「一键登记」的 registerVisit()
+// 仍会正常写入云端，只是不再有"抓取整个 CRM 列表页并批量补录历史数据"的通道。
 
 // ==================== 设备授权弹窗 ====================
 function showAuthDialog(req, apiUrl) {

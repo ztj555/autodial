@@ -1,5 +1,65 @@
 # AutoDial 更新日志
 
+## 2026-09-13（扩展 v5.5.0 · 弹窗配色/按钮修复 + 主题切换入口 + 森林绿改浅色）
+
+> 用户反馈两条：①「森林绿」主题太阴间、配色不对劲；②「清除 PIN」与「修改服务器」点完界面看起来一样。
+
+### Chrome 扩展
+
+- **修复：状态副标题颜色硬编码**（`popup.js`）—— `#cloudStatus` 的文字色原为内联写死的天空蓝值
+  （`#40C057` / `#5880A8` / `#F03E3E`），换任何主题都不跟随。在深色/绿色主题下会出现"蓝灰配绿"的错色，
+  这正是"配色不对劲"的直接来源。现改为走 CSS 类 `.hero-sub.ok` / `.hero-sub.err`（消费 `--green` / `--red`）。
+- **修复：半透明同色也跟随主题** —— 状态点呼吸光晕与危险按钮底色原先硬编码 `rgba(64,192,87,…)` /
+  `rgba(240,62,62,…)`。新增派生变量 `--green-rgb` / `--red-rgb`（`themes.js` 的 `AD_THEME_VARS`
+  同时产出 `greenRgb` / `redRgb`）。
+- **修复：「修改服务器」与「清除 PIN」界面看起来一样**（根因：面板显示状态被三个 handler 各改一半）
+  - `setupPanel` 里「配对码」整组（含其上分割线）收进 `#pinGroup` —— 此前只隐藏输入框/按钮，
+    会残留一个没有输入框的"配对码"空标题
+  - 新增唯一出口 `renderPanel(mode)`：`status`（状态页）/ `setup`（完整设置，含配对码）/
+    `server`（仅云中继与姓名，带返回按钮）。`clearPin` / `editServer` / `backToStatus` 三个入口全部改走它
+  - 「仅服务器」模式下同时隐藏顶部 PIN 检测提示语（避免误导）
+  - 「清除 PIN」加二次确认（3 秒内再点一次才生效，按钮文案变为"确认清除？"）——
+    原先一点即清且清完没有返回按钮，等于把用户困在设置页
+  - 清空后落点明确为「完整设置页 + 聚焦配对码输入框」
+- **新增：弹窗内置主题切换**（`popup.html` / `popup.js`）—— 底部新增常驻「外观」卡片，
+  9 套主题以色块横排展示，点击即时换肤并写入 `chrome.storage.local.__ad_theme`。
+  此前只能进 CRM 页面、点悬浮条菜单才能换主题。
+- **新增：悬浮挂件实时跟随主题**（`content-script.js`）—— 顶层帧新增 `chrome.storage.onChanged` 监听，
+  在弹窗里换主题后，已打开的 CRM 页面悬浮挂件立即换色，不必刷新页面。
+  （此前 `currentThemeId` 只在脚本注入时读一次 localStorage。）
+- **重构：CSS 变量映射表收口** —— `themes.js` 新增 `AD_APPLY_THEME(id)`（唯一权威实现），
+  `theme-init.js` 与 `auth.js` 原先各自抄了一份同样的 MAP，现均改为调用它。
+- **森林绿主题改版：墨绿 → 森林晨雾（浅色）** —— 原配色 `bg #0E1810` 近乎纯黑，
+  是九套主题里最压抑的一套，且文字/数值/图标全为同一族绿，观感发闷。
+  现统一为 `accent #4CAF50 / bg #F0F8F0 / bg2 #FFFFFF / bg3 #E8F4E8 / text #1E3A1E /
+  text2 #5E8A5E / green #2FA75F / red #E53935`。深色档在带多档明暗的客户端上仍保留可选。
+- 版本号 `5.4.0` → `5.5.0`
+
+### 其他客户端（保持多端主题一致）
+
+- `android-app/.../ThemeManager.kt`：`forest-green` 的 `defaultMode` `dark` → `light`；亮白档 `green` `#00E676` → `#2FA75F`
+- `pc-app-go/frontend/themes/theme-data.js`、`pc-app-Electron/themes/theme-data.js`：同上
+- `cloud-relay/python/dashboard.html`：`AD_THEMES['forest-green']` 换为浅色（需重新部署 dashboard 才生效）
+
+## 2026-09-13（扩展 v5.4.0 · 移除「同步登记列表」功能，云端接口保留）
+
+> 决策：插件端不再承担"抓取 CRM 来访列表页 → 批量补录历史数据到云端"的职责，该功能整体移除。
+> 云端接口全部保留不变，手机端同步与 dashboard 登记列表照常工作。
+
+### Chrome 扩展
+
+- **移除 popup「同步登记列表」按钮**：`popup.html` 的 `#syncBtn` 与 `popup.js` 中 `triggerSync` 发送方一并删除
+- **移除 3 个右键菜单项**（`background.js`）：🔁 一键同步上门数据（CRM 页面）/ 同步登记列表（当前页）/ 🔁 一键同步上门数据（扩展图标），以及 `VISIT_LIST_URL` 常量与 `contextMenus.onClicked` 分发
+  - 保留一次 `chrome.contextMenus.removeAll()`，用于清掉旧版本遗留在浏览器中的菜单项
+- **移除 content-script 抓取链路**：`handleSyncVisitList()`（分页抓取 `form[name="fdsf"] ~ table tr` + 逐页 `fetch` + 汇总）、顶层与 iframe 两处 `syncVisitList` 消息监听、仅供其使用的 `iframeToast()`
+- **移除 background 批量上报处理器**：`batchSyncVisits`（逐条 `GET /api/v1/visit?...&source=crm_sync`）与 `triggerSync`
+- **不受影响**：`registerVisit()`「一键登记」（当前客户登记 → 提交 CRM + 写入云端）保持原样；`showToast()` 保留（一键登记在用）
+- 版本号 `5.3.0` → `5.4.0`
+
+### 云端
+
+- **未改动**。`/api/v1/visit`、`/api/v1/visits`、`/api/v1/visits/batch`、`visit_record` 推送等接口与鉴权逻辑全部保留。
+
 ## 2026-09-13（扩展 v5.3.0 · 拨号/右键时实时读取"当前激活客户帧"号码）
 
 > 背景：v5.2.0 用 `isFrameActive()` 挡住了隐藏的旧客户帧，串号问题解决，但号码刷新仍依赖子 iframe **每 5 秒心跳**——切客户后若立即点击，浮窗最多滞后 5 秒，可能拨到上一位客户。

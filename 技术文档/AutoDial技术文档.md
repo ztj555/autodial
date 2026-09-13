@@ -383,7 +383,7 @@ AutoDial-Extension/
 - **离线队列串行化（v4.23 E-9）**：`queueCloudVisit`/`flushCloudVisits` 走 `_visitQueueChain` promise 链逐个执行——flush 期间新入队的记录不再被 `storage.set` 覆盖丢失。
 - **消息广播全帧（v4.23 E-5）**：拨号结果/号码更新 `chrome.tabs.sendMessage` 不再限定 `frameId: 0`，iframe 内注入的浮窗同样收得到（CRM 站点大量使用 iframe）；无监听的帧静默忽略。
 
-**右键菜单（v4.11）**：🔁 一键同步上门数据（任意 CRM 页面，自动跳转+同步）/ 同步登记列表当前页（仅列表页右键）/ 🔁 扩展图标右键同款；`chrome.contextMenus.removeAll()` 防 MV3 service worker 重启时菜单重复。
+**右键菜单（v5.4 起已清空）**：原 v4.11 的 3 个菜单项（🔁 一键同步上门数据（CRM 页面）/ 同步登记列表当前页（仅列表页）/ 🔁 扩展图标右键同款）已随「同步登记列表」功能一并移除。启动时仅保留一次 `chrome.contextMenus.removeAll()`，用于清理旧版本遗留在浏览器中的菜单项；本扩展不再注册任何右键菜单。
 
 ### 3.3 content-script.js — 内容脚本
 
@@ -400,13 +400,12 @@ AutoDial-Extension/
 
 **号码格式**：支持任意号码（手机号、固话、10086、400/800、*100# 等），最小 3 位、最长 20 位，允许 `+ * #` 和格式化字符（空格、`-`、括号）；端到端校验点在云中继和 PC 端 HTTP handler，插件端不做拦截。
 
-**同步登记列表（v4.11 全链路修复）**：
+**「同步登记列表」（v5.4 起已移除）**：
 
-- 数据提取 `extractVisits`：`form[name="fdsf"] ~ table tr`（兄弟元素，非子元素）；列位：cells[0]=crm_id、[1]=name、[2]=mobile、[4]=visit_type、[5]=advisor_phone、[6]=advisor_name、[10]=visit_time（CRM 真实来访时间）
-- 自动翻页：扫描分页链接 → `fetch(url, {credentials:'include'})` + DOMParser 逐页解析 → 去重排序合并；单页失败跳过不中断
-- 提交：`GET /api/v1/visit?...&visit_time=&source=crm_sync` + X-AutoDial-PIN；云中继 mobile+visit_time 精确去重
-- 增量反馈 toast：`✅ 同步完成：共 120 条，新增 80 条，跳过 35 条（已存在），失败 5 条`
-- 触发入口：CRM 页面右键 / 扩展图标右键 / Popup 按钮（content-script 已去掉主管校验，任何坐席均可同步）
+- 原「同步登记列表 / 一键同步上门数据」功能整体移除：插件端不再抓取 CRM 来访列表页（`list_user_visit.html`）的分页数据，也不再批量上报云端
+- 移除点：popup `#syncBtn`、3 个右键菜单项、content-script `handleSyncVisitList()` / `iframeToast()` / 两处 `syncVisitList` 监听、background `batchSyncVisits` / `triggerSync`
+- **云端接口保留**：`/api/v1/visit`、`/api/v1/visits`、`/api/v1/visits/batch` 与 `visit_record` 推送不变；手机端同步与 dashboard 登记列表照常工作
+- 当前客户登记仍走「一键登记」`registerVisit()`（提交 CRM + 写入云端）
 
 ### 3.4 popup.html / popup.js
 

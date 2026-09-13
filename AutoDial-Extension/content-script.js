@@ -184,158 +184,12 @@
   // 顶层页面：创建浮动拖动按钮
   // ═══════════════════════════════════════════════
 
-  /**
-   * 从 CRM 来访列表页抓取记录，同步到云中继（主管功能）。
-   * 顶层和 iframe 共用，通过 toastFn 参数适配不同上下文。
-   */
-  function handleSyncVisitList(sendResponse, toastFn) {
-    if (!toastFn) toastFn = (typeof showToast !== 'undefined' ? showToast : alert);
-    // 1) 检查是否在来访列表页
-    if (!window.location.href.includes('list_user_visit.html')) {
-      var msg = '请先打开【日志报表→查看来访客户】页面';
-      toastFn('✗ ' + msg);
-      sendResponse({ ok: false, error: msg });
-      return;
-    }
-    // 2) 获取 PIN（已去掉主管限制，任何人都可同步）
-    var pin = window.__adMyPhone || '';
-    chrome.runtime.sendMessage({ type: 'getPin' }, function(resp) {
-      if (resp && resp.pin) pin = resp.pin;
-      if (!pin) {
-        var msg = '未检测到 PIN，请先打开 CRM 主页面';
-        toastFn('✗ ' + msg);
-        sendResponse({ ok: false, error: msg });
-        return;
-      }
-      // 3) 抓取表格数据（utils: 从文档中解析来访记录）
-        function extractVisits(doc) {
-          var rows = doc.querySelectorAll('form[name="fdsf"] ~ table tr');
-          var result = [];
-          for (var r = 1; r < rows.length; r++) {
-            var cells = rows[r].querySelectorAll('td');
-            if (cells.length < 11) continue;
-            var id = (cells[0].textContent || '').trim();
-            var name = (cells[1].textContent || '').replace(/\(.*\)$/, '').trim();
-            var mobileCell = (cells[2].textContent || '').trim();
-            var mobile = (mobileCell.match(/1[3-9]\d{9}/) || [''])[0];
-            var visitType = (cells[4].textContent || '').trim();
-            var advisorPhone = (cells[5].textContent || '').trim();
-            var advisorName = (cells[6].textContent || '').trim();
-            var visitTime = (cells[10].textContent || '').trim();
-            if (!name || !mobile) continue;
-            result.push({
-              crm_id: id, name: name, mobile: mobile,
-              visit_type: visitType, advisor_phone: advisorPhone,
-              advisor_name: advisorName, visit_time: visitTime
-            });
-          }
-          return result;
-        }
+  // v5.4: 「同步登记列表」功能整体移除 —— 插件端不再抓取 CRM 来访列表页
+  // （list_user_visit.html）的分页数据，也不再通过 batchSyncVisits 批量写入云端。
+  // 云端接口保留；当前客户的登记仍走「一键登记」registerVisit()。
 
-        // 抓取当前页
-        var visits = extractVisits(document);
-
-        // 收集后续分页链接（去重、按页码排序）
-        // F3修复: 此前遍历全页所有 <a>，parseInt(text)>1 即视为页码，手机号链接
-        // （11 位数字）被当"第 15212345678 页"→ totalPages 虚高、垃圾 fetch + toast 刷屏。
-        // 现在：优先扫描分页容器；文本须为纯数字且 ≤4 位（页码现实上不会超过 9999）；
-        // href 解析后必须是 http/https 协议（排除 tel:/mailto:/javascript: 等）。
-        var pageUrls = {};
-        var seenPages = {};
-        var paginationContainer = document.querySelector('.pagination, .pager, [class*="pagination"]');
-        var paginationLinks = paginationContainer ? paginationContainer.querySelectorAll('a') : document.querySelectorAll('a');
-        for (var pi = 0; pi < paginationLinks.length; pi++) {
-          var a = paginationLinks[pi];
-          var txt = (a.textContent || '').trim();
-          if (!/^\d{1,4}$/.test(txt)) continue;
-          var pageNum = parseInt(txt, 10);
-          if (pageNum <= 1 || !a.href || seenPages[pageNum]) continue;
-          var proto = (a.href.split(':')[0] || '').toLowerCase();
-          if (proto !== 'http' && proto !== 'https') continue;
-          seenPages[pageNum] = true;
-          pageUrls[pageNum] = a.href;
-        }
-
-        var pageNums = Object.keys(pageUrls).sort(function(a, b) { return a - b; });
-        if (pageNums.length === 0) {
-          // 单页数据，直接提交
-          if (visits.length === 0) {
-            var msg = '未找到登记记录';
-            toastFn('✗ ' + msg);
-            sendResponse({ ok: false, error: msg });
-            return;
-          }
-          submitToCloud();
-          return;
-        }
-
-        // 多页数据：逐页 fetch 抓取
-        var totalPages = pageNums.length + 1; // 含当前第1页
-        toastFn('检测到 ' + totalPages + ' 页数据 (' + visits.length + ' 条/页)，正在逐页抓取...');
-
-        var pageIndex = 0;
-        function fetchNextPage() {
-          if (pageIndex >= pageNums.length) {
-            // 全部抓完
-            toastFn('共抓取 ' + visits.length + ' 条记录（' + totalPages + ' 页）');
-            submitToCloud();
-            return;
-          }
-          var url = pageUrls[pageNums[pageIndex]];
-          fetch(url, { credentials: 'include' })
-            .then(function(res) { return res.text(); })
-            .then(function(html) {
-              var parser = new DOMParser();
-              var doc = parser.parseFromString(html, 'text/html');
-              var pageVisits = extractVisits(doc);
-              visits = visits.concat(pageVisits);
-              pageIndex++;
-              toastFn('已抓取 ' + (pageIndex + 1) + '/' + totalPages + ' 页，累计 ' + visits.length + ' 条');
-              fetchNextPage();
-            })
-            .catch(function(err) {
-              toastFn('⚠ 第 ' + pageNums[pageIndex] + ' 页抓取失败: ' + err.message + '，跳过继续');
-              pageIndex++;
-              fetchNextPage();
-            });
-        }
-
-        function submitToCloud() {
-          if (visits.length === 0) {
-            var msg = '未找到登记记录';
-            toastFn('✗ ' + msg);
-            sendResponse({ ok: false, error: msg });
-            return;
-          }
-          // 4) 批量提交到云端
-          toastFn('正在同步 ' + visits.length + ' 条记录...');
-          chrome.runtime.sendMessage({
-            type: 'batchSyncVisits',
-            pin: pin,
-            visits: visits
-          }, function(syncResp) {
-            if (syncResp && syncResp.ok) {
-              var parts = ['✅ 同步完成：共 ' + syncResp.total + ' 条'];
-              if (syncResp.synced > 0) parts.push('新增 ' + syncResp.synced + ' 条');
-              if (syncResp.skipped > 0) parts.push('跳过 ' + syncResp.skipped + ' 条（当日已存在）');
-              if (syncResp.failed > 0) parts.push('失败 ' + syncResp.failed + ' 条');
-              var msg = parts.join('，');
-              toastFn(msg);
-              sendResponse({ ok: true, synced: syncResp.synced, skipped: syncResp.skipped, failed: syncResp.failed, total: syncResp.total });
-            } else {
-              var msg = '✗ 同步失败: ' + (syncResp ? syncResp.error : '未知错误');
-              toastFn(msg);
-              sendResponse({ ok: false, error: syncResp ? syncResp.error : '未知错误' });
-            }
-          });
-        }
-
-        fetchNextPage();
-    });
-  }
-
-  // ─── Toast 提示（R6修复: 从 if(isTopFrame) 块内上提到 IIFE 顶层，使块外的
-  // handleSyncVisitList 可通过 typeof 检测到，避免顶层路径回退 alert 连环弹窗） ───
+  // ─── Toast 提示（R6修复: 从 if(isTopFrame) 块内上提到 IIFE 顶层，顶层与 iframe 共用） ───
+  // 当前调用方：「一键登记」结果提示（见下方 register 流程）。
   function showToast(text) {
     var old = document.getElementById('__ad_toast');
     if (old) old.remove();
@@ -1738,16 +1592,19 @@
         sendResponse({ phone: result ? result.phone : null });
         return true;
       }
-      // 同步登记列表（主管功能）
-      if (msg.type === 'syncVisitList') {
-        // F2修复: 顶层页面若不是列表页，不调用 sendResponse（不抢答），
-        // 把响应权留给列表页 iframe 的监听器——此前顶层监听器抢先回 ok:false，
-        // 导致 iframe 布局下同步登记列表的正确响应被丢弃。
-        if (!window.location.href.includes('list_user_visit.html')) return false;
-        handleSyncVisitList(sendResponse);
-        return true;
-      }
     });
+
+    // v5.5: 跟随「扩展弹窗 / 其他端」的主题切换实时换肤。
+    // 此前 currentThemeId 只在脚本注入时从 localStorage 读一次 —— 在弹窗里换了主题，
+    // 已打开的 CRM 页面悬浮挂件不跟随，得刷新页面才生效。
+    // chrome.storage 是跨上下文共享的，弹窗只需写入 __ad_theme 即可推到所有 CRM 标签页。
+    try {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        const nv = changes.__ad_theme && changes.__ad_theme.newValue;
+        if (nv && nv !== currentThemeId && EXT_THEMES[nv]) applyTheme(nv);
+      });
+    } catch (_) {}
 
     // 监听子iframe发来的客户姓名
     window.addEventListener('message', function(e) {
@@ -1773,31 +1630,8 @@
   // 子iframe：扫描手机号并拦截"点击拨打"
   // ═══════════════════════════════════════════════
 
-  /**
-   * iframe 内简易 toast（不依赖顶层 showToast）
-   */
-  function iframeToast(text) {
-    var old = document.getElementById('__ad_iframe_toast');
-    if (old) old.remove();
-    var div = document.createElement('div');
-    div.id = '__ad_iframe_toast';
-    var isOk = text.indexOf('✅') >= 0 || text.indexOf('正在') >= 0;
-    div.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);' +
-      'background:' + (isOk ? T().green : T().red) + ';color:#fff;padding:10px 24px;' +
-      'border-radius:8px;z-index:2147483647;font-size:14px;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
-    div.textContent = text;
-    document.body.appendChild(div);
-    setTimeout(function() { div.remove(); }, 3000);
-  }
-
-  // 响应同步登记列表
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type !== 'syncVisitList') return false;
-    // 只在来访列表页处理
-    if (!window.location.href.includes('list_user_visit.html')) return false;
-    handleSyncVisitList(sendResponse, iframeToast);
-    return true;
-  });
+  // v5.4: 原先此处为 iframeToast() 与 iframe 侧「响应同步登记列表」监听器，
+  // 随「同步登记列表」功能一并移除（插件端不再抓取 CRM 列表、也不再批量上报）。
 
   // 监听主题变更，刷新"点击拨打"链接颜色
   window.addEventListener('message', (e) => {

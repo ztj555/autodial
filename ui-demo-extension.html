@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="zh-CN" data-page-node-id="XAMIyNJRmNgI7Nyn5vsoAx">
+<head data-page-node-id="0fJvbvYdND5DORSBl4Awbe">
+<meta charset="UTF-8" data-page-node-id="tQAD5kzpQmy2wt40lFwaCp">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="HPG8538VS2y0DIKmOmOyCu">
 <title>AutoDial Chrome扩展 - Popup界面演示</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -222,123 +222,159 @@ input:focus {
   z-index: 1000;
   box-shadow: var(--shadow-btn);
 }
+/* v5.5: 状态副标题配色改由主题变量驱动（与真实 popup 同款） */
+.hero-sub.ok { color: var(--green); }
+.hero-sub.err { color: var(--red); }
+
+/* ===== 外观（主题切换）常驻卡片 ===== */
+.theme-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 10px 12px;
+  box-shadow: var(--shadow-card);
+}
+.theme-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.theme-head .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.theme-name { margin-left: auto; font-size: 11px; color: var(--text-2); }
+.swatches { display: flex; gap: 7px; }
+.swatch-btn {
+  width: 27px; height: 27px; flex-shrink: 0;
+  border-radius: 50%; border: none; padding: 0; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+  transition: transform .12s, box-shadow .15s;
+}
+.swatch-btn:hover { transform: scale(1.12); }
+.swatch-btn.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary), 0 1px 3px rgba(0,0,0,.16);
+}
 </style>
 </head>
-<body>
-<div class="demo-badge">🎨 UI演示模式</div>
+<body data-page-node-id="sADSYc0lWxkeNG43i6Qi4f">
+<div class="demo-badge" data-page-node-id="gtnOQJ3JXFLKLPjOrefhOi">🎨 UI演示模式</div>
 
 <!-- Topbar -->
-<header class="topbar">
-  <div class="app-icon">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg>
+<header class="topbar" data-page-node-id="982svY7Q3qJnHvhbm8RqcH">
+  <div class="app-icon" data-page-node-id="6zkHujUqPKEuHUtt9IvDMi">
+    <svg viewBox="0 0 24 24" fill="none" data-page-node-id="EV5aHZbFhcz9YTSx5fYseM"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor" data-page-node-id="K6PPuHeHaxX2ARKsqlHVOn"/></svg>
   </div>
-  <div class="title-group">
-    <h1>AutoDial</h1>
-    <span class="ver">v5</span>
+  <div class="title-group" data-page-node-id="dX96HkbfbscG7pVOCUEC42">
+    <h1 data-page-node-id="wzUP6TOfTqSsosZzV1pJA2">AutoDial</h1>
+    <span class="ver" data-page-node-id="XURV8UsbuFKYuaWUJyJmni">v5</span>
   </div>
 </header>
 
 <!-- 状态页（PIN 已设置） -->
-<div id="statusPanel">
-  <div class="hero-card">
-    <div class="hero-row">
-      <div class="status-indicator">
-        <span id="statusDot" class="status-dot"></span>
+<div id="statusPanel" data-page-node-id="VFFqJ4nDjM455FaJ5s6D2g">
+  <div class="hero-card" data-page-node-id="NyzaGlwXK26jiUCEqzr3vD">
+    <div class="hero-row" data-page-node-id="RwLMmHQjKflDl2MwbSBm1p">
+      <div class="status-indicator" data-page-node-id="a52tSRi6JP9iW5w5jFAQxN">
+        <span id="statusDot" class="status-dot" data-page-node-id="JumxtuDVOStrAkMUmvGnor"></span>
       </div>
-      <div class="hero-text">
-        <div id="statusText" class="hero-title">PIN 已就绪</div>
-        <div id="cloudStatus" class="hero-sub">已连接</div>
+      <div class="hero-text" data-page-node-id="iBsqFGj1Yp4qAF2CjhCo66">
+        <div id="statusText" class="hero-title" data-page-node-id="vHWXV6jcqBpIFXL8z7922G">PIN 已就绪</div>
+        <div id="cloudStatus" class="hero-sub" data-page-node-id="CyyEI16BApn0RtfCXdx8wA">已连接</div>
       </div>
-    </div>
-    <button id="syncBtn" class="btn btn-primary">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 4v4h-4M4 20v-4h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      同步登记列表
-    </button>
-  </div>
-
-  <div class="info-card">
-    <div class="info-row" onclick="showToast('查看坐席信息')">
-      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg></span>
-      <span class="label">坐席手机号</span>
-      <span id="myPhone" class="value link">138****8000</span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="info-row" onclick="showToast('编辑顾问姓名')">
-      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-      <span class="label">接待顾问</span>
-      <span id="myMgrName" class="value link">张三</span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="info-row" onclick="showToast('查看服务器详情')">
-      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-      <span class="label">云端地址</span>
-      <span id="cloudAddr" class="value link">101.34.65.254:35430</span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
   </div>
 
-  <div class="btn-row">
-    <button id="editServerBtn" class="btn btn-ghost" onclick="switchToSetup()">修改服务器</button>
-    <button id="clearPinBtn" class="btn btn-danger" onclick="clearPin()">清除 PIN</button>
+  <div class="info-card" data-page-node-id="hBFhy5m9N0rQEUyil0uwWi">
+    <div class="info-row" onclick="showToast('查看坐席信息')" data-page-node-id="9zWwc3DyOBBQUwQ30r6zee">
+      <span class="row-ico" data-page-node-id="cfiv3QTSAGaPMSfxXBGUAF"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="rGDttD7eql5bo8nD40REdJ"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" data-page-node-id="POfsXTDeZyOK6Rfkdhosua"/></svg></span>
+      <span class="label" data-page-node-id="XwFYahTbFoPHvbE3uvGq22">坐席手机号</span>
+      <span id="myPhone" class="value link" data-page-node-id="gmALMQcQDjETVFIQppqPC5">138****8000</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" data-page-node-id="F6ZqLDIcvjHppipoS9QoaU"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="21yVW63VHT3Eqof4eQdVCT"/></svg>
+    </div>
+    <div class="info-row" onclick="showToast('编辑顾问姓名')" data-page-node-id="A7oFpNoRUNie2XNmMW08Gw">
+      <span class="row-ico" data-page-node-id="QAZLY3cxfGJPsLBzB1jHH4"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="F4ZpHmJ8QRFjcpNKkjXkA8"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8" data-page-node-id="k8HPG3XtKWtRXlPvnwf65j"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="HkHOb2vEMXUA46sYY8R0KE"/></svg></span>
+      <span class="label" data-page-node-id="Zw24tbDKzpuIFchgU9jhXd">接待顾问</span>
+      <span id="myMgrName" class="value link" data-page-node-id="IXcHmIlQCtjIRP01dLH47H">张三</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" data-page-node-id="0LcwwgXGSYnJmnxu09ClsA"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Yo2mjbdloJMCsgjn00Lbxn"/></svg>
+    </div>
+    <div class="info-row" onclick="showToast('查看服务器详情')" data-page-node-id="64Us0tGebC51u7pOMeZoyx">
+      <span class="row-ico" data-page-node-id="l0e9N2Q5FGClW0xToX6Znj"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="aQrvGdfyzH6GR04eDlZSzi"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="CRL0z6FaQuw3CBF42lN89J"/></svg></span>
+      <span class="label" data-page-node-id="DRNgWl9kEiBrQEbchLg2QE">云端地址</span>
+      <span id="cloudAddr" class="value link" data-page-node-id="aDs84hdC5567kSP30R3kmg">101.34.65.254:35430</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" data-page-node-id="1eCqtbV1ttQxvF0lFIYlIe"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5gMVZLOFPCPtBEvupdQYOR"/></svg>
+    </div>
+  </div>
+
+  <div class="btn-row" data-page-node-id="PtJCFeGoeDnMTiwb92LUNH">
+    <button id="editServerBtn" class="btn btn-ghost" onclick="renderPanel('server')" data-page-node-id="w0bCt08aT4EmNK6yMxHwgE">修改服务器</button>
+    <button id="clearPinBtn" class="btn btn-danger" onclick="clearPin()" data-page-node-id="i4VbKTzvqHtOMhKoq0RSuK">清除 PIN</button>
   </div>
 </div>
 
 <!-- 设置页（隐藏） -->
-<div id="setupPanel" style="display:none">
-  <div class="hint-card">
-    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
-    <span>打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
+<div id="setupPanel" style="display:none" data-page-node-id="NgVNYv3yVsXp1OAenHfVkr">
+  <div class="hint-card" id="setupHintCard" data-page-node-id="7J4oGXWd3Hjw6fJu0D9w0n">
+    <svg viewBox="0 0 24 24" fill="none" data-page-node-id="71w3ZQCFBMxc6qfoAGnJHL"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" data-page-node-id="yLV9ASh3pR2UNHxKCNLLAD"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="fb032HUrPqWw4W3nA7axIt"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" data-page-node-id="BdcWDDgesEQKEMSIYbuD4T"/></svg>
+    <span id="setupHint" data-page-node-id="K2oQhL9FJ46EFu1uf0sHuH">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
   </div>
 
-  <div class="section">
-    <div class="group">
-      <div class="section-head">
-        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
-        <span class="section-title">云中继地址</span>
+  <div class="section" data-page-node-id="iV3usTPRKGWZVdk9tUmqdj">
+    <div class="group" data-page-node-id="Ie0Cb9R78jcIWWQFUUODGm">
+      <div class="section-head" data-page-node-id="FH6ch4C9splTHe4HrpX0b1">
+        <span class="section-ico" data-page-node-id="F4z3iQFUvpWZbQYtcYgM2T"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="LAcMla5n6xWfFkfdXy78GA"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="EXtj0VK92TCdOhX9jhXPNx"/></svg></span>
+        <span class="section-title" data-page-node-id="q03nHqLniLLQBZsMA5hTlZ">云中继地址</span>
       </div>
-      <div class="input-row">
-        <input id="serverInput" placeholder="101.34.65.254:35430" value="101.34.65.254:35430" />
-        <button id="testServerBtn" class="btn btn-ghost btn-sm" onclick="testServer()">测试</button>
+      <div class="input-row" data-page-node-id="Hd0cGgnYgIBhfyE1WiklVJ">
+        <input id="serverInput" placeholder="101.34.65.254:35430" value="101.34.65.254:35430" data-page-node-id="QrUYYOAACouvEzDPLNDZ3a" />
+        <button id="testServerBtn" class="btn btn-ghost btn-sm" onclick="testServer()" data-page-node-id="PjjSEV7eoohOnbQl0iTbsZ">测试</button>
       </div>
-      <span id="serverStatus" class="field-status"></span>
+      <span id="serverStatus" class="field-status" data-page-node-id="MIdXv8p8PpdupD7larbtEe"></span>
     </div>
 
-    <div class="group-divider"></div>
+    <!-- v5.5: 「配对码」整组（含其上方分割线）收进 #pinGroup ——「修改服务器」时整块隐藏，
+         否则会残留一个没有输入框的"配对码"空标题（真实 popup 同款修法） -->
+    <div id="pinGroup" data-page-node-id="F0C0YXJqsvZ03fduTsXlX9">
+      <div class="group-divider" data-page-node-id="KUQrcYn07zNl45EgMI9VDj"></div>
 
-    <div class="group">
-      <div class="section-head">
-        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <span class="section-title">配对码</span>
-        <span class="section-sub">4位或11位数字</span>
+      <div class="group" data-page-node-id="3jwYnwTlkMWTJ6YA1bFpps">
+        <div class="section-head" data-page-node-id="oUgp9Rowyr55Erfi2RY6De">
+          <span class="section-ico" data-page-node-id="D0mLsma0wWPGZ9B649sPMI"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="csc42AqaufDCGJAdgjhscs"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8" data-page-node-id="GhbSoS5aZFPCEbzIr42NQV"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="XjaA3Xskg29Cx31dHBd6Ca"/></svg></span>
+          <span class="section-title" data-page-node-id="KxFtOWP2ctHmyF3r45baTY">配对码</span>
+          <span class="section-sub" data-page-node-id="Z3mzz9EJJj6SgQzFxx8Jm1">4位或11位数字</span>
+        </div>
+        <div class="input-row" data-page-node-id="NSAWVNEpFhg5HVgyZBke6f">
+          <input id="pinInput" placeholder="输入配对码" maxlength="11" value="13800138000" data-page-node-id="ONCyMxdcUHrcBrzIIklRyS" />
+          <button id="savePinBtn" class="btn btn-primary btn-sm" onclick="savePin()" data-page-node-id="PNeednmWJPhWOEenMHaFd1">保存</button>
+        </div>
+        <span id="pinStatus" class="field-status" data-page-node-id="EnLUGfUpvSJjzJnC5nBK77"></span>
       </div>
-      <div class="input-row">
-        <input id="pinInput" placeholder="输入配对码" maxlength="11" value="13800138000" />
-        <button id="savePinBtn" class="btn btn-primary btn-sm" onclick="savePin()">保存</button>
-      </div>
-      <span id="pinStatus" class="field-status"></span>
     </div>
 
-    <div class="group-divider"></div>
+    <div class="group-divider" data-page-node-id="J42IeD58nweLyHVI0OvyyG"></div>
 
-    <div class="group">
-      <div class="section-head">
-        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <span class="section-title">接待顾问姓名</span>
+    <div class="group" data-page-node-id="qEUPKPGgLzU6H9AFsIJ797">
+      <div class="section-head" data-page-node-id="boHd89LSRKhNGotVi1AfJL">
+        <span class="section-ico" data-page-node-id="QWjLCb9vWxSybkoZ4xREnT"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="Iuz9hXFZBEoQ5AoBo1nspR"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8" data-page-node-id="B1FFxAFi8IAk4fKKV9oKvp"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="G4tYZEwqALNNogeKidrHCx"/></svg></span>
+        <span class="section-title" data-page-node-id="p8XXXOsCvXgIDWYHG5iHC2">接待顾问姓名</span>
       </div>
-      <div class="input-row">
-        <input id="mgrNameInput" placeholder="请填写您的姓名" value="张三" />
-        <button id="saveMgrNameBtn" class="btn btn-primary btn-sm" onclick="saveMgrName()">保存</button>
+      <div class="input-row" data-page-node-id="VGQkAqbUmrgUWEvpsfUpRh">
+        <input id="mgrNameInput" placeholder="请填写您的姓名" value="张三" data-page-node-id="iD2oM9TK9fT34WoJP2rBpl" />
+        <button id="saveMgrNameBtn" class="btn btn-primary btn-sm" onclick="saveMgrName()" data-page-node-id="be5mo7qJgW6NnApmkgfaBG">保存</button>
       </div>
-      <span id="mgrNameStatus" class="field-status"></span>
+      <span id="mgrNameStatus" class="field-status" data-page-node-id="38hk5WwVIkE8J5nzAwc1kv"></span>
     </div>
   </div>
 
-  <button id="backToStatusBtn" class="btn btn-ghost" onclick="switchToStatus()" style="width:100%">
-    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <button id="backToStatusBtn" class="btn btn-ghost" onclick="renderPanel('status')" style="display:none;margin-bottom:12px" data-page-node-id="xte5tvaq7O4oOVXFOCJqsN">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px" data-page-node-id="VI8bBrRANpaN8n3zjMRHt7"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="tBtifWQC8EGJrtjdLiGFXa"/></svg>
     返回
   </button>
 </div>
 
+<!-- 外观（主题切换）——常驻，两个面板下都可见 -->
+<div class="theme-card" id="themeCard" data-page-node-id="Grr1OJCYA8xVKoaxDE0mw0">
+  <div class="theme-head" data-page-node-id="gbnnvTpcnDFmr2F0xdELuL">
+    <span class="section-ico" data-page-node-id="Lr7L6owgHyolyJtsXUo3Oy"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="McDoNS7iwagqtBurB3uSJe"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.7-9-7.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="ZxVahCD8T0AdSjtINNQKJ7"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" data-page-node-id="DJl3hYDwv7AHGPL7llej2S"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor" data-page-node-id="yTwyJJv7Jz0CYzZVnGbEPX"/><circle cx="15" cy="8" r="1.2" fill="currentColor" data-page-node-id="bz31qU0xr14C59qcob2Eum"/></svg></span>
+    <span class="section-title" data-page-node-id="CBPehFOjFSeURkDCiHNJaA">外观</span>
+    <span id="themeName" class="theme-name" data-page-node-id="NnFysVO3nbkpOXBkGgokhz"></span>
+  </div>
+  <div class="swatches" id="swatches" data-page-node-id="BMrDmNCC7DAQNFDYLCwnbp"></div>
+</div>
+
+<!-- 主题数据直接复用扩展端的唯一权威源（themes.js 的 AD_THEMES / AD_APPLY_THEME） -->
+<script src="AutoDial-Extension/themes.js"></script>
 <script>
 // Toast
 let toastTimer = null;
@@ -352,22 +388,55 @@ function showToast(msg, type) {
   setTimeout(() => t.remove(), 2500);
 }
 
-// 切换面板
-function switchToSetup() {
-  document.getElementById('statusPanel').style.display = 'none';
-  document.getElementById('setupPanel').style.display = 'block';
+// 切换面板（与真实 popup 的 renderPanel 对齐 —— 唯一出口，避免各入口各改一半 DOM）
+// 'status' 状态页 / 'setup' 完整设置（含配对码）/ 'server' 仅云中继与姓名
+const SHOW_PIN_GROUP = { status: false, setup: true, server: false };
+function renderPanel(mode) {
+  const isStatus = mode === 'status';
+  document.getElementById('statusPanel').style.display = isStatus ? 'block' : 'none';
+  document.getElementById('setupPanel').style.display  = isStatus ? 'none'  : 'block';
+  document.getElementById('pinGroup').style.display    = SHOW_PIN_GROUP[mode] ? '' : 'none';
+  document.getElementById('setupHintCard').style.display = (mode === 'server') ? 'none' : '';
+  document.getElementById('backToStatusBtn').style.display = (!isStatus && mode !== 'setup') ? 'inline-block' : 'none';
 }
 
-function switchToStatus() {
-  document.getElementById('setupPanel').style.display = 'none';
-  document.getElementById('statusPanel').style.display = 'block';
+// ── 外观（主题切换）── 复用扩展端 themes.js 的 AD_THEMES / AD_APPLY_THEME
+const THEME_ORDER = ['sky-blue', 'dark-gold', 'cyber-frost', 'deep-space', 'cyberpunk',
+                     'minimalist', 'forest-green', 'energetic-orange', 'ocean-blue'];
+let currentTheme = 'sky-blue';
+
+function buildSwatches() {
+  const box = document.getElementById('swatches');
+  if (!box || typeof AD_THEMES === 'undefined') return;
+  box.innerHTML = THEME_ORDER.filter(function (id) { return AD_THEMES[id]; }).map(function (id) {
+    const t = AD_THEMES[id];
+    return '<button type="button" class="swatch-btn" data-theme="' + id + '" title="' + t.name +
+           '" style="background:linear-gradient(135deg,' + t.accentLight + ',' + t.accentDark + ')"></button>';
+  }).join('');
+  box.addEventListener('click', function (e) {
+    const btn = e.target.closest('.swatch-btn');
+    if (btn) pickTheme(btn.dataset.theme);
+  });
 }
 
-// 同步按钮
-document.getElementById('syncBtn').addEventListener('click', () => {
-  showToast('正在同步...', 'success');
-  setTimeout(() => showToast('✓ 同步成功', 'success'), 1000);
-});
+function markSwatch(id) {
+  currentTheme = id;
+  const box = document.getElementById('swatches');
+  if (box) {
+    box.querySelectorAll('.swatch-btn').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.theme === id);
+    });
+  }
+  const nameEl = document.getElementById('themeName');
+  if (nameEl && typeof AD_THEMES !== 'undefined' && AD_THEMES[id]) nameEl.textContent = AD_THEMES[id].name;
+}
+
+function pickTheme(id) {
+  if (typeof AD_APPLY_THEME !== 'function' || typeof AD_THEMES === 'undefined' || !AD_THEMES[id]) return;
+  AD_APPLY_THEME(id);
+  markSwatch(id);
+  showToast('已切换到「' + AD_THEMES[id].name + '」');
+}
 
 // 测试服务器
 function testServer() {
@@ -399,13 +468,20 @@ function saveMgrName() {
   showToast('顾问姓名已保存', 'success');
 }
 
-// 清除PIN
+// 清除PIN（与真实 popup 一致：清完落到「完整设置页」并聚焦配对码输入框）
 function clearPin() {
-  if (confirm('确定要清除配对码吗？')) {
+  if (confirm('确定要清除本机 PIN？清除后将停止自动配对拨号，需重新设置。')) {
+    const input = document.getElementById('pinInput');
+    if (input) input.value = '';
+    renderPanel('setup');
     showToast('配对码已清除', 'success');
-    switchToSetup();
+    setTimeout(function () { const i = document.getElementById('pinInput'); if (i) i.focus(); }, 60);
   }
 }
+
+// 初始化主题色块
+buildSwatches();
+markSwatch(typeof AD_THEMES !== 'undefined' && AD_THEMES[currentTheme] ? currentTheme : 'sky-blue');
 
 // 模拟在线状态
 setTimeout(() => {
