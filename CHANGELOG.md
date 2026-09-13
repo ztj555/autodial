@@ -1,5 +1,33 @@
 # AutoDial 更新日志
 
+## 2026-09-13（扩展 v5.1.0 · 修复"插件端识别不到坐席手机号" + PIN 注册时机）
+
+> 现象：新版扩展在 CRM 上识别不到坐席手机号（拨号/登记时报"未检测到坐席手机号"），换回 `autodial-old0520` 的 v4.2.0 即恢复正常。
+> 核实方式：登录真实 CRM（`guwen.zhudaicms.com`）核对 DOM，并用 CDP 把扩展脚本注入已登录页面做行为实测（见下"验证"）。
+
+### Chrome 扩展
+
+- **[P0] `getPin()` 的 `self_phone_precise` 门禁误伤正常路径**：v5.0.0 为修 P1「误判号码可能成为生效 PIN」，给 `getPin()` 加了 `if (stored.self_phone && stored.self_phone_precise !== false)`，而 `precise` 仅在 CSS 选择器 `.user-phone` 命中时才为 `true`。另一套 CRM（融鑫汇）的手机号是裸 StaticText、**没有 `.user-phone`**，永远走 TreeWalker 兜底 → `precise` 恒为 `false` → `getPin()` 直接返回 `null`，即使 `self_phone` 里的号码完全正确也拿不到 PIN → 拨号/一键登记全部失败
+  - 改为 `pin || self_phone` 无条件兜底，并把"能不能注册 PIN"的判据从**选择器命中**换成**识别时机**（见下条）
+- **[P0] 那条 P1 的真实机理是"UI 自污染"，现已从根上封死**：`detectPin()` 的 TreeWalker 扫的是顶层 `document.body`，而本插件的浮窗号码标签 `#__ad_dial_label` 展示的正是**客户号码**（来自 iframe 的 `phoneDetected` → `updatePhone()`），登记弹窗 `autodial-register-overlay` 里还有"客户手机号：xxx"——二者都 append 在同一个 body 里。于是"我们自己写进去的客户号码"会被 TreeWalker 当成坐席号读回来。实测对照：把客户号码放进普通 `div` 会被识别（`phone:15158106834`），放进带插件前缀的挂件则不会
+  - 新增 `isOwnUiNode()`：TreeWalker 的 `acceptNode` 跳过落在 `[id^="__ad_"]` / `[id^="autodial-"]` 子树内的文本节点；CSS 选择器路径同样校验
+- **[P1] PIN 注册时机收紧为"CRM 刷新后的首次识别"**：原实现由 `MutationObserver({childList,subtree})` 持续触发 `detectPin()`，使用过程中任何一次识别变化都可能改写 `self_phone` 甚至 PIN
+  - `detectPin()` 新增 `_pinRegistered`：**只有本次页面加载（= CRM 刷新）的首次命中**才写 `self_phone` 并上报 `initial: true`；之后的变化只打日志
+  - `selfPhoneDetected` 按 `initial` 分流：非刷新期识别一律跳过，不动 PIN；`maybeSwitchPin()` 只在 `initial` 时被调用，并去掉其 `precise` 依赖（否则融鑫汇那套永远切不了 PIN）
+  - 语义即：**刷新注册一次 / 面板手动改一次，其余时候沿用上次的 PIN**；换人场景由"新坐席登录 CRM 后刷新"覆盖
+- 版本号 `5.0.0` → `5.1.0`
+
+### 验证
+
+- `node --check`：`content-script.js` / `background.js` 通过
+- 真实 CRM 实测（CDP 注入 + `chrome.*` 桩件，抓取脚本实际发出的消息）：
+  - 顶层 frame：`{type:'selfPhoneDetected', phone:'15397033187', name:'左廷军', precise:true, initial:true}` ✅ `.user-phone` 服务端渲染，选择器路径正常
+  - 客户详情 iframe：`{type:'phoneDetected', phone:'15158106834'}` ✅ 并成功拦截"点击拨打"链接
+  - 用例 A（去掉 `.user-phone` 的 class，模拟融鑫汇裸文本）：`{phone:'15397033187', precise:false, initial:true}` ✅ **改前必挂的场景现已识别**
+  - 用例 B（无坐席号 + 客户号放进插件挂件）：无任何检测消息 ✅ 自污染已封闭
+  - 用例 C（对照：客户号放进普通 `div`）：`{phone:'15158106834', initial:true}` ✅ 证明 B 非侥幸
+- `chrome --pack-extension` 对新旧 manifest 均打包成功（配置合法）
+
 ## 2026-09-12（文档治理 · 报告类文档整合清理）
 
 > v4.23 全部批次完成后，按"没改的列出来、改过的删掉或整合"原则对报告类文档做最终清理。依据：《未闭环问题清单》已把 13 份报告的每一条问题逐条回源码核实并附闭环状态总表（43 闭环 / 24 维持不修及理由）。

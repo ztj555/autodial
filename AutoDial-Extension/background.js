@@ -40,7 +40,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'pcCheck') refreshPcStatus();
 });
 refreshPcStatus(); // 启动时立刻探测一次
-flushCloudVisits().catch(() => {}); // v4.17: SW 启动时补推暂存的云端登记
+// v5.1 修复：flushCloudVisits() 原本在这里调用，但它内部直接访问 _visitQueueChain，
+// 而 _visitQueueChain 要到本文件第 428 行才用 let 声明。顶层脚本在此之前访问会抛
+// ReferenceError: Cannot access '_visitQueueChain' before initialization（TDZ），
+// 使 SW 顶层执行在这一行中断 —— 之后所有 chrome.runtime.onMessage.addListener
+// 都不会注册，表现为拨号/坐席号/PIN 整体失效（老版无此函数，故仅新版复现）。
+// 已移到文件末尾、所有声明之后再调用。
 
 // ==================== 设备授权轮询 ====================
 // v4.21: 轮询从 5 秒放宽到 30 秒，并对 429 退避加倍。
@@ -197,14 +202,16 @@ let pcLastCheck = 0;
 // ==================== PIN 管理（替代原 JWT） ====================
 
 async function getPin() {
-  // pin 是权威值（仅由"精确识别"或手动设置写入）。
-  // self_phone 只作兜底，且被明确标记为非精确识别时不得使用——此前无条件兜底，
-  // 而 self_phone 会被 TreeWalker 的猜测结果覆盖，一旦误判（例如读到客户手机号），
-  // 错误号码会直接变成生效 PIN 并打到云端（拨给错误的人 / 错账号登记）。
-  const stored = await chrome.storage.local.get(['pin', 'self_phone', 'self_phone_precise']);
-  if (stored.pin) return stored.pin;
-  if (stored.self_phone && stored.self_phone_precise !== false) return stored.self_phone;
-  return null;
+  // pin 是权威值：由「CRM 刷新后的首次识别」或「面板手动设置」写入，一经确定即保持稳定，
+  // 使用过程中的识别结果不会覆盖它（见 content-script.js detectPin 的 _pinRegistered）。
+  //
+  // v5.1 修正：原实现在此处对 self_phone 加了 `self_phone_precise !== false` 门禁，
+  // 导致只要识别没走到 CSS 选择器（TreeWalker 兜底）就整条链路返回 null ——
+  // 即使 self_phone 里的号码完全正确，拨号/登记也会失败（表现为"插件端识别不到手机号"）。
+  // 现在 self_phone 只会在"页面刷新后的首次识别"时写入，且 content-script 已排除
+  // 本插件自建挂件（避免读到浮窗里展示的客户号码），因此可以安全兜底。
+  const stored = await chrome.storage.local.get(['pin', 'self_phone']);
+  return stored.pin || stored.self_phone || null;
 }
 
 // ==================== PC 检测（与 v3.1 一致） ====================
@@ -608,23 +615,24 @@ function notifyTab(tabId, msg) {
   }
 }
 
-// v4.15: 换人使用电脑时同步切换 PIN。
-// 仅信任 CSS 选择器精确命中（precise=true）——TreeWalker 兜底检测可能误判，
-// 与已设 PIN 冲突时只警示不切换，避免把拨号路由到错误的号码。
+// v5.1: PIN 注册。现在**只在「CRM 刷新后的首次识别」时被调用**
+// （见下方 selfPhoneDetected 的 initial 分支），与「面板手动设置」共同构成仅有的两个写入口。
+// 换人场景：新坐席登录 CRM 并刷新 → 首次识别到新号码 → 自动切换 PIN。
+//
+// 原实现在这里要求 precise=true（仅 CSS 选择器 .user-phone 命中才写），
+// 而另一套 CRM（融鑫汇）的手机号是裸 StaticText、没有 .user-phone，
+// 永远走 TreeWalker 兜底 → precise 恒为 false → PIN 永远注册不上，
+// 这才是「插件端识别不到手机号」的直接原因。现已改为按「刷新时机」而非「选择器命中」判定。
 async function maybeSwitchPin(newPhone, precise, tabId) {
   try {
     if (!newPhone) return;
     const s = await chrome.storage.local.get(['pin']);
     const oldPin = s.pin || '';
     if (newPhone === oldPin) return;
-    if (precise) {
-      chrome.storage.local.set({ pin: newPhone });
-      console.log('[AutoDial BG] 坐席已切换:', oldPin, '→', newPhone);
-      if (oldPin && tabId) {
-        notifyTab(tabId, { type: 'pinNotice', text: '坐席号已切换为 ' + newPhone, warn: false });
-      }
-    } else if (oldPin && tabId) {
-      notifyTab(tabId, { type: 'pinNotice', text: '检测到坐席号 ' + newPhone + ' 与已设置 PIN ' + oldPin + ' 不一致，请核对', warn: true });
+    chrome.storage.local.set({ pin: newPhone });
+    console.log('[AutoDial BG] 坐席号注册/切换:', oldPin || '(无)', '→', newPhone, precise ? '(精确)' : '(兜底)');
+    if (oldPin && tabId) {
+      notifyTab(tabId, { type: 'pinNotice', text: '坐席号已切换为 ' + newPhone, warn: false });
     }
   } catch (e) {
     console.warn('[AutoDial BG] PIN switch check failed:', e);
@@ -661,12 +669,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // 坐席手机号检测 -> 存为 PIN + 刷新服务器列表 + 上传姓名到云端
+  // v5.1: 区分「页面刷新后的首次识别」(initial=true) 与「使用过程中的识别变化」。
+  // 只有前者可以写入 self_phone 并注册/切换 PIN；后者仅记录日志。
+  // 原实现不加区分，使用过程中任何一次识别都会改写 self_phone 甚至 PIN。
   if (msg.type === 'selfPhoneDetected') {
-    // 同时记录是否为精确识别：非精确（TreeWalker 猜测）的结果只用于界面展示与提醒，
-    // 不参与 getPin() 的 PIN 兜底（见 getPin 注释）
+    // 用 `!== false` 而非 `=== true`：字段缺失时按"可注册"处理，
+    // 这样即使浏览器里残留旧版 content-script（不带 initial 字段），也不会彻底注册不上 PIN。
+    const isInitial = msg.initial !== false;
+    if (!isInitial) {
+      console.log('[AutoDial BG] 非刷新期识别到坐席号，沿用原 PIN 不覆盖:', msg.phone);
+      return;
+    }
     chrome.storage.local.set({ self_phone: msg.phone, self_phone_precise: !!msg.precise });
     console.log('[AutoDial BG] 坐席手机号已检测:', msg.phone, msg.precise ? '(精确)' : '(非精确)');
-    // v4.15: 换人使用时同步切换 PIN，防止"电话打给上一任坐席"（异步执行，不阻塞监听器）
+    // v4.15: 换人使用时同步切换 PIN，防止"电话打给上一任坐席"
     maybeSwitchPin(msg.phone, !!msg.precise, tabId);
     if (msg.name) {
       chrome.storage.local.set({ manager_name: msg.name });
@@ -915,3 +931,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 });
+
+// ==================== 启动任务 ====================
+// 必须放在所有 let/const 声明与监听器注册之后：flushCloudVisits() 内部访问的
+// _visitQueueChain 是在文件中部用 let 声明的，提前调用会触发 TDZ 错误并中断
+// SW 顶层脚本（详见文件上方 refreshPcStatus() 处的注释）。
+flushCloudVisits().catch(() => {}); // v4.17: SW 启动时补推暂存的云端登记

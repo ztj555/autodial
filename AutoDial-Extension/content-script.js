@@ -18,6 +18,27 @@
   // TreeWalker从body顶部向下扫，第一个命中的手机号就是坐席的
 
   /**
+   * v5.1: 判断某个文本节点是否落在"本插件自己注入的挂件"里。
+   *
+   * 这是那条 [P1]「误判号码可能成为生效 PIN」的真正来源：
+   * 浮窗的号码标签 #__ad_dial_label 展示的是**客户号码**，登记弹窗
+   * autodial-register-overlay 展示的是"客户手机号：xxx"，二者都 append 在顶层
+   * document.body 里。而 detectPin() 的 TreeWalker 扫的正是同一个 body ——
+   * 于是"我们自己写进去的客户号码"会被当成坐席号读回来。
+   *
+   * 所有自建节点的 id 均以 __ad_ 或 autodial- 开头，用 closest 做一次前缀匹配即可。
+   */
+  function isOwnUiNode(node) {
+    var el = node && node.parentElement;
+    if (!el || typeof el.closest !== 'function') return false;
+    try {
+      return !!el.closest('[id^="__ad_"], [id^="autodial-"]');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * 从 CRM 页面同时检测坐席手机号和姓名。
    * DOM 结构（已确认）：div.user-name = 姓名，div.user-phone = 手机号。
    * CSS 选择器优先；选择器失效时回退到 TreeWalker 文本扫描。
@@ -27,20 +48,25 @@
     try {
       var phoneEl = document.querySelector('.user-phone');
       var nameEl = document.querySelector('.user-name');
-      if (phoneEl) {
+      if (phoneEl && !isOwnUiNode(phoneEl)) {
         var phoneText = phoneEl.textContent.trim();
         var m = phoneText.match(/1[3-9]\d{9}/);
         if (m) {
-          var name = nameEl ? nameEl.textContent.trim() : '';
+          var name = nameEl && !isOwnUiNode(nameEl) ? nameEl.textContent.trim() : '';
           // v4.15: precise=true 表示选择器精确命中，可作为自动切换坐席号的依据
           return { phone: m[0], name: name, precise: true };
         }
       }
     } catch(e) {}
 
-    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化；可能误判，不可自动切换坐席号）
+    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化）
+    // v5.1: 跳过本插件自己的挂件，避免浮窗/登记弹窗里的客户号码被误判成坐席号
     var PHONE_RE = /1[3-9]\d{9}/;
-    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        return isOwnUiNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
     var prevText = '';
     while (w.nextNode()) {
       var text = w.currentNode.textContent.trim();
@@ -1568,18 +1594,32 @@
     }
 
     // ========== v4: 检测坐席手机号 → 存为 PIN ==========
+    // v5.1: PIN 注册时机收紧。原实现由 MutationObserver 持续触发 detectPin()，
+    // 使用过程中任何一次识别变化都可能覆盖 PIN；而本机坐席号是唯一的，
+    // 只有离职换人才会变，且换人必然伴随 CRM 重新登录/刷新。
+    // 因此约定：**只有"本次页面加载后的首次命中"才允许写入 self_phone 并注册 PIN**，
+    // 之后由 MutationObserver 触发的识别仅打印日志，不再改动 PIN。
     let _lastPhone = null;
     let _debounceTimer = null;
+    let _pinRegistered = false;
 
     function detectPin() {
       try {
         const result = getMyPhoneAndNameFromCRM();
         if (result && result.phone && result.phone !== _lastPhone) {
           _lastPhone = result.phone;
+          // 首次命中 = 本次页面加载（CRM 刷新）的这一次注册机会
+          const isInitial = !_pinRegistered;
+          if (!isInitial) {
+            // 非首次：本次页面加载期间坐席号又变了，沿用原 PIN，什么都不改
+            console.log('[AutoDial v4] 坐席手机号发生变化，沿用原 PIN 不再覆盖:', result.phone);
+            return true;
+          }
+          _pinRegistered = true;
           window.__adMyPhone = result.phone;
           chrome.storage.local.set({ self_phone: result.phone });
           console.log('[AutoDial v4] 检测到坐席手机号 (PIN):', result.phone);
-          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: result.phone, name: result.name || '', precise: !!result.precise });
+          chrome.runtime.sendMessage({ type: 'selfPhoneDetected', phone: result.phone, name: result.name || '', precise: !!result.precise, initial: true });
           // 同步检测并存储经理姓名
           if (result.name) {
             window.__adMyName = result.name;
