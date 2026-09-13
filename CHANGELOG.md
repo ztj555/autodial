@@ -1,5 +1,43 @@
 # AutoDial 更新日志
 
+## 2026-09-13（扩展 v5.3.0 · 拨号/右键时实时读取"当前激活客户帧"号码）
+
+> 背景：v5.2.0 用 `isFrameActive()` 挡住了隐藏的旧客户帧，串号问题解决，但号码刷新仍依赖子 iframe **每 5 秒心跳**——切客户后若立即点击，浮窗最多滞后 5 秒，可能拨到上一位客户。
+> 处理：把号码获取从"被动等心跳"改成"动作驱动的即时查询"。
+
+### Chrome 扩展
+
+- **[P1] 浮窗/拨打按钮左击：拨号前先取实时号码**：点击瞬间向所有子帧广播一次询问，只有 `isFrameActive()` 为真的帧（= 眼前这个客户）应答，拿到最新号码再拨，**彻底消除 5 秒滞后**，拿不到才提示"未检测到号码"
+- **[P1] 浮动条右键：弹出右键菜单时同步刷新**：`showContextMenu()` 内触发一次实时查询，菜单**先弹出不阻塞手感**，号码回来后**就地更新**菜单里的"拨打 / 发短信 / 一键登记"三项文案
+  - 拨号浮窗与挂断浮窗的右键都走同一个 `showContextMenu()`，因此两个入口一并生效
+- **实现**：顶层新增 `refreshActivePhone(cb)` + `broadcastToFrames()`，沿用既有 子→父 `postMessage` 通道，新增 父→子 请求 `__ad_ask_phone` / 子→父 应答 `__ad_phone_reply`
+  - **隐藏帧不应答**：子帧收到询问后先过 `isFrameActive()` 守卫，与 `scan()` 同一道判断，旧客户帧彻底闭嘴
+  - **多层 iframe 兼容**：`__ad_ask_phone` 逐层向下转发，`__ad_phone_reply` 逐层向上冒泡
+  - **超时兜底（300ms）**：无任何帧应答（如插件刚更新、旧帧未加载新代码）时沿用现有 `currentPhone`，退回旧行为，不会更糟
+- 版本号 `5.2.0` → `5.3.0`
+
+## 2026-09-13（扩展 v5.2.0 · 修复多客户标签下号码/姓名来回串）
+
+> 现象：同时打开多个客户时，浮窗号码与姓名在多个客户之间来回跳——当前客户是贾康康（15268581961），浮窗却停在上一客户杨文安（18757152162），"一键登记"也成了杨文安。老版 v4.2.0 无此问题。
+> 核实方式：登录真实 CRM（`guwen.zhudaicms.com`，即"融鑫汇-客户管理系统"），实际打开 2 个客户后用 CDP 读取每个 iframe 的可见性属性（见下"验证"）。
+
+### Chrome 扩展
+
+- **[P0] 多客户 iframe 同时上报，浮窗号码来回跳**：该 CRM 为每个打开的客户保留一个 iframe，切走的客户 iframe 只被设为 `opacity:0 / z-index:-999` 叠在下方，**display、visibility、innerWidth、document.visibilityState 全都不变**，其 DOM 依旧完全可读。而 v4.15 为子 iframe 引入的 `setInterval(scan, 5000)` 心跳会让**每个已打开客户**都持续上报自己那份「手机号码：」→ background 收到任意帧就 `updatePhone` 广播整个 tab → 浮窗在两个号码之间来回跳。姓名同理：旧 iframe 仍在 `postMessage({type:'nameDetected'})`，把顶层 `__adCustomerName` 覆盖回旧客户
+  - 新增 `isFrameActive()`：同源时用 `window.frameElement` 取到父文档中承载自己的 `<iframe>`，逐层向上检查 `display:none` / `visibility:hidden` / `opacity:0` / `z-index<0`；顶层（无 frameElement）恒为激活；跨域取不到时保守放行
+  - `scan()` 开头 `if (!isFrameActive()) return;`——**隐藏帧不上报号码、不上报 null、也不发姓名**
+  - 保留心跳：切回某客户时若 DOM 恰好没变动，仍需靠心跳重新 hook 拨打链接并上报
+- 版本号 `5.1.0` → `5.2.0`
+
+### 验证
+
+- `node --check`：`content-script.js` 通过
+- 真实 CRM 实测（CDP，打开"刘洪江"（100631867）+ "尹华"（99590275）两个客户）：
+  - iframe 列表：`我的客户`(opacity 0) / `刘洪江`(opacity 0, 15158106834) / `尹华`(opacity 1, 17816152885)
+  - 旧客户 iframe 虽被隐藏，仍能读到 `手机号码：15158106834` —— 证实心跳会把旧号码一起上报
+  - `isFrameActive()` 判定：我的客户 `false`、刘洪江 `false`、尹华 `true`、顶层 `true` ✅
+  - 隐藏信号实测：`opacity:0` + `z-index:-999`（`display` / `visibility` 均为正常值，故不能用它们判断）
+
 ## 2026-09-13（扩展 v5.1.0 · 修复"插件端识别不到坐席手机号" + PIN 注册时机）
 
 > 现象：新版扩展在 CRM 上识别不到坐席手机号（拨号/登记时报"未检测到坐席手机号"），换回 `autodial-old0520` 的 v4.2.0 即恢复正常。

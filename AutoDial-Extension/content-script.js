@@ -459,21 +459,22 @@
 
       // ─── 点击拨号 ────────────────────────────────
       // v4.23: 防连点——2 秒窗口内只发一次，避免连点触发两次拨号指令
+      // v5.3: 点击瞬间先向"当前激活客户帧"取一次实时号码，再拨——消除 5 秒心跳滞后，
+      //       确保拨的永远是"眼前这个客户"（拿不到才提示未检测到号码）
       let lastFloatDialClick = 0;
       floatEl.addEventListener('click', (e) => {
         // 比较按下和抬起的位置，超过 5px 视为拖动，不触发拨号
         const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
         if (dist > 5) return;
-        if (!currentPhone) {
-          flashFloat('未检测到号码', false);
-          return;
-        }
         const now = Date.now();
         if (now - lastFloatDialClick < 2000) return;
-        lastFloatDialClick = now;
-        // v4.15: 点击立即进入"拨号中"状态（清除旧失败提示），结果回来后刷新
-        flashFloat('拨号中…', undefined);
-        chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
+        refreshActivePhone((phone) => {
+          if (!phone) { flashFloat('未检测到号码', false); return; }
+          lastFloatDialClick = Date.now();
+          // v4.15: 点击立即进入"拨号中"状态（清除旧失败提示），结果回来后刷新
+          flashFloat('拨号中…', undefined);
+          chrome.runtime.sendMessage({ type: 'dial', phone });
+        });
       });
 
       // ─── 右键菜单 ────────────────────────────────
@@ -808,6 +809,23 @@
     let contextMenu = null;
     let _ctxMousedownHandler = null;
 
+    // v5.3: 用最新号码刷新已弹出的菜单文案（号码实时查询回来后调用）
+    function refreshContextMenuLabels() {
+      const menu = document.getElementById('__ad_ctxmenu');
+      if (!menu) return;
+      const setLabel = (key, text) => {
+        const row = menu.querySelector('[data-ad-ctx="' + key + '"]');
+        const span = row && row.querySelector('span');
+        if (span) span.textContent = text;
+      };
+      const phone = currentPhone;
+      setLabel('dial', phone ? '拨打 ' + phone : '拨号（未检测号码）');
+      setLabel('sms', phone ? '发短信 ' + phone : '发短信（未检测号码）');
+      const custName = window.__adCustomerName || '';
+      const custPhone = window.__adPhone || '';
+      setLabel('register', (custPhone && custName) ? '一键登记 ' + custName + ' ' + custPhone : '一键登记（未检测客户）');
+    }
+
     function showContextMenu(x, y) {
       hideContextMenu();
       const t = T();
@@ -856,15 +874,15 @@
         { icon: 'monitor', label: '打开电脑端主界面', action: openDesktopApp },
         { icon: 'eye', label: '显示/隐藏悬浮窗', action: toggleFloatbar },
         { type: 'separator' },
-        { icon: 'phone', label: currentPhone ? '拨打 ' + currentPhone : '拨号（未检测号码）', action: () => {
+        { icon: 'phone', key: 'dial', label: currentPhone ? '拨打 ' + currentPhone : '拨号（未检测号码）', action: () => {
           if (!currentPhone) { flashFloat('未检测到号码', false); return; }
           chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
         }},
-        { icon: 'chat', label: currentPhone ? '发短信 ' + currentPhone : '发短信（未检测号码）', action: () => {
+        { icon: 'chat', key: 'sms', label: currentPhone ? '发短信 ' + currentPhone : '发短信（未检测号码）', action: () => {
           if (!currentPhone) { flashFloat('未检测到号码', false); return; }
           sendSms(currentPhone);
         }},
-        { icon: 'pencil', label: (function() {
+        { icon: 'pencil', key: 'register', label: (function() {
           var custName = window.__adCustomerName || '';
           var custPhone = window.__adPhone || '';
           return custPhone && custName ? '一键登记 ' + custName + ' ' + custPhone : '一键登记（未检测客户）';
@@ -939,6 +957,7 @@
           transition: 'background .15s',
           whiteSpace: 'nowrap',
         });
+        if (item.key) row.setAttribute('data-ad-ctx', item.key);
         if (item.icon) {
           row.innerHTML = adIcon(item.icon, 15) + '<span style="pointer-events:none">' + escHtml(item.label) + '</span>';
         } else {
@@ -963,6 +982,10 @@
         if (rect.left < 0) contextMenu.style.left = '8px';
         if (rect.top < 0) contextMenu.style.top = '8px';
       });
+
+      // v5.3: 右键即刷新——弹出菜单的同时向"当前激活客户帧"取最新号码，
+      //       拿到后就地更新菜单里的拨打/发短信/一键登记文案（菜单先弹出，不阻塞手感）
+      refreshActivePhone(() => refreshContextMenuLabels());
 
       _ctxMousedownHandler = (e) => {
         const menu = document.getElementById('__ad_ctxmenu');
@@ -1431,6 +1454,41 @@
       });
     }
 
+    // ─── v5.3: 实时读取「当前激活客户帧」的号码 ──────
+    //
+    // 背景：客户详情是独立 iframe，靠 5 秒心跳上报号码 → 切客户后顶层浮窗最多滞后 5 秒。
+    // 用户若在这几秒内点击，就可能拨到上一位客户。
+    //
+    // 改为「动作驱动的即时查询」：顶层浮窗左击/右键时广播一次询问，只有 isFrameActive()
+    // 为真的那一帧（= 眼前这个客户）会应答自己号码，因此拿到的永远是最新值，既无需等心跳，
+    // 也不会被隐藏的旧客户帧串号。超时（300ms 无应答）时沿用现有 currentPhone，退回旧行为。
+    var _adAskSeq = 0;
+    function broadcastToFrames(msg) {
+      var frames = document.querySelectorAll('iframe');
+      for (var i = 0; i < frames.length; i++) {
+        try { if (frames[i].contentWindow) frames[i].contentWindow.postMessage(msg, '*'); } catch (e) {}
+      }
+    }
+    function refreshActivePhone(cb) {
+      var reqId = 'adq' + (++_adAskSeq);
+      var settled = false;
+      function settle(got, phone) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        window.removeEventListener('message', onReply);
+        if (got && phone !== currentPhone) updatePhone(phone);
+        if (typeof cb === 'function') cb(currentPhone);
+      }
+      function onReply(e) {
+        if (!e.data || e.data.type !== '__ad_phone_reply' || e.data.reqId !== reqId) return;
+        settle(true, e.data.phone || null);
+      }
+      var timer = setTimeout(function () { settle(false, null); }, 300);
+      window.addEventListener('message', onReply);
+      broadcastToFrames({ type: '__ad_ask_phone', reqId: reqId });
+    }
+
     function updatePhone(phone) {
       currentPhone = phone || null;
       window.__adPhone = currentPhone;
@@ -1750,6 +1808,65 @@
     }
   });
 
+  // v5.2: 判断「本 iframe 是否为当前激活的页签」。
+  //
+  // 融鑫汇等 CRM 打开多个客户时，会为每个客户保留一个 iframe：切走的客户 iframe 被设为
+  // opacity:0 / z-index:-999 叠在下面，而 display、visibility、innerWidth 全都不变，
+  // 其 DOM 依旧完全可读。若不加判断，每个已打开客户的 iframe 都会随着 5 秒心跳一起上报
+  // 自己那份「手机号码：」，顶层浮窗就会在多个客户之间来回跳。
+  // （老版没有心跳，靠 DOM 变化驱动，天然只有当前客户会上报，故无此问题。）
+  //
+  // 同源时可用 window.frameElement 拿到父文档里承载自己的 <iframe>，逐层向上检查；
+  // 跨域取不到时保守放行，退回旧行为，不误伤单客户场景。
+  function isFrameActive() {
+    try {
+      if (document.visibilityState === 'hidden') return false;
+      var w = window.innerWidth || document.documentElement.clientWidth || 0;
+      var h = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (!w || !h) return false;
+      var win = window, depth = 0;
+      while (win && win.frameElement && depth++ < 5) {
+        var cs = win.getComputedStyle(win.frameElement);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        if (parseFloat(cs.opacity) === 0) return false;
+        var z = parseInt(cs.zIndex, 10);
+        if (!isNaN(z) && z < 0) return false;
+        if (win.parent === win) break;
+        win = win.parent;
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // v5.3: 响应顶层的"实时读取激活帧号码"请求。
+  // 顶层浮窗左击/右键时广播 __ad_ask_phone；只有当前激活的客户帧才应答，
+  // 从而让顶层立刻拿到"眼前这个客户"的号码，不必等 5 秒心跳，也不会被旧客户串号。
+  window.addEventListener('message', function (e) {
+    var d = e.data;
+    if (!d || !d.type) return;
+    if (d.type === '__ad_ask_phone') {
+      // 多层 iframe：继续向下转发，让最深处的激活帧也能应答
+      try {
+        var subs = document.querySelectorAll('iframe');
+        for (var i = 0; i < subs.length; i++) {
+          if (subs[i].contentWindow) subs[i].contentWindow.postMessage(d, '*');
+        }
+      } catch (_) {}
+      // 非激活帧一律不应答（与 scan() 同一道守卫，避免隐藏的旧客户帧回来串号）
+      if (!isFrameActive()) return;
+      var p = null;
+      try { p = getPhoneFromDetailPage(); } catch (_) {}
+      try {
+        window.parent.postMessage({ type: '__ad_phone_reply', reqId: d.reqId, phone: p || null }, '*');
+      } catch (_) {}
+    } else if (d.type === '__ad_phone_reply') {
+      // 多层 iframe：把深层应答逐级冒泡回顶层
+      try { if (window.parent !== window) window.parent.postMessage(d, '*'); } catch (_) {}
+    }
+  });
+
   function getPhoneFromDetailPage() {
     const walker = document.createTreeWalker(
       document.body,
@@ -1842,6 +1959,10 @@
   var adLastDetectedUrl = '';
 
   function scan() {
+    // v5.2: 多客户标签场景下，只有「当前激活」的 iframe 才有资格上报号码/姓名。
+    // 已打开但被 CRM 隐藏（opacity:0 / z-index:-999）的上一个客户，其 iframe 仍会每 5 秒
+    // 心跳一次；若一并上报，顶层浮窗就会在两个客户的号码之间来回跳。
+    if (!isFrameActive()) return;
     const phone = getPhoneFromDetailPage();
     if (phone) {
       adLastDetectedUrl = window.location.href;
