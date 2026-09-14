@@ -1121,8 +1121,8 @@
         pinInput.value = s.pin || s.self_phone || '';
       });
 
-      // ═══════════════════ 云端服务器区 ═══════════════════
-      const srvSection = mkSection('云端服务器', '默认端口 35430，可保留为空走直连');
+      // ═══════════════════ 云中继地址区（v5.6 走 addr.js） ═══════════════════
+      const srvSection = mkSection('云中继地址', '默认端口 35430 · 留空则用自动获取的地址');
       dialog.appendChild(srvSection);
 
       const srvRow = document.createElement('div');
@@ -1147,88 +1147,74 @@
       });
 
       const srvSaveBtn = mkBtn('保存', t.gradAccent, '#FFFFFF');
-      srvSaveBtn.addEventListener('click', () => {
-        chrome.storage.local.set({ cloud_api: srvInput.value.trim() }, () => {
-          srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = t.green;
+      srvSaveBtn.addEventListener('click', async () => {
+        const v = srvInput.value.trim();
+        if (!v) {
+          await AD_ADDR.setManual('');
+          srvStatus.textContent = '✓ 已清空，将使用自动获取的地址'; srvStatus.style.color = t.green;
+          const a = await AD_ADDR.readActive();
+          srvInput.value = AD_ADDR.cleanAddr(a.addr);
+          srcHint.textContent = '来源：' + AD_ADDR.sourceLabel(a.source);
           setTimeout(() => { srvStatus.textContent = ''; }, 2000);
-        });
+          return;
+        }
+        const saved = await AD_ADDR.setManual(v);
+        srvInput.value = AD_ADDR.cleanAddr(saved.addr);
+        srcHint.textContent = '来源：手动';
+        srvStatus.textContent = '✓ 已保存'; srvStatus.style.color = t.green;
+        setTimeout(() => { srvStatus.textContent = ''; }, 2000);
       });
       srvRow.appendChild(srvInput);
       srvRow.appendChild(srvSaveBtn);
       dialog.appendChild(srvRow);
 
       const srvStatus = document.createElement('div');
-      Object.assign(srvStatus.style, { fontSize: '11px', minHeight: '16px', marginBottom: '8px', paddingLeft: '4px', color: t.text2 });
+      Object.assign(srvStatus.style, { fontSize: '11px', minHeight: '16px', marginBottom: '4px', paddingLeft: '4px', color: t.text2 });
       dialog.appendChild(srvStatus);
 
-      // 加载当前服务器
-      chrome.storage.local.get(['cloud_api'], (s) => {
-        srvInput.value = s.cloud_api || '';
+      // v5.6：来源提示行（手动 / 自动 / 默认）
+      const srcHint = document.createElement('div');
+      Object.assign(srcHint.style, { fontSize: '11px', marginBottom: '8px', paddingLeft: '4px', color: t.text2 });
+      dialog.appendChild(srcHint);
+
+      // v5.6：输入框显示「真实生效地址」。此前只读 cloud_api —— 从没手动设过时是空白，
+      // 但后台实际在用自动获取的候选首位，看到的值和用到的值不是一回事。
+      AD_ADDR.readActive().then((a) => {
+        srvInput.value = AD_ADDR.cleanAddr(a.addr);
+        srcHint.textContent = '来源：' + AD_ADDR.sourceLabel(a.source);
       });
 
-      // 按钮行: 测试连接 + 一键获取
+      // 按钮行: 测试连接 + 获取候选
       const actionRow = document.createElement('div');
       Object.assign(actionRow.style, { display: 'flex', gap: '8px', marginBottom: '8px' });
 
       const testBtn = mkBtn('测试连接', t.bg3, t.text, `1px solid ${t.accent}33`);
       testBtn.addEventListener('click', async () => {
-        let addr = srvInput.value.trim();
+        const addr = srvInput.value.trim();
         if (!addr) { srvStatus.textContent = '请输入服务器地址'; srvStatus.style.color = t.red; return; }
-        if (!/^https?:\/\//i.test(addr)) addr = 'http://' + addr;
         srvStatus.textContent = '测试中...'; srvStatus.style.color = t.text2;
-        try {
-          const start = Date.now();
-          // v4.23: 加 8 秒超时——服务器地址填错时 fetch 可能挂很久，状态一直停在"测试中..."
-          const ctrl = new AbortController();
-          setTimeout(() => ctrl.abort(), 8000);
-          const r = await fetch(addr + '/health', { signal: ctrl.signal });
-          const d = await r.json();
-          const ms = Date.now() - start;
-          if (d.service) {
-            srvStatus.textContent = `✓ 连接成功 (${ms}ms)`; srvStatus.style.color = t.green;
-          } else {
-            srvStatus.textContent = '✗ 服务异常'; srvStatus.style.color = t.red;
-          }
-        } catch (_) {
-          srvStatus.textContent = '✗ 无法连接'; srvStatus.style.color = t.red;
-        }
+        // v5.6：统一走 AD_ADDR.probe（与弹窗同一个实现），失败按原因区分，
+        // 不再是笼统的"无法连接"（地址错/端口拒绝/超时/不是本服务）。
+        const r = await AD_ADDR.probe(addr, { timeoutMs: 8000 });
+        srvStatus.textContent = AD_ADDR.probeMessage(r);
+        srvStatus.style.color = r.ok ? t.green : t.red;
       });
       actionRow.appendChild(testBtn);
 
-      const fetchBtn = mkBtn('一键获取', t.bg3, t.text, `1px solid ${t.accent}33`);
+      const fetchBtn = mkBtn('获取候选', t.bg3, t.text, `1px solid ${t.accent}33`);
       fetchBtn.addEventListener('click', async () => {
         srvStatus.textContent = '获取中...'; srvStatus.style.color = t.text2;
-        const sources = [
-          'https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt',
-          'https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt'
-        ];
-        let servers = [];
-        for (const url of sources) {
-          try {
-            const ctrl = new AbortController();
-            setTimeout(() => ctrl.abort(), 8000);
-            const r = await fetch(url, { signal: ctrl.signal });
-            if (!r.ok) continue;
-            const text = await r.text();
-            for (let line of text.split('\n')) {
-              line = line.trim();
-              if (!line || line.startsWith('#') || /^\[.+\]$/.test(line)) continue;
-              line = line.replace(/新云端|老云端/g, '').replace(/^(https?|wss?):\/\//i, '').trim();
-              if (!line) continue;
-              line = line.split(' ')[0]; // 去掉行末别名
-              if (!line.includes(':')) line += ':35430';
-              servers.push(line);
-            }
-            if (servers.length > 0) {
-              chrome.storage.local.set({ cloud_apis_fetched: servers });
-              srvInput.value = servers[0];
-              chrome.storage.local.set({ cloud_api: servers[0] });
-              srvStatus.textContent = `✓ 获取到 ${servers.length} 个服务器`; srvStatus.style.color = t.green;
-              return;
-            }
-          } catch (_) { continue; }
+        // v5.6：只刷新「候选池」，**不再**把 servers[0] 写进 cloud_api。
+        // 此前点一次「一键获取」就顶掉手动地址，并从此永久钉死在第一台机器上
+        // （后面自动列表再更新也不会跟随）。
+        const list = await AD_ADDR.fetchList(8000);
+        if (!list.length) {
+          srvStatus.textContent = '获取失败，请检查网络'; srvStatus.style.color = t.red;
+          return;
         }
-        srvStatus.textContent = '获取失败，请检查网络'; srvStatus.style.color = t.red;
+        await AD_ADDR.applyAuto(list);
+        srvInput.value = list[0];  // 仅填入输入框作建议，点「保存」才真正生效
+        srvStatus.textContent = `✓ 获取到 ${list.length} 个候选，点「保存」启用首个`; srvStatus.style.color = t.green;
       });
       actionRow.appendChild(fetchBtn);
       dialog.appendChild(actionRow);

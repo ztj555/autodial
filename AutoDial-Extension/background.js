@@ -5,6 +5,10 @@
  */
 console.log('[AutoDial BG] v4.0 已加载 (PIN 模式)');
 
+// v5.6: 云中继地址统一走 addr.js 的 AD_ADDR（唯一权威实现）
+// 经典 service worker（非 module），可用 importScripts 同步引入
+importScripts('addr.js');
+
 // ==================== 配置 ====================
 const PC_BASE = 'http://127.0.0.1:35432';
 const PC_PING_TIMEOUT = 500;  // 本地 ping 500ms 足够，超时走云端
@@ -129,70 +133,28 @@ chrome.storage.onChanged.addListener((changes) => {
 
 startAuthPolling(); // 启动时立即开始
 
-// 地址标准化：纯 IP:PORT -> http://IP:PORT，已有协议不动
-function fixUrl(addr) {
-  if (!addr) return 'http://101.34.65.254:35430';
-  if (/^https?:\/\//i.test(addr)) return addr;
-  if (/^ws:\/\//i.test(addr)) return addr.replace(/^ws:/i, 'http:');
-  if (/^wss:\/\//i.test(addr)) return addr.replace(/^wss:/i, 'https:');
-  return 'http://' + addr;
-}
-
+// v5.6: 地址标准化与优先级判断全部收敛到 addr.js。
+// 此前 fixUrl / getCloudApi / 硬编码 'http://101.34.65.254:35430' 在本文件出现 3 次，
+// 与 popup.js 的 cleanAddr/storedAddr、挂件里的内联判断各成一套，三处结论可能不同。
 async function getCloudApi() {
-  // 手动设置的地址优先，其次自动获取的列表
-  const stored = await chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched']);
-  if (stored.cloud_api) return fixUrl(stored.cloud_api);
-  if (stored.cloud_apis_fetched && stored.cloud_apis_fetched.length > 0) {
-    return fixUrl(stored.cloud_apis_fetched[0]);
-  }
-  return 'http://101.34.65.254:35430';
+  const a = await AD_ADDR.readActive();
+  return AD_ADDR.fullUrl(a.addr);
 }
 
-// 一键获取云服务器列表（从 Gist/Gitee）
-async function fetchCloudList() {
-  const sources = [
-    'https://gist.githubusercontent.com/ztj555/cb6a6bb0ddbe3d4e651d5bb3411777d5/raw/AutoDialservers.txt',
-    'https://gitee.com/zuo-tingjun/AutoDialserverslist/raw/master/servers.txt'
-  ];
-
-  for (const url of sources) {
-    try {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), 8000);
-      const res = await fetch(url, { signal: ctrl.signal });
-      if (!res.ok) continue;
-      const text = await res.text();
-
-      const servers = [];
-      for (let line of text.split('\n')) {
-        line = line.trim();
-        if (!line || line.startsWith('#')) continue;
-        // 跳过 [xxx] 标签
-        if (/^\[.+\]$/.test(line)) continue;
-        // 清理后缀标签
-        line = line.replace(/新云端|老云端/g, '').trim();
-        if (!line) continue;
-        // 去掉行末别名（格式: "IP:PORT 别名"）
-        line = line.split(' ')[0];
-        // 去掉协议前缀（保持纯 IP:PORT）
-        line = line.replace(/^(https?|wss?):\/\//i, '');
-        // 没有端口默认 35430
-        if (!line.includes(':')) line += ':35430';
-        servers.push(line);
-      }
-
-      if (servers.length > 0) {
-        await chrome.storage.local.set({ cloud_apis_fetched: servers });
-        console.log('[AutoDial BG] 云端服务器列表已更新:', servers.length, '个');
-        return;
-      }
-    } catch (e) {
-      continue;
-    }
-  }
+// 刷新「候选服务器池」（只写 cloud_apis_fetched，绝不覆盖手动设置的地址）
+// v5.6 语义：自动获取只当候选，不自动切换 —— 生效地址只由用户手动保存决定
+async function fetchCloudList(force) {
+  const cur = await AD_ADDR.readActive();
+  const now = Date.now();
+  // 10 分钟节流：SW 每次唤醒 + 每次 CRM 上报都会调，没必要反复打 Gist/Gitee
+  if (!force && cur.listAt && now - cur.listAt < 10 * 60 * 1000) return;
+  const list = await AD_ADDR.fetchList(8000);
+  if (!list.length) return;
+  await AD_ADDR.applyAuto(list);
+  console.log('[AutoDial BG] 云中继候选池已更新:', list.length, '个');
 }
 
-// SW 启动 + 每次 CRM 页面打开时自动刷新服务器列表
+// SW 启动 + 每次 CRM 页面打开时刷新候选池（已内部节流）
 fetchCloudList().catch(() => {});
 
 // ==================== 状态 ====================

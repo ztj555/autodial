@@ -205,6 +205,52 @@ input:focus {
 .field-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--text-2); }
 .field-status.ok { color: var(--green); }
 .field-status.err { color: var(--red); }
+.section-sub.badge { background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 2px 8px; }
+.addr-row { position: relative; }
+.addr-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.addr-wrap input { padding-right: 30px; }
+.addr-caret {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  background: none; border: none; border-radius: var(--r-sm);
+  color: var(--text-2); cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.addr-caret:hover:not(:disabled) { color: var(--primary); background: var(--input-bg); }
+.addr-caret:disabled { opacity: .35; cursor: default; }
+.addr-caret svg { width: 12px; height: 12px; transition: transform .18s; }
+.addr-caret.open svg { transform: rotate(180deg); }
+.addr-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: 0 8px 22px rgba(0,0,0,.15);
+  overflow: hidden;
+}
+.addr-menu[hidden] { display: none; }
+.addr-menu-list { max-height: 164px; overflow-y: auto; padding: 4px; }
+.addr-item {
+  display: block; width: 100%; text-align: left;
+  font-family: inherit; font-size: 12px; line-height: 1.5;
+  background: none; color: var(--text);
+  border: none; border-radius: var(--r-sm);
+  padding: 7px 9px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .12s, color .12s;
+}
+.addr-item:hover { background: var(--input-bg); color: var(--primary); }
+.addr-item.active { color: var(--primary); background: rgba(var(--primary-rgb), .07); }
+.addr-item.active::after { content: '当前'; float: right; font-size: 11px; color: var(--text-2); }
+.addr-empty { padding: 10px 9px; font-size: 11px; color: var(--text-2); text-align: center; }
+.addr-menu-foot {
+  display: block; width: 100%; text-align: left;
+  font-family: inherit; font-size: 11px; line-height: 1.5; color: var(--text-2);
+  background: var(--input-bg); border: none; border-top: 1px solid var(--divider);
+  padding: 8px 12px; cursor: pointer;
+  transition: color .12s;
+}
+.addr-menu-foot:hover:not(:disabled) { color: var(--primary); }
+.addr-menu-foot:disabled { opacity: .6; cursor: default; }
 .btn-sm {
   width: auto; height: 38px; padding: 0 16px;
   font-size: 12px; border-radius: var(--r-sm); flex-shrink: 0;
@@ -321,10 +367,23 @@ input:focus {
       <div class="section-head" data-page-node-id="FH6ch4C9splTHe4HrpX0b1">
         <span class="section-ico" data-page-node-id="F4z3iQFUvpWZbQYtcYgM2T"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="LAcMla5n6xWfFkfdXy78GA"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="EXtj0VK92TCdOhX9jhXPNx"/></svg></span>
         <span class="section-title" data-page-node-id="q03nHqLniLLQBZsMA5hTlZ">云中继地址</span>
+        <span id="serverSource" class="section-sub badge" data-page-node-id="SrvSrcBadge01">默认</span>
       </div>
-      <div class="input-row" data-page-node-id="Hd0cGgnYgIBhfyE1WiklVJ">
-        <input id="serverInput" placeholder="101.34.65.254:35430" value="101.34.65.254:35430" data-page-node-id="QrUYYOAACouvEzDPLNDZ3a" />
-        <button id="testServerBtn" class="btn btn-ghost btn-sm" onclick="testServer()" data-page-node-id="PjjSEV7eoohOnbQl0iTbsZ">测试</button>
+      <div class="addr-row" id="addrRow" data-page-node-id="AddrRow00001">
+        <div class="input-row" data-page-node-id="Hd0cGgnYgIBhfyE1WiklVJ">
+          <div class="addr-wrap" data-page-node-id="AddrWrap0001">
+            <input id="serverInput" placeholder="101.34.65.254:35430" value="101.34.65.254:35430" data-page-node-id="QrUYYOAACouvEzDPLNDZ3a" />
+            <button id="addrCaretBtn" class="addr-caret" type="button" title="选择候选服务器" aria-label="选择候选服务器" aria-expanded="false" onclick="toggleAddrMenu(event)" data-page-node-id="AddrCaret001">
+              <svg viewBox="0 0 12 12" fill="none" data-page-node-id="AddrCaretIco"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="AddrCaretPth"/></svg>
+            </button>
+          </div>
+          <button id="testServerBtn" class="btn btn-ghost btn-sm" onclick="testServer()" data-page-node-id="PjjSEV7eoohOnbQl0iTbsZ">测试</button>
+          <button id="saveServerBtn" class="btn btn-primary btn-sm" onclick="saveServer()" data-page-node-id="SrvSaveBtn001">保存</button>
+        </div>
+        <div id="addrMenu" class="addr-menu" hidden onclick="event.stopPropagation()" data-page-node-id="AddrMenu0001">
+          <div id="addrMenuList" class="addr-menu-list" data-page-node-id="AddrMenuList"></div>
+          <button id="fetchPoolBtn" class="addr-menu-foot" type="button" onclick="fetchPool()" data-page-node-id="PoolFetchBtn1">从网络获取</button>
+        </div>
       </div>
       <span id="serverStatus" class="field-status" data-page-node-id="MIdXv8p8PpdupD7larbtEe"></span>
     </div>
@@ -460,14 +519,132 @@ function pickTheme(id) {
   showToast('已切换到「' + AD_THEMES[id].name + '」');
 }
 
-// 测试服务器
+// ══════ v5.6：云中继地址（语义与真实 popup 的 addr.js 对齐） ══════
+// demo 用变量模拟 chrome.storage.local：cloud_api / cloud_api_source / cloud_apis_fetched
+var SAVED_ADDR = document.getElementById('serverInput').value;
+var ADDR_SOURCE = '手动';
+var POOL = [];
+var POOL_AT = 0;
+
+function cleanAddr(a) {
+  a = (a || '').trim();
+  a = a.replace(/^ws:\/\//i, 'http://').replace(/^wss:\/\//i, 'https://');
+  var m = a.match(/^(https?):\/\//i);
+  var scheme = m ? m[1].toLowerCase() + '://' : '';
+  var rest = scheme ? a.slice(m[0].length) : a;
+  rest = rest.split('/')[0].split('?')[0].trim();
+  if (!rest) return '';
+  if (!scheme && !/:\d+$/.test(rest)) rest += ':35430';
+  return scheme + rest;
+}
+
+function renderSource(src) {
+  ADDR_SOURCE = src;
+  document.getElementById('serverSource').textContent = src;
+  document.getElementById('cloudAddr').textContent = cleanAddr(SAVED_ADDR) + ' · ' + src;
+}
+
+// 浮层开合（与真实 popup v5.6.1 一致：点 ▾ 切换，点别处 / Esc 收起）
+function openAddrMenu() {
+  document.getElementById('addrMenu').hidden = false;
+  document.getElementById('addrCaretBtn').classList.add('open');
+  document.getElementById('addrCaretBtn').setAttribute('aria-expanded', 'true');
+}
+function closeAddrMenu() {
+  document.getElementById('addrMenu').hidden = true;
+  document.getElementById('addrCaretBtn').classList.remove('open');
+  document.getElementById('addrCaretBtn').setAttribute('aria-expanded', 'false');
+}
+function toggleAddrMenu(ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();   // 否则冒泡到 document 会把刚打开的浮层关掉
+  var m = document.getElementById('addrMenu');
+  if (m.hidden) openAddrMenu(); else closeAddrMenu();
+}
+
+// 脚注文案：候选个数 + 更新时间（拉取中不覆盖「获取中…」）
+function updateFetchLabel() {
+  var btn = document.getElementById('fetchPoolBtn');
+  if (btn.disabled) return;
+  var n = POOL.length;
+  btn.textContent = n ? '从网络获取 · ' + n + ' 个 · 刚刚更新' : '从网络获取';
+}
+
+// 渲染候选浮层（只填列表，显隐交给 openAddrMenu/closeAddrMenu）
+function renderPool() {
+  var box = document.getElementById('addrMenuList');
+  box.innerHTML = '';
+  if (!POOL.length) {
+    var d = document.createElement('div');
+    d.className = 'addr-empty';
+    d.textContent = '暂无候选，点下方「从网络获取」';
+    box.appendChild(d);
+  } else {
+    POOL.forEach(function (item) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'addr-item' + (cleanAddr(SAVED_ADDR) === item ? ' active' : '');
+      b.textContent = item;
+      b.title = '点击填入上方输入框（需点「保存」才生效）';
+      b.onclick = function () {
+        document.getElementById('serverInput').value = item;
+        closeAddrMenu();
+        var st = document.getElementById('serverStatus');
+        st.textContent = '已填入，点击「保存」生效';
+        st.className = 'field-status';
+      };
+      box.appendChild(b);
+    });
+  }
+  updateFetchLabel();
+}
+
+document.addEventListener('click', function () {
+  var m = document.getElementById('addrMenu');
+  if (m && !m.hidden) closeAddrMenu();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeAddrMenu();
+});
+
+// 「测试」：只测不存（v5.6 起不再顺带把地址写进存储）
 function testServer() {
-  const status = document.getElementById('serverStatus');
-  status.textContent = '测试中...';
-  setTimeout(() => {
-    status.textContent = '✓ 连接成功';
-    status.className = 'field-status ok';
-  }, 1500);
+  var st = document.getElementById('serverStatus');
+  st.textContent = '测试中...';
+  st.className = 'field-status';
+  setTimeout(function () {
+    st.textContent = '✓ 已连接 (AutoDial Cloud Relay v4.23) · 320ms';
+    st.className = 'field-status ok';
+  }, 900);
+}
+
+// 「保存」：唯一的写入动作
+function saveServer() {
+  var st = document.getElementById('serverStatus');
+  var cleaned = cleanAddr(document.getElementById('serverInput').value);
+  if (!cleaned) { st.textContent = '请输入地址'; st.className = 'field-status err'; return; }
+  SAVED_ADDR = cleaned;
+  document.getElementById('serverInput').value = cleaned;
+  renderSource('手动');
+  renderPool();
+  st.textContent = '✓ 已保存（手动） · ✓ 已连接 (AutoDial Cloud Relay v4.23) · 320ms';
+  st.className = 'field-status ok';
+  showToast('云中继地址已保存');
+}
+
+// 「从网络获取」：只刷新候选池，**不**切换生效地址
+function fetchPool() {
+  var btn = document.getElementById('fetchPoolBtn');
+  btn.disabled = true;
+  btn.textContent = '获取中…';
+  setTimeout(function () {
+    POOL = ['101.34.65.254:35430', '47.98.12.34:35430', '120.24.56.78:35430'];
+    POOL_AT = Date.now();
+    renderPool();
+    btn.disabled = false;
+    updateFetchLabel();   // 复位后再写正式文案（个数 + 更新时间）
+    openAddrMenu();   // 拿到候选后展开，方便直接选
+    showToast('已获取 ' + POOL.length + ' 个候选（未切换生效地址）');
+  }, 900);
 }
 
 // 保存PIN
@@ -510,6 +687,9 @@ function modifyPin() {
 // 初始化主题色块
 buildSwatches();
 markSwatch(typeof AD_THEMES !== 'undefined' && AD_THEMES[currentTheme] ? currentTheme : 'sky-blue');
+// v5.6：初始化来源徽标与候选池（与真实 popup 的 AD_ADDR.readActive() 对应）
+renderSource('手动');
+renderPool();
 
 // 模拟在线状态
 setTimeout(() => {

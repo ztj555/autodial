@@ -1,5 +1,80 @@
 # AutoDial 更新日志
 
+## 2026-09-14（扩展 v5.6.0 · 云中继地址逻辑重构：单一权威实现 + 测试/保存分离）
+
+> 用户反馈：「关于服务器地址，获取和测试等的逻辑不太对，感觉用的云里雾里」。
+> 排查后确认不是错觉 —— 同一个「当前生效地址」被**三套代码用三套规则**算出来。
+
+### 修复的六处自相矛盾
+
+| # | 问题 | 位置 | 后果 |
+|---|---|---|---|
+| 1 | 「测试」按钮顺带把地址写进 `storage` | `popup.js` 旧实现 | 只想测一下，地址已被改 |
+| 2 | 挂件「测试连接」却不保存 | `content-script.js` | 同名按钮两种行为 |
+| 3 | 挂件输入框只读 `cloud_api`，不读候选列表 | `content-script.js` | 看到的值 ≠ 实际生效的值 |
+| 4 | 「一键获取」无条件 `set({cloud_api: servers[0]})` | `content-script.js` | 点一次就永久钉死在第 1 台机器 |
+| 5 | 打开弹窗自动发两次请求（`/health` + `/api/v1/status`） | `popup.js` 旧实现 | 同一弹窗两处结论可能互相矛盾 |
+| 6 | 失败一律提示「无法连接」 | 两处 `catch` | 分不清是地址错、端口不通还是服务不对 |
+
+### 新增：`AutoDial-Extension/addr.js`（云中继地址唯一权威实现）
+
+三端共用同一份（popup 用 `<script>`、挂件用 manifest `content_scripts.js`、
+background 用 `importScripts`）：
+
+- 常量：`AD_DEFAULT_PORT = 35430`、`AD_DEFAULT_ADDR` —— 端口默认值从 6 处收敛到 1 处
+- 纯函数：`cleanAddr` / `fullUrl` / `parseLine` / `parseList` / `sourceLabel`
+- 读写唯一入口：`readActive()` / `setManual()` / `applyAuto()` —— 取代原先的
+  `storedAddr`（popup）、`fixUrl` + `getCloudApi`（background）、挂件里的内联判断
+- 探针：`probe()` 返回结构化结果，`kind` ∈ `ok | invalid | timeout | refused | http | not-autodial`；
+  `probeMessage()` 转人话；`statusOf()` 查业务态
+- `fetchList()` 从 Gist/Gitee 拉候选（多源自动回落）
+
+### 数据模型：引入「来源标记」
+
+| 键 | 含义 |
+|---|---|
+| `cloud_api` | 唯一权威地址（纯 `host:port`） |
+| `cloud_api_source`（**新增**） | `'manual'` / `'auto'` / `''` |
+| `cloud_apis_fetched` | 候选池（附 `cloud_apis_fetched_at`） |
+
+- **自动获取只刷新候选池，永不自动切换生效地址**（生效地址只由「保存」决定）
+- 兼容老数据：有 `cloud_api` 但无 `cloud_api_source` 时按 `manual` 处理（最保守）
+
+### UI 变更
+
+- **弹窗**（`popup.html` / `popup.js`）
+  - 「云中继地址」组拆成 **测试**（`btn-ghost`，只测不存、显示耗时与具体失败原因）+
+    **保存**（`btn-primary`，唯一的写入动作）
+  - 新增**来源徽标**（手动 / 自动 / 默认）
+  - 新增**候选服务器下拉浮层**：输入框右侧 ▾ 展开（`position:absolute` 覆盖下方内容，
+    **不撑高面板**），点某一项只填入输入框（需再点「保存」才生效），当前生效那台带「当前」标记；
+    「从网络获取」并入浮层底部脚注，脚注同时显示候选个数与更新时间。
+    云中继分组高度由约 **172px 降至约 70px**
+    （初版曾把候选铺成 flex-wrap 的 pill 列表，5 个地址在 340px 弹窗里折成 3 行、
+    单独吃掉约 100px，而 Chrome 扩展弹窗总高上限仅 600px）
+  - 打开弹窗**只跑一次探针**（30 秒 TTL 缓存），状态页 Hero 与设置页状态行共用结果；
+    探通才继续查 `/api/v1/status`
+  - 状态页「云端地址」行改为 `地址 · 来源`
+- **挂件**（`content-script.js`）
+  - 输入框初值改为**真实生效地址**，并显示来源行
+  - 「测试连接」改走 `AD_ADDR.probe`，失败按原因区分
+  - 「一键获取」→「**获取候选**」：只刷新候选池、不再劫持 `cloud_api`
+  - 副标题「默认端口 35430，可保留为空走直连」→「默认端口 35430 · 留空则用自动获取的地址」
+    （原文案与实现不符：清空后 `getCloudApi()` 仍会回落到候选首位）
+- **background**（`background.js`）
+  - `getCloudApi()` 改用 `AD_ADDR.readActive()`
+  - `fetchCloudList()` 改为只写候选池 + **10 分钟节流**（读取 `cloud_apis_fetched_at`，
+    避免 SW 每次唤醒 / 每次 CRM 上报都打 Gist）
+- `manifest.json`：`content_scripts.js` 加入 `addr.js`；版本 `5.5.2` → `5.6.0`
+
+### 验证
+
+- `addr_test.js` **56/56**（地址归一化 / 老数据兼容 / ★ `applyAuto` 不覆盖手动地址 /
+  探针六种结果分类 / 多源回落 / `statusOf`）
+- `panel_test.js` **118/118**（含 ★「测试」不写存储、★「保存」才写、★ 探针 30 秒内只跑一次、
+  ★ 候选池刷新后生效地址不变、★ 浮层 ▾ 开合 / 点外部与 Esc 收起 / 选中候选即收起）
+- `demo_test.js` **72/72**（`ui-demo-extension.html` 行为与真实 popup 一致）
+
 ## 2026-09-14（扩展 v5.5.2 · 「清除 PIN」改为「修改 PIN」+ 补上「返回」）
 
 > 用户反馈两条：①「清除 PIN」应该改成「修改 PIN」，点进去不要把配对码清空；

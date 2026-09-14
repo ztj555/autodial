@@ -354,14 +354,15 @@ AutoDial-Extension/
 ├── background.js           ← Service Worker：双模路由 + PIN 管理 + 拨号 + 右键同步
 ├── content-script.js       ← 内容脚本：CRM 浮动按钮 + 号码扫描 + 主题应用（数据取自 themes.js）
 ├── themes.js               ← 9 套主题唯一定义源 AD_THEMES（v5 起与 popup 共用，manifest 首个注入）
-├── popup.html / popup.js   ← 弹窗：云服务器 + PIN 配置 + 状态大盘
+├── addr.js                 ← 云中继地址唯一权威实现 AD_ADDR（v5.6：popup/挂件/background 三端共用）
+├── popup.html / popup.js   ← 弹窗：云中继地址 + PIN 配置 + 状态大盘
 ├── auth.html / auth.js     ← 设备授权页（外部脚本规避 MV3 CSP，v4.14 修复）
 ├── icons/                  ← 扩展图标（icon16/48/128.png）
 ├── AutoDial-API.md / README.md
 └── create-icons.ps1
 ```
 
-**manifest 关键点**：`permissions: ["activeTab","storage","clipboardWrite","alarms","contextMenus"]`；`host_permissions` 含 `http://127.0.0.1:35432/*` 使扩展可绕过 CORS 访问本地 PC；content_scripts 仅注入三类 CRM 域名（guwen.zhudaicms.com / *.zhudaicms.com / *.rxhcrm.com / *.rongxinhui.com），`js: ["themes.js", "content-script.js"]`（顺序敏感），`run_at: document_idle`，`all_frames: true`。
+**manifest 关键点**：`permissions: ["activeTab","storage","clipboardWrite","alarms","contextMenus"]`；`host_permissions` 含 `http://127.0.0.1:35432/*` 使扩展可绕过 CORS 访问本地 PC；content_scripts 仅注入三类 CRM 域名（guwen.zhudaicms.com / *.zhudaicms.com / *.rxhcrm.com / *.rongxinhui.com），`js: ["themes.js", "addr.js", "content-script.js"]`（顺序敏感 —— `addr.js` 依赖 `themes.js` 之后的注入位，`content-script.js` 依赖 `AD_ADDR` 已存在），`run_at: document_idle`，`all_frames: true`。
 
 ### 3.2 background.js — Service Worker
 
@@ -409,8 +410,14 @@ AutoDial-Extension/
 
 ### 3.4 popup.html / popup.js
 
-- PIN 设置（4 位或 11 位手机号校验 `/^\d{4}$|^\d{11}$/`）；云服务器地址配置（`ws://xxx:35430`）；连通性测试 `GET /health`；状态查询 `GET /api/v1/status`；一键获取服务器列表（GitHub Gist / Gitee）
-- 配置存储 `chrome.storage.local`：`pin`、`selfPhone`、`cloudServer`、`cloudServers`、`manager_name`、`__ad_theme`
+- PIN 设置（4 位或 11 位手机号校验 `/^\d{4}$|^\d{11}$/`）；云中继地址配置；连通性测试 `GET /health`；状态查询 `GET /api/v1/status`；从网络获取候选服务器列表（GitHub Gist / Gitee）
+- **v5.6 地址逻辑重构**：新建 `addr.js`（`AD_ADDR`）作为云中继地址的唯一权威实现，popup / content-script 挂件 / background 三端共用。此前同一「当前生效地址」被三套代码用三套规则算出（popup 的 `storedAddr`、background 的 `fixUrl`+`getCloudApi`、挂件里的内联判断），结论可能不一致
+  - 数据模型：`cloud_api`（唯一权威地址）+ `cloud_api_source`（`manual`/`auto`/`''`，**v5.6 新增**）+ `cloud_apis_fetched`（候选池，附 `cloud_apis_fetched_at`）
+  - 语义：**「测试」只测不存**；「保存」是唯一写入动作；自动获取**只刷新候选池，永不自动切换生效地址**；兼容老数据（有 `cloud_api` 无 `source` 时按 `manual` 处理）
+  - 探针：`AD_ADDR.probe()` 返回 `{ ok, kind, detail, ms }`，`kind` ∈ `ok | invalid | timeout | refused | http | not-autodial`，取代原先笼统的"无法连接"
+  - 端口默认值 `35430` 收敛到 `AD_DEFAULT_PORT` 一处（原散落 6 处）
+  - 打开弹窗只跑一次探针（30s TTL 缓存），探通才继续查 `/api/v1/status`（原为两次独立请求，可能互相矛盾）
+- 配置存储 `chrome.storage.local`：`pin`、`self_phone`、`cloud_api`、`cloud_api_source`、`cloud_apis_fetched`、`manager_name`、`__ad_theme`
 - v4.13 起天空蓝亮色默认主题（与手机端/云端面板一致）
 
 ### 3.5 错误处理与注意事项
