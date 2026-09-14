@@ -28,6 +28,9 @@
   --banner-info-bg: #E3EEFB;
   --banner-info-border: #C4DAF3;
   --primary-rgb: 43,108,196;
+  /* v5.5: 状态点/危险按钮的 RGB 分量 —— 由 themes.js 的 AD_APPLY_THEME 随主题写入 */
+  --green-rgb: 64,192,87;
+  --red-rgb: 240,62,62;
   /* 圆角体系（4 档） */
   --r-sm: 10px;
   --r-md: 14px;
@@ -287,7 +290,7 @@ input:focus {
     <div class="info-row">
       <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg></span>
       <span class="label">坐席手机号</span>
-      <span id="myPhone" class="value">--</span>
+      <span id="myPhone" class="value link">--</span>
       <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div class="info-row">
@@ -306,13 +309,19 @@ input:focus {
 
   <div class="btn-row">
     <button id="editServerBtn" class="btn btn-ghost">修改服务器</button>
-    <button id="clearPinBtn" class="btn btn-danger">清除 PIN</button>
+    <button id="editPinBtn" class="btn btn-ghost">修改 PIN</button>
   </div>
 </div>
 
 <!-- ===== 设置页（PIN + 服务器） ===== -->
 <div id="setupPanel" style="display:none">
-  <div class="hint-card" id="setupHintCard">
+  <!-- v5.5.2：返回按钮置于设置面板顶部（原先在面板最底部，不符合返回习惯） -->
+  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none;margin-bottom:10px">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    返回
+  </button>
+
+  <div class="hint-card">
     <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
     <span id="setupHint">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
   </div>
@@ -330,23 +339,19 @@ input:focus {
       <span id="serverStatus" class="field-status"></span>
     </div>
 
-    <!-- v5.5: 「配对码」整组（含其上方分割线）收进 #pinGroup —
-         「修改服务器」时整块隐藏，不再残留一个没有输入框的"配对码"空标题 -->
-    <div id="pinGroup">
-      <div class="group-divider"></div>
+    <div class="group-divider"></div>
 
-      <div class="group">
-        <div class="section-head">
-          <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-          <span class="section-title">配对码</span>
-          <span class="section-sub">4位或11位数字</span>
-        </div>
-        <div class="input-row">
-          <input id="pinInput" placeholder="输入配对码" maxlength="11" />
-          <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
-        </div>
-        <span id="pinStatus" class="field-status"></span>
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">配对码</span>
+        <span class="section-sub">4位或11位数字</span>
       </div>
+      <div class="input-row">
+        <input id="pinInput" placeholder="输入配对码" maxlength="11" />
+        <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
+      <span id="pinStatus" class="field-status"></span>
     </div>
 
     <div class="group-divider"></div>
@@ -363,11 +368,6 @@ input:focus {
       <span id="mgrNameStatus" class="field-status"></span>
     </div>
   </div>
-
-  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none;margin-bottom:12px">
-    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    返回
-  </button>
 </div>
 
 <!-- ===== 外观（主题切换）——常驻，两个面板下都可见 ===== -->

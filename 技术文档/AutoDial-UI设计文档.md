@@ -113,10 +113,11 @@
 
 ### 2.1 popup.html（结构级重做，360px）
 
-- 结构：Topbar（图标底座 34 + AutoDial + v5 pill）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「清除 PIN」danger pill → **常驻「外观」卡片 `#themeCard`**（9 套主题色块横排，两个面板下都可见）
+- 结构：Topbar（图标底座 34 + AutoDial + v5 pill）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（顶部「返回」按钮 `#backToStatusBtn` + Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「修改 PIN」ghost pill → **常驻「外观」卡片 `#themeCard`**（9 套主题色块横排，两个面板下都可见）
 - 三张设置卡合并为一张分组卡（对齐手机端 settingGroup/settingRow）；主按钮移入 Hero 大盘底部；版本徽章 v4→v5；面板切换加 `.panel-in` 动画
-- **v5.5 补充**：面板显隐改由唯一出口 `renderPanel(mode)` 决定（`status` / `setup` 完整设置含配对码 / `server` 仅云中继与姓名带返回按钮），「配对码」整组收进 `#pinGroup` 整块显隐；状态副标题配色改走 `.hero-sub.ok/.err`（不再内联硬编码天空蓝值）；半透明同色走 `--green-rgb` / `--red-rgb`；CSS 变量映射收口到 `themes.js` 的 `AD_APPLY_THEME(id)`
-- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus myPhone myMgrName cloudAddr editServerBtn clearPinBtn setupHint setupHintCard serverInput testServerBtn serverStatus backToStatusBtn pinInput savePinBtn pinStatus pinGroup mgrNameInput saveMgrNameBtn mgrNameStatus themeCard swatches themeName`
+- **v5.5.1 补充**：面板显隐**回退为原三 handler 写法**（`editServerBtn` / `clearPinBtn` / `backToStatusBtn` 各改一段 DOM）——「修改服务器」隐藏配对码输入框/保存按钮/状态行并显示「返回」按钮；「清除 PIN」一点即清、随后进入完整设置页。v5.5 引入的 `renderPanel(mode)` 状态机与 `#pinGroup` 包裹层已移除。**保留**：状态副标题配色走 `.hero-sub.ok/.err`（不再内联硬编码天空蓝值）、半透明同色走 `--green-rgb` / `--red-rgb`、CSS 变量映射收口到 `themes.js` 的 `AD_APPLY_THEME(id)`、常驻「外观」主题卡片
+- **v5.5.2 补充**：「清除 PIN」改为「修改 PIN」（`#editPinBtn`，`btn-danger` → `btn-ghost`）——点击进入设置页时**配对码保留原值不清空**，自动聚焦 + 全选便于覆盖输入；两个入口（`#editServerBtn` / `#editPinBtn`）**都会显示「返回」按钮** `#backToStatusBtn`，点「返回」＝放弃本次修改（`pinInput` 还原为已保存值）后回状态页；`showStatus()` 内统一隐藏返回按钮；状态页「坐席手机号」行 `#myPhone` 由 `.value` 改为 `.value.link` 并挂 `onclick` → 等同点「修改 PIN」（三行入口统一复用 handler）；「返回」按钮置于 `#setupPanel` **顶部**（面板开标签之后、设置卡片之前，原在面板最底部）。清除能力随之移除
+- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus myPhone myMgrName cloudAddr editServerBtn editPinBtn setupHint serverInput testServerBtn serverStatus backToStatusBtn pinInput savePinBtn pinStatus mgrNameInput saveMgrNameBtn mgrNameStatus themeCard swatches themeName`
 
 ### 2.2 auth.html
 

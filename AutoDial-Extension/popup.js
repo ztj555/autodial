@@ -1,13 +1,23 @@
 /**
- * AutoDial Popup v5.5
+ * AutoDial Popup v5.5.2
  * 整合版：设云中继地址 + 设 PIN（坐席手机号）+ 测试连接 + 切换主题
  * 服务器地址统一为纯 IP:PORT 格式（自动补全 http://）
  *
- * v5.5 修的两处：
- *  1) 状态副标题的颜色原先内联硬编码为天空蓝值（#40C057/#5880A8/#F03E3E），
- *     换任何主题都不跟随 → 现在一律走主题 CSS 变量（.hero-sub.ok / .hero-sub.err）。
- *  2) 「修改服务器」与「清除 PIN」原先由三个 handler 各改一半 DOM 的 display，
- *     两个入口看起来几乎一样、且清除后出不来 → 现在统一由 renderPanel(mode) 决定。
+ * v5.5.2：「清除 PIN」改为「修改 PIN」，且**不再清空配对码**：
+ *   · 「修改 PIN」→ 进入设置页，配对码输入框保留当前值（可改后保存），并显示「返回」
+ *   · 补上「返回」按钮：此前只有「修改服务器」会显示返回按钮，
+ *     从「清除 PIN」进来后没有任何回路，回不到状态页
+ *   · 点「返回」= 放弃本次修改：配对码输入框还原为已保存的值
+ *   · 「返回」按钮位于设置面板**顶部**（`#setupPanel` 开标签之后），原先在面板最底部
+ *   · 状态页「坐席手机号」行也可直接点击 → 等同点「修改 PIN」（与「接待顾问」「云端地址」两行一致）
+ *
+ * v5.5.1：回退 v5.5 引入的「面板状态单一出口（renderPanel）」改写，恢复原三 handler 写法：
+ *   · 「修改服务器」→ 显示设置页、隐藏配对码输入框（保存按钮/状态行一并隐藏）、显示返回按钮
+ *   · 「修改 PIN」  → 显示设置页，配对码保留原值，改完点保存
+ *   · 「返回」      → 恢复配对码输入区并回到状态页
+ * 与面板无关的两项 v5.5 改进**保留**：
+ *   ① 状态副标题颜色走主题变量（.hero-sub.ok / .hero-sub.err），不再内联硬编码天空蓝值
+ *   ② 底部常驻「外观」主题切换卡片
  */
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (id) => document.getElementById(id);
@@ -40,42 +50,37 @@ document.addEventListener('DOMContentLoaded', () => {
            (s.cloud_apis_fetched && s.cloud_apis_fetched[0] ? s.cloud_apis_fetched[0] : DEFAULT_ADDR);
   }
 
-  // ─── 面板状态机（v5.5 唯一出口） ────────────────────
-  // 'status' 状态页
-  // 'setup'  设置页·完整（含配对码）—— 首次未设 PIN / 刚清掉 PIN
-  // 'server' 设置页·仅云中继与姓名（隐藏配对码整组，带返回按钮）
-  const SHOW_PIN_GROUP = { status: false, setup: true, server: false };
-  function renderPanel(mode, focusEl) {
-    const isStatus = mode === 'status';
-    $('statusPanel').style.display = isStatus ? 'block' : 'none';
-    $('setupPanel').style.display  = isStatus ? 'none'  : 'block';
-    // 配对码整组（含其上分割线）一起显隐 —— 只隐藏输入框会残留一个空标题
-    $('pinGroup').style.display = SHOW_PIN_GROUP[mode] ? '' : 'none';
-    // 顶部提示语是讲 PIN 自动检测的，「仅服务器」模式下显示会误导 → 一并隐藏
-    $('setupHintCard').style.display = (mode === 'server') ? 'none' : '';
-    // 返回按钮只在「仅服务器」模式出现：此时状态页仍可用，返回才有意义
-    $('backToStatusBtn').style.display = (!isStatus && mode !== 'setup') ? 'inline-block' : 'none';
-    if (focusEl) setTimeout(() => { try { focusEl.focus(); focusEl.select(); } catch (_) {} }, 60);
-  }
-
-  function refreshSetupHint() {
+  // ─── 面板切换（v5.4 及以前的原实现） ────────────────
+  function showSetup() {
+    $('setupPanel').style.display = 'block';
+    $('statusPanel').style.display = 'none';
     const hint = $('setupHint');
-    if (!hint) return;
-    chrome.storage.local.get(['self_phone'], (s) => {
-      hint.textContent = s.self_phone
-        ? '已检测到 ' + s.self_phone + '，点击保存即可'
-        : '打开 CRM 页面，插件会自动检测坐席手机号作为 PIN';
-    });
+    if (hint) {
+      chrome.storage.local.get(['self_phone'], (s) => {
+        hint.textContent = s.self_phone
+          ? '已检测到 ' + s.self_phone + '，点击保存即可'
+          : '打开 CRM 页面，插件会自动检测坐席手机号作为 PIN';
+      });
+    }
   }
 
-  // ─── 状态页 ───────────────────────────────────────
   function showStatus(pin) {
-    renderPanel('status');
+    $('setupPanel').style.display = 'none';
+    $('statusPanel').style.display = 'block';
+    $('backToStatusBtn').style.display = 'none';
     $('myPhone').textContent = pin || '--';
+
+    // v5.5.2：点「坐席手机号」行 = 修改 PIN（与「接待顾问」「云端地址」两行的交互对齐，
+    // 三个入口都改成 click() 复用已有 handler，避免再出现"某条路径少改一段 DOM"）
+    $('myPhone').onclick = () => { $('editPinBtn').click(); };
 
     // 接待顾问姓名（优先自动检测）
     chrome.storage.local.get(['manager_name'], (s) => {
       $('myMgrName').textContent = s.manager_name || '未检测到（可在下方设置）';
+      $('myMgrName').onclick = () => {
+        $('editServerBtn').click();
+        setTimeout(() => mgrNameInput.focus(), 100);
+      };
       if (s.manager_name) mgrNameInput.value = s.manager_name;
     });
 
@@ -83,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.get(['cloud_api', 'cloud_apis_fetched'], (s) => {
       const auto = s.cloud_apis_fetched && s.cloud_apis_fetched[0];
       $('cloudAddr').textContent = cleanAddr(s.cloud_api) || (auto ? auto + ' [自动]' : DEFAULT_ADDR);
+      $('cloudAddr').onclick = () => { $('editServerBtn').click(); };
     });
 
     // 异步检查云端 API 状态
@@ -100,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const phStr = d.phoneConnected ? '手机在线(' + (d.phoneCount || 0) + ')' : '手机离线';
           const online = !!(d.pcConnected || d.phoneConnected);
           el.textContent = '● ' + pcStr + ' | ' + phStr;
+          // v5.5：颜色改由主题 CSS 变量驱动（原为内联硬编码 #40C057/#5880A8/#F03E3E）
           el.className = 'hero-sub' + (online ? ' ok' : '');
           $('statusDot').className = 'status-dot ' + (online ? 'online' : 'offline');
         } else {
@@ -112,10 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
-
-  // ─── 云端地址 / 姓名 行 → 打开「仅服务器」设置 ───────
-  $('myMgrName').onclick = () => renderPanel('server', mgrNameInput);
-  $('cloudAddr').onclick = () => renderPanel('server', serverInput);
 
   // ─── 测试服务器连接 ────────────────────────────────
   async function testServer(addr) {
@@ -187,39 +190,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ─── 修改服务器（PIN 与姓名保持不动） ────────────────
   $('editServerBtn').addEventListener('click', () => {
-    renderPanel('server', serverInput);
+    showSetup();
+    pinInput.style.display = 'none';
+    $('savePinBtn').style.display = 'none';
+    pinStatus.style.display = 'none';
+    $('backToStatusBtn').style.display = 'inline-block';
+    // 保留姓名输入可见
+    mgrNameInput.style.display = '';
+    $('saveMgrNameBtn').style.display = '';
+    mgrNameStatus.style.display = '';
   });
 
-  // ─── 返回状态面板（不改 PIN） ───────────────────────
+  // ─── 修改 PIN（保留当前配对码，不清空；改完点保存） ──
+  $('editPinBtn').addEventListener('click', () => {
+    showSetup();
+    pinInput.style.display = '';
+    $('savePinBtn').style.display = '';
+    pinStatus.style.display = '';
+    pinStatus.textContent = '';
+    $('backToStatusBtn').style.display = 'inline-block';
+    mgrNameInput.style.display = '';
+    $('saveMgrNameBtn').style.display = '';
+    mgrNameStatus.style.display = '';
+    // 原值已填好，直接聚焦并全选，便于覆盖输入
+    setTimeout(() => { pinInput.focus(); pinInput.select(); }, 60);
+  });
+
+  // ─── 返回状态面板（放弃本次修改） ───────────────────
   $('backToStatusBtn').addEventListener('click', () => {
+    pinInput.style.display = '';
+    $('savePinBtn').style.display = '';
+    pinStatus.style.display = '';
+    pinStatus.textContent = '';
+    $('backToStatusBtn').style.display = 'none';
+    mgrNameInput.style.display = '';
+    $('saveMgrNameBtn').style.display = '';
+    mgrNameStatus.style.display = '';
     chrome.storage.local.get(['pin', 'self_phone'], (s) => {
-      const p = s.pin || s.self_phone;
-      if (p) showStatus(p);
-      else { renderPanel('setup'); refreshSetupHint(); }
-    });
-  });
-
-  // ─── 清除 PIN（二次确认，避免误点即清） ──────────────
-  // 弹窗里不用原生 confirm()：部分场景会被浏览器拦截，一旦被拦按钮就成了"点了没反应"。
-  // 改成按钮二次确认（3 秒内再点一次生效），并把清空后的落点明确为「完整设置页 + 聚焦配对码」。
-  const clearBtn = $('clearPinBtn');
-  let clearArmed = false;
-  let clearTimer = null;
-  clearBtn.addEventListener('click', () => {
-    if (!clearArmed) {
-      clearArmed = true;
-      clearBtn.textContent = '确认清除？';
-      clearTimer = setTimeout(() => { clearArmed = false; clearBtn.textContent = '清除 PIN'; }, 3000);
-      return;
-    }
-    clearTimeout(clearTimer);
-    clearArmed = false;
-    clearBtn.textContent = '清除 PIN';
-    chrome.storage.local.remove(['pin', 'self_phone'], () => {
-      pinInput.value = '';
-      pinStatus.textContent = '';
-      renderPanel('setup', pinInput);
-      refreshSetupHint();
+      const p = s.pin || s.self_phone || '';
+      pinInput.value = p;   // 还原为已保存的值，丢弃未保存的输入
+      showStatus(p);
     });
   });
 
@@ -278,8 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       pinInput.value = p;
       showStatus(p);
     } else {
-      renderPanel('setup');
-      refreshSetupHint();
+      showSetup();
     }
     testServer(fullUrl(serverInput.value));
   });

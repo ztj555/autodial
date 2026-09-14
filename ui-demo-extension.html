@@ -277,7 +277,7 @@ input:focus {
   </div>
 
   <div class="info-card" data-page-node-id="hBFhy5m9N0rQEUyil0uwWi">
-    <div class="info-row" onclick="showToast('查看坐席信息')" data-page-node-id="9zWwc3DyOBBQUwQ30r6zee">
+    <div class="info-row" onclick="modifyPin()" data-page-node-id="9zWwc3DyOBBQUwQ30r6zee">
       <span class="row-ico" data-page-node-id="cfiv3QTSAGaPMSfxXBGUAF"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="rGDttD7eql5bo8nD40REdJ"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8" data-page-node-id="POfsXTDeZyOK6Rfkdhosua"/></svg></span>
       <span class="label" data-page-node-id="XwFYahTbFoPHvbE3uvGq22">坐席手机号</span>
       <span id="myPhone" class="value link" data-page-node-id="gmALMQcQDjETVFIQppqPC5">138****8000</span>
@@ -298,14 +298,20 @@ input:focus {
   </div>
 
   <div class="btn-row" data-page-node-id="PtJCFeGoeDnMTiwb92LUNH">
-    <button id="editServerBtn" class="btn btn-ghost" onclick="renderPanel('server')" data-page-node-id="w0bCt08aT4EmNK6yMxHwgE">修改服务器</button>
-    <button id="clearPinBtn" class="btn btn-danger" onclick="clearPin()" data-page-node-id="i4VbKTzvqHtOMhKoq0RSuK">清除 PIN</button>
+    <button id="editServerBtn" class="btn btn-ghost" onclick="enterServerOnly()" data-page-node-id="w0bCt08aT4EmNK6yMxHwgE">修改服务器</button>
+    <button id="editPinBtn" class="btn btn-ghost" onclick="modifyPin()" data-page-node-id="i4VbKtzvqHtOMhKoq0RSuK">修改 PIN</button>
   </div>
 </div>
 
 <!-- 设置页（隐藏） -->
 <div id="setupPanel" style="display:none" data-page-node-id="NgVNYv3yVsXp1OAenHfVkr">
-  <div class="hint-card" id="setupHintCard" data-page-node-id="7J4oGXWd3Hjw6fJu0D9w0n">
+  <!-- 返回按钮置于设置面板顶部（与真实 popup 一致，原先在底部不符合习惯） -->
+  <button id="backToStatusBtn" class="btn btn-ghost" onclick="switchToStatus()" style="display:none;margin-bottom:10px" data-page-node-id="xte5tvaq7O4oOVXFOCJqsN">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px" data-page-node-id="VI8bBrRANpaN8n3zjMRHt7"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="tBtifWQC8EGJrtjdLiGFXa"/></svg>
+    返回
+  </button>
+
+  <div class="hint-card" data-page-node-id="7J4oGXWd3Hjw6fJu0D9w0n">
     <svg viewBox="0 0 24 24" fill="none" data-page-node-id="71w3ZQCFBMxc6qfoAGnJHL"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" data-page-node-id="yLV9ASh3pR2UNHxKCNLLAD"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" data-page-node-id="fb032HUrPqWw4W3nA7axIt"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" data-page-node-id="BdcWDDgesEQKEMSIYbuD4T"/></svg>
     <span id="setupHint" data-page-node-id="K2oQhL9FJ46EFu1uf0sHuH">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
   </div>
@@ -323,10 +329,7 @@ input:focus {
       <span id="serverStatus" class="field-status" data-page-node-id="MIdXv8p8PpdupD7larbtEe"></span>
     </div>
 
-    <!-- v5.5: 「配对码」整组（含其上方分割线）收进 #pinGroup ——「修改服务器」时整块隐藏，
-         否则会残留一个没有输入框的"配对码"空标题（真实 popup 同款修法） -->
-    <div id="pinGroup" data-page-node-id="F0C0YXJqsvZ03fduTsXlX9">
-      <div class="group-divider" data-page-node-id="KUQrcYn07zNl45EgMI9VDj"></div>
+    <div class="group-divider" data-page-node-id="KUQrcYn07zNl45EgMI9VDj"></div>
 
       <div class="group" data-page-node-id="3jwYnwTlkMWTJ6YA1bFpps">
         <div class="section-head" data-page-node-id="oUgp9Rowyr55Erfi2RY6De">
@@ -340,7 +343,6 @@ input:focus {
         </div>
         <span id="pinStatus" class="field-status" data-page-node-id="EnLUGfUpvSJjzJnC5nBK77"></span>
       </div>
-    </div>
 
     <div class="group-divider" data-page-node-id="J42IeD58nweLyHVI0OvyyG"></div>
 
@@ -356,11 +358,6 @@ input:focus {
       <span id="mgrNameStatus" class="field-status" data-page-node-id="38hk5WwVIkE8J5nzAwc1kv"></span>
     </div>
   </div>
-
-  <button id="backToStatusBtn" class="btn btn-ghost" onclick="renderPanel('status')" style="display:none;margin-bottom:12px" data-page-node-id="xte5tvaq7O4oOVXFOCJqsN">
-    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px" data-page-node-id="VI8bBrRANpaN8n3zjMRHt7"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="tBtifWQC8EGJrtjdLiGFXa"/></svg>
-    返回
-  </button>
 </div>
 
 <!-- 外观（主题切换）——常驻，两个面板下都可见 -->
@@ -388,16 +385,41 @@ function showToast(msg, type) {
   setTimeout(() => t.remove(), 2500);
 }
 
-// 切换面板（与真实 popup 的 renderPanel 对齐 —— 唯一出口，避免各入口各改一半 DOM）
-// 'status' 状态页 / 'setup' 完整设置（含配对码）/ 'server' 仅云中继与姓名
-const SHOW_PIN_GROUP = { status: false, setup: true, server: false };
-function renderPanel(mode) {
-  const isStatus = mode === 'status';
-  document.getElementById('statusPanel').style.display = isStatus ? 'block' : 'none';
-  document.getElementById('setupPanel').style.display  = isStatus ? 'none'  : 'block';
-  document.getElementById('pinGroup').style.display    = SHOW_PIN_GROUP[mode] ? '' : 'none';
-  document.getElementById('setupHintCard').style.display = (mode === 'server') ? 'none' : '';
-  document.getElementById('backToStatusBtn').style.display = (!isStatus && mode !== 'setup') ? 'inline-block' : 'none';
+// 已保存的配对码（demo 模拟 chrome.storage.local.pin；点「返回」时按它还原输入框）
+var SAVED_PIN = document.getElementById('pinInput').value;
+
+// 切换面板（与真实 popup v5.5.2 的三 handler 写法对齐）
+// 状态页 / 完整设置页（含配对码）/ 「修改服务器」只隐藏配对码输入框
+function switchToSetup() {
+  document.getElementById('setupPanel').style.display = 'block';
+  document.getElementById('statusPanel').style.display = 'none';
+}
+
+function switchToStatus() {
+  document.getElementById('pinInput').style.display = '';
+  document.getElementById('savePinBtn').style.display = '';
+  document.getElementById('pinStatus').style.display = '';
+  document.getElementById('pinStatus').textContent = '';
+  document.getElementById('backToStatusBtn').style.display = 'none';
+  document.getElementById('mgrNameInput').style.display = '';
+  document.getElementById('saveMgrNameBtn').style.display = '';
+  document.getElementById('mgrNameStatus').style.display = '';
+  document.getElementById('pinInput').value = SAVED_PIN;   // 放弃未保存的修改，还原为已保存值
+  document.getElementById('setupPanel').style.display = 'none';
+  document.getElementById('statusPanel').style.display = 'block';
+}
+
+// 「修改服务器」：进入设置页、隐藏配对码输入框/保存按钮/状态行，显示返回按钮
+// （配对码标题保留 —— 与真实 popup 的 editServerBtn 行为一致）
+function enterServerOnly() {
+  switchToSetup();
+  document.getElementById('pinInput').style.display = 'none';
+  document.getElementById('savePinBtn').style.display = 'none';
+  document.getElementById('pinStatus').style.display = 'none';
+  document.getElementById('backToStatusBtn').style.display = 'inline-block';
+  document.getElementById('mgrNameInput').style.display = '';
+  document.getElementById('saveMgrNameBtn').style.display = '';
+  document.getElementById('mgrNameStatus').style.display = '';
 }
 
 // ── 外观（主题切换）── 复用扩展端 themes.js 的 AD_THEMES / AD_APPLY_THEME
@@ -458,6 +480,7 @@ function savePin() {
   }
   document.getElementById('pinStatus').textContent = '✓ 保存成功';
   document.getElementById('pinStatus').className = 'field-status ok';
+  SAVED_PIN = pin;   // 记录为已保存值，供「返回」还原
   showToast('配对码已保存', 'success');
 }
 
@@ -468,15 +491,20 @@ function saveMgrName() {
   showToast('顾问姓名已保存', 'success');
 }
 
-// 清除PIN（与真实 popup 一致：清完落到「完整设置页」并聚焦配对码输入框）
-function clearPin() {
-  if (confirm('确定要清除本机 PIN？清除后将停止自动配对拨号，需重新设置。')) {
-    const input = document.getElementById('pinInput');
-    if (input) input.value = '';
-    renderPanel('setup');
-    showToast('配对码已清除', 'success');
-    setTimeout(function () { const i = document.getElementById('pinInput'); if (i) i.focus(); }, 60);
-  }
+// 修改PIN（与真实 popup 一致：进入设置页，配对码保留当前值不清空，并显示「返回」按钮）
+function modifyPin() {
+  const input = document.getElementById('pinInput');
+  if (!input) return;
+  input.style.display = '';
+  document.getElementById('savePinBtn').style.display = '';
+  document.getElementById('pinStatus').style.display = '';
+  document.getElementById('pinStatus').textContent = '';
+  document.getElementById('backToStatusBtn').style.display = 'inline-block';
+  document.getElementById('mgrNameInput').style.display = '';
+  document.getElementById('saveMgrNameBtn').style.display = '';
+  document.getElementById('mgrNameStatus').style.display = '';
+  switchToSetup();
+  setTimeout(function () { input.focus(); input.select(); }, 60);
 }
 
 // 初始化主题色块
