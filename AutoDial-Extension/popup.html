@@ -75,6 +75,20 @@ body::-webkit-scrollbar-track { background: transparent; }
 .title-group { display: flex; align-items: baseline; gap: 6px; }
 .title-group h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
 .ver { font-size: 11px; color: var(--text-2); background: var(--surface-2); padding: 2px 8px; border-radius: var(--r-pill); }
+/* 顶栏刷新按钮：margin-left:auto 把它推到最右 */
+.icon-btn {
+  margin-left: auto; flex-shrink: 0;
+  width: 30px; height: 30px; padding: 0;
+  border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2);
+  display: grid; place-items: center; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn[disabled] { cursor: default; opacity: .55; }
+.icon-btn.spin svg { animation: adSpin .8s linear infinite; }
+@keyframes adSpin { to { transform: rotate(360deg); } }
 
 /* ===== 面板切换动画（display:none→block 时触发） ===== */
 @keyframes panelIn {
@@ -108,16 +122,42 @@ body::-webkit-scrollbar-track { background: transparent; }
   box-shadow: 0 0 0 3px rgba(var(--red-rgb),.14), 0 0 8px rgba(var(--red-rgb),.4);
   animation: none;
 }
+/* v5.6.1: 探测未出结果前的「未知」态 —— 中性灰，不动画，避免误报成故障 */
+.status-dot.unknown {
+  background: var(--text-2); opacity: .45;
+  box-shadow: none; animation: none;
+}
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(var(--green-rgb),.16), 0 0 8px rgba(var(--green-rgb),.45); }
   50% { box-shadow: 0 0 0 6px rgba(var(--green-rgb),.08), 0 0 12px rgba(var(--green-rgb),.35); }
 }
 .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hero-title { font-size: 15px; font-weight: 700; }
+/* v5.6.1: 大圆点/大标题只反映「云端连通性」，不再由「有没有设备在线」决定 */
+.hero-title.ok { color: var(--green); }
+.hero-title.err { color: var(--red); }
 .hero-sub { font-size: 12px; color: var(--text-2); }
 /* v5.5: 状态副标题配色改由主题变量驱动（原为 popup.js 内联硬编码 #40C057/#5880A8/#F03E3E） */
 .hero-sub.ok { color: var(--green); }
 .hero-sub.err { color: var(--red); }
+/* 副标题为空时不留空行（云端已连接时无需副标题，三行清单已说明一切） */
+.hero-sub:empty { display: none; }
+
+/* ===== v5.6.1 三行独立连接状态（云端 / PC / 手机 各自着色，互不干扰） =====
+   颜色语义：绿 = 正常 · 灰 = 中性（设备离线、云端不通时未查询）· 红 = 仅云端故障 */
+.conn-list { margin-top: 10px; border-top: 1px solid var(--divider); }
+.conn-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+.conn-row + .conn-row { border-top: 1px solid var(--divider); }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-2); opacity: .4;
+}
+.conn-label { flex: 1; color: var(--text); }
+.conn-val { color: var(--text-2); }
+.conn-row.ok .conn-dot { background: var(--green); opacity: 1; }
+.conn-row.ok .conn-val { color: var(--green); }
+.conn-row.err .conn-dot { background: var(--red); opacity: 1; }
+.conn-row.err .conn-val { color: var(--red); }
 
 /* ===== 按钮（手机端 primaryBtn 渐变 + ghost/danger pill） ===== */
 .btn {
@@ -240,7 +280,7 @@ input:focus {
   border-radius: var(--r-pill); padding: 2px 8px;
 }
 
-/* ===== v5.6.1 候选服务器：输入框内嵌下拉浮层（绝对定位覆盖，不撑高面板） ===== */
+/* ===== v5.6.0 候选服务器：输入框内嵌下拉浮层（绝对定位覆盖，不撑高面板） ===== */
 .addr-row { position: relative; }
 .addr-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
 .addr-wrap input { padding-right: 30px; }
@@ -288,7 +328,7 @@ input:focus {
 .addr-menu-foot:hover:not(:disabled) { color: var(--primary); }
 .addr-menu-foot:disabled { opacity: .6; cursor: default; }
 
-/* ===== 外观（主题切换）常驻卡片 ===== */
+/* ===== 外观（色相 × 明暗）常驻卡片 ===== */
 .theme-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 10px 12px;
@@ -296,13 +336,35 @@ input:focus {
 }
 .theme-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .theme-head .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.theme-name { margin-left: auto; font-size: 11px; color: var(--text-2); }
-.swatches { display: flex; gap: 7px; }
+
+/* v6.0：亮 / 暗 分段开关。
+   原先 9 套主题各自钉死一个明暗（亮暗暗暗暗暗亮暗暗），
+   色相和亮度混在同一个列表里，切换毫无规律；现拆成两个独立维度 */
+.mode-toggle {
+  margin-left: auto; display: flex; gap: 2px; padding: 2px;
+  background: var(--input-bg); border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+}
+.mode-btn {
+  font-family: inherit; font-size: 11px; line-height: 1; color: var(--text-2);
+  background: none; border: none; padding: 5px 11px; border-radius: var(--r-pill);
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.mode-btn:hover { color: var(--primary); }
+.mode-btn.active { background: var(--primary); color: #fff; }
+
+/* 16 套色相 = 8 列 × 2 行（弹窗内容宽 306px，每列 32px 放得下 27px 色块） */
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px 0; justify-items: center; }
 .swatch-btn {
-  width: 27px; height: 27px; flex-shrink: 0;
+  width: 27px; height: 27px;
   border-radius: 50%; border: none; padding: 0; cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,.16);
   transition: transform .12s, box-shadow .15s;
+}
+/* 当前生效的「色相 · 明暗」组合，避免只靠色块高亮猜 */
+.theme-cur {
+  display: block; margin-top: 9px; text-align: center;
+  font-size: 11px; color: var(--text-2);
 }
 .swatch-btn:hover { transform: scale(1.12); }
 /* 选中态：外圈主题强调色光环 + 内圈卡片底描边，任何主题下都能看清 */
@@ -320,8 +382,16 @@ input:focus {
   </div>
   <div class="title-group">
     <h1>AutoDial</h1>
-    <span class="ver">v5</span>
+    <span class="ver">v6</span>
   </div>
+  <button type="button" class="icon-btn" id="refreshBtn" title="刷新状态（主题 + 连接）" aria-label="刷新状态">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 4v4h-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 20v-4h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
 </header>
 
 <!-- ===== 状态页（PIN 已设置） ===== -->
@@ -329,11 +399,25 @@ input:focus {
   <div class="hero-card">
     <div class="hero-row">
       <div class="status-indicator">
-        <span id="statusDot" class="status-dot online"></span>
+        <span id="statusDot" class="status-dot unknown"></span>
       </div>
       <div class="hero-text">
-        <div id="statusText" class="hero-title">PIN 已就绪</div>
-        <div id="cloudStatus" class="hero-sub">连接中…</div>
+        <div id="statusText" class="hero-title">检查中…</div>
+        <div id="cloudStatus" class="hero-sub">正在探测云端…</div>
+      </div>
+    </div>
+    <!-- v5.6.1: 云端 / PC / 手机 三行独立状态，各自着色 ——
+         原先三者被压进「一个圆点 + 一行字」，圆点只看有没有设备在线，
+         云端明明连通也照样显示红色，第一眼无法判断。 -->
+    <div class="conn-list">
+      <div id="connCloud" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">云端中继</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPc" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">PC 客户端</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPhone" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">手机</span><span class="conn-val">—</span>
       </div>
     </div>
   </div>
@@ -396,7 +480,7 @@ input:focus {
           <button id="testServerBtn" class="btn btn-ghost btn-sm">测试</button>
           <button id="saveServerBtn" class="btn btn-primary btn-sm">保存</button>
         </div>
-        <!-- v5.6.1 候选浮层：绝对定位覆盖下方内容，展开时不撑高面板 -->
+        <!-- v5.6.0 候选浮层：绝对定位覆盖下方内容，展开时不撑高面板 -->
         <div id="addrMenu" class="addr-menu" hidden>
           <div id="addrMenuList" class="addr-menu-list"></div>
           <button id="fetchPoolBtn" class="addr-menu-foot" type="button">从网络获取</button>
@@ -436,14 +520,18 @@ input:focus {
   </div>
 </div>
 
-<!-- ===== 外观（主题切换）——常驻，两个面板下都可见 ===== -->
+<!-- ===== 外观（色相 × 明暗）——常驻，两个面板下都可见 ===== -->
 <div class="theme-card" id="themeCard">
   <div class="theme-head">
     <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.7-9-7.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15" cy="8" r="1.2" fill="currentColor"/></svg></span>
     <span class="section-title">外观</span>
-    <span id="themeName" class="theme-name"></span>
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="明暗模式">
+      <button type="button" class="mode-btn" data-mode="light">亮白</button>
+      <button type="button" class="mode-btn" data-mode="dark">暗夜</button>
+    </div>
   </div>
   <div class="swatches" id="swatches"></div>
+  <span id="themeName" class="theme-cur"></span>
 </div>
 
 <script src="themes.js"></script>

@@ -64,6 +64,20 @@ body {
 .title-group { display: flex; align-items: baseline; gap: 6px; }
 .title-group h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
 .ver { font-size: 11px; color: var(--text-2); background: var(--surface-2); padding: 2px 8px; border-radius: var(--r-pill); }
+/* 顶栏刷新按钮（与 popup.html 保持逐条一致） */
+.icon-btn {
+  margin-left: auto; flex-shrink: 0;
+  width: 30px; height: 30px; padding: 0;
+  border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2);
+  display: grid; place-items: center; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn[disabled] { cursor: default; opacity: .55; }
+.icon-btn.spin svg { animation: adSpin .8s linear infinite; }
+@keyframes adSpin { to { transform: rotate(360deg); } }
 @keyframes panelIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -88,6 +102,11 @@ body {
   box-shadow: 0 0 0 3px rgba(64,192,87,.16), 0 0 8px rgba(64,192,87,.45);
   animation: pulse 2s ease-in-out infinite;
 }
+/* v5.6.1: 探测未出结果前的中性「未知」态 */
+.status-dot.unknown {
+  background: var(--text-2); opacity: .45;
+  box-shadow: none; animation: none;
+}
 .status-dot.offline {
   background: var(--red);
   box-shadow: 0 0 0 3px rgba(240,62,62,.14), 0 0 8px rgba(240,62,62,.4);
@@ -100,6 +119,25 @@ body {
 .hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hero-title { font-size: 15px; font-weight: 700; }
 .hero-sub { font-size: 12px; color: var(--text-2); }
+.hero-title.ok { color: var(--green); }
+.hero-title.err { color: var(--red); }
+.hero-sub:empty { display: none; }
+
+/* ===== v5.6.1 三行独立连接状态（与真实 popup 同款） =====
+   颜色语义：绿 = 正常 · 灰 = 中性（设备离线、未查询）· 红 = 仅云端故障 */
+.conn-list { margin-top: 10px; border-top: 1px solid var(--divider); }
+.conn-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+.conn-row + .conn-row { border-top: 1px solid var(--divider); }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-2); opacity: .4;
+}
+.conn-label { flex: 1; color: var(--text); }
+.conn-val { color: var(--text-2); }
+.conn-row.ok .conn-dot { background: var(--green); opacity: 1; }
+.conn-row.ok .conn-val { color: var(--green); }
+.conn-row.err .conn-dot { background: var(--red); opacity: 1; }
+.conn-row.err .conn-val { color: var(--red); }
 .btn {
   border: none; cursor: pointer; font-family: inherit;
   font-size: 13px; font-weight: 600; letter-spacing: .02em;
@@ -272,7 +310,7 @@ input:focus {
 .hero-sub.ok { color: var(--green); }
 .hero-sub.err { color: var(--red); }
 
-/* ===== 外观（主题切换）常驻卡片 ===== */
+/* ===== 外观（色相 × 明暗）常驻卡片 ===== */
 .theme-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 10px 12px;
@@ -280,13 +318,28 @@ input:focus {
 }
 .theme-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .theme-head .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.theme-name { margin-left: auto; font-size: 11px; color: var(--text-2); }
-.swatches { display: flex; gap: 7px; }
+.mode-toggle {
+  margin-left: auto; display: flex; gap: 2px; padding: 2px;
+  background: var(--input-bg); border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+}
+.mode-btn {
+  font-family: inherit; font-size: 11px; line-height: 1; color: var(--text-2);
+  background: none; border: none; padding: 5px 11px; border-radius: var(--r-pill);
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.mode-btn:hover { color: var(--primary); }
+.mode-btn.active { background: var(--primary); color: #fff; }
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px 0; justify-items: center; }
 .swatch-btn {
-  width: 27px; height: 27px; flex-shrink: 0;
+  width: 27px; height: 27px;
   border-radius: 50%; border: none; padding: 0; cursor: pointer;
   box-shadow: 0 1px 3px rgba(0,0,0,.16);
   transition: transform .12s, box-shadow .15s;
+}
+.theme-cur {
+  display: block; margin-top: 9px; text-align: center;
+  font-size: 11px; color: var(--text-2);
 }
 .swatch-btn:hover { transform: scale(1.12); }
 .swatch-btn.active {
@@ -304,8 +357,16 @@ input:focus {
   </div>
   <div class="title-group" data-page-node-id="dX96HkbfbscG7pVOCUEC42">
     <h1 data-page-node-id="wzUP6TOfTqSsosZzV1pJA2">AutoDial</h1>
-    <span class="ver" data-page-node-id="XURV8UsbuFKYuaWUJyJmni">v5</span>
+    <span class="ver" data-page-node-id="XURV8UsbuFKYuaWUJyJmni">v6</span>
   </div>
+  <button type="button" class="icon-btn" id="refreshBtn" title="刷新状态（主题 + 连接）" aria-label="刷新状态">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 4v4h-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 20v-4h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
 </header>
 
 <!-- 状态页（PIN 已设置） -->
@@ -313,11 +374,23 @@ input:focus {
   <div class="hero-card" data-page-node-id="NyzaGlwXK26jiUCEqzr3vD">
     <div class="hero-row" data-page-node-id="RwLMmHQjKflDl2MwbSBm1p">
       <div class="status-indicator" data-page-node-id="a52tSRi6JP9iW5w5jFAQxN">
-        <span id="statusDot" class="status-dot" data-page-node-id="JumxtuDVOStrAkMUmvGnor"></span>
+        <span id="statusDot" class="status-dot unknown" data-page-node-id="JumxtuDVOStrAkMUmvGnor"></span>
       </div>
       <div class="hero-text" data-page-node-id="iBsqFGj1Yp4qAF2CjhCo66">
-        <div id="statusText" class="hero-title" data-page-node-id="vHWXV6jcqBpIFXL8z7922G">PIN 已就绪</div>
-        <div id="cloudStatus" class="hero-sub" data-page-node-id="CyyEI16BApn0RtfCXdx8wA">已连接</div>
+        <div id="statusText" class="hero-title" data-page-node-id="vHWXV6jcqBpIFXL8z7922G">检查中…</div>
+        <div id="cloudStatus" class="hero-sub" data-page-node-id="CyyEI16BApn0RtfCXdx8wA">正在探测云端…</div>
+      </div>
+    </div>
+    <!-- v5.6.1: 云端 / PC / 手机 三行独立状态 -->
+    <div class="conn-list" data-page-node-id="ConnList0001">
+      <div id="connCloud" class="conn-row" data-page-node-id="ConnRowCloud">
+        <span class="conn-dot"></span><span class="conn-label">云端中继</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPc" class="conn-row" data-page-node-id="ConnRowPc">
+        <span class="conn-dot"></span><span class="conn-label">PC 客户端</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPhone" class="conn-row" data-page-node-id="ConnRowPhone">
+        <span class="conn-dot"></span><span class="conn-label">手机</span><span class="conn-val">—</span>
       </div>
     </div>
   </div>
@@ -424,14 +497,32 @@ input:focus {
   <div class="theme-head" data-page-node-id="gbnnvTpcnDFmr2F0xdELuL">
     <span class="section-ico" data-page-node-id="Lr7L6owgHyolyJtsXUo3Oy"><svg viewBox="0 0 24 24" fill="none" data-page-node-id="McDoNS7iwagqtBurB3uSJe"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.7-9-7.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" data-page-node-id="ZxVahCD8T0AdSjtINNQKJ7"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" data-page-node-id="DJl3hYDwv7AHGPL7llej2S"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor" data-page-node-id="yTwyJJv7Jz0CYzZVnGbEPX"/><circle cx="15" cy="8" r="1.2" fill="currentColor" data-page-node-id="bz31qU0xr14C59qcob2Eum"/></svg></span>
     <span class="section-title" data-page-node-id="CBPehFOjFSeURkDCiHNJaA">外观</span>
-    <span id="themeName" class="theme-name" data-page-node-id="NnFysVO3nbkpOXBkGgokhz"></span>
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="明暗模式">
+      <button type="button" class="mode-btn" data-mode="light">亮白</button>
+      <button type="button" class="mode-btn" data-mode="dark">暗夜</button>
+    </div>
   </div>
   <div class="swatches" id="swatches" data-page-node-id="BMrDmNCC7DAQNFDYLCwnbp"></div>
+  <span id="themeName" class="theme-cur" data-page-node-id="NnFysVO3nbkpOXBkGgokhz"></span>
 </div>
 
 <!-- 主题数据直接复用扩展端的唯一权威源（themes.js 的 AD_THEMES / AD_APPLY_THEME） -->
 <script src="AutoDial-Extension/themes.js"></script>
 <script>
+// v6.0 兜底：若 themes.js 未能加载（路径改名 / file:// 限制 / 单文件拷走预览），
+// 这里给出最小定义，避免下面的脚本因 ReferenceError 整体中断 —— 主题区降级为默认色，其余功能照常。
+if (typeof AD_THEME_DEFAULT === 'undefined') {
+  window.AD_THEME_DEFAULT = 'sky-blue';
+  window.AD_THEME_DEFAULT_MODE = 'light';
+  window.AD_THEME_MODES = ['light', 'dark'];
+  window.AD_THEME_MODE_LABEL = { light: '亮白', dark: '暗夜' };
+  window.AD_THEME_LIST = [];
+  window.AD_NORM_MODE = function (m) { return m === 'dark' ? 'dark' : 'light'; };
+  window.AD_HAS_THEME = function (id) {
+    return !!(id && typeof AD_THEMES !== 'undefined' && AD_THEMES[id]);
+  };
+}
+
 // Toast
 let toastTimer = null;
 function showToast(msg, type) {
@@ -481,18 +572,19 @@ function enterServerOnly() {
   document.getElementById('mgrNameStatus').style.display = '';
 }
 
-// ── 外观（主题切换）── 复用扩展端 themes.js 的 AD_THEMES / AD_APPLY_THEME
-const THEME_ORDER = ['sky-blue', 'dark-gold', 'cyber-frost', 'deep-space', 'cyberpunk',
-                     'minimalist', 'forest-green', 'energetic-orange', 'ocean-blue'];
-let currentTheme = 'sky-blue';
+// ── 外观（色相 × 明暗）── 复用扩展端 themes.js 的 AD_THEMES / AD_APPLY_THEME
+// v6.0：色相与明暗是两个独立维度，分开存（__ad_theme / __ad_theme_mode）
+let currentTheme = AD_THEME_DEFAULT;
+let currentMode = AD_THEME_DEFAULT_MODE;
 
 function buildSwatches() {
   const box = document.getElementById('swatches');
   if (!box || typeof AD_THEMES === 'undefined') return;
-  box.innerHTML = THEME_ORDER.filter(function (id) { return AD_THEMES[id]; }).map(function (id) {
+  box.innerHTML = AD_THEME_LIST.filter(function (id) { return AD_THEMES[id]; }).map(function (id) {
     const t = AD_THEMES[id];
+    const m = t.modes.light;   // 色块表达"色相"，预览固定用亮档配色
     return '<button type="button" class="swatch-btn" data-theme="' + id + '" title="' + t.name +
-           '" style="background:linear-gradient(135deg,' + t.accentLight + ',' + t.accentDark + ')"></button>';
+           '" style="background:linear-gradient(135deg,' + m.accentLight + ',' + m.accentDark + ')"></button>';
   }).join('');
   box.addEventListener('click', function (e) {
     const btn = e.target.closest('.swatch-btn');
@@ -500,23 +592,57 @@ function buildSwatches() {
   });
 }
 
+function buildModeToggle() {
+  const box = document.getElementById('modeToggle');
+  if (!box) return;
+  box.addEventListener('click', function (e) {
+    const btn = e.target.closest('.mode-btn');
+    if (btn) pickMode(btn.dataset.mode);
+  });
+}
+
+function renderThemeName() {
+  const nameEl = document.getElementById('themeName');
+  if (nameEl && typeof AD_THEMES !== 'undefined' && AD_THEMES[currentTheme]) {
+    nameEl.textContent = AD_THEMES[currentTheme].name + ' · ' + AD_THEME_MODE_LABEL[currentMode];
+  }
+}
+
 function markSwatch(id) {
-  currentTheme = id;
+  currentTheme = AD_HAS_THEME(id) ? id : AD_THEME_DEFAULT;
   const box = document.getElementById('swatches');
   if (box) {
     box.querySelectorAll('.swatch-btn').forEach(function (b) {
-      b.classList.toggle('active', b.dataset.theme === id);
+      b.classList.toggle('active', b.dataset.theme === currentTheme);
     });
   }
-  const nameEl = document.getElementById('themeName');
-  if (nameEl && typeof AD_THEMES !== 'undefined' && AD_THEMES[id]) nameEl.textContent = AD_THEMES[id].name;
+  renderThemeName();
+}
+
+function markMode(mode) {
+  currentMode = AD_NORM_MODE(mode);
+  const box = document.getElementById('modeToggle');
+  if (box) {
+    box.querySelectorAll('.mode-btn').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.mode === currentMode);
+    });
+  }
+  renderThemeName();
 }
 
 function pickTheme(id) {
-  if (typeof AD_APPLY_THEME !== 'function' || typeof AD_THEMES === 'undefined' || !AD_THEMES[id]) return;
-  AD_APPLY_THEME(id);
+  if (typeof AD_APPLY_THEME !== 'function' || !AD_HAS_THEME(id)) return;
+  AD_APPLY_THEME(id, currentMode);
   markSwatch(id);
-  showToast('已切换到「' + AD_THEMES[id].name + '」');
+  showToast('已切换到「' + AD_THEMES[id].name + ' · ' + AD_THEME_MODE_LABEL[currentMode] + '」');
+}
+
+function pickMode(mode) {
+  const mk = AD_NORM_MODE(mode);
+  if (mk === currentMode) return;
+  AD_APPLY_THEME(currentTheme, mk);
+  markMode(mk);
+  showToast('已切换到「' + AD_THEMES[currentTheme].name + ' · ' + AD_THEME_MODE_LABEL[mk] + '」');
 }
 
 // ══════ v5.6：云中继地址（语义与真实 popup 的 addr.js 对齐） ══════
@@ -544,7 +670,7 @@ function renderSource(src) {
   document.getElementById('cloudAddr').textContent = cleanAddr(SAVED_ADDR) + ' · ' + src;
 }
 
-// 浮层开合（与真实 popup v5.6.1 一致：点 ▾ 切换，点别处 / Esc 收起）
+// 浮层开合（与真实 popup v5.6.0 一致：点 ▾ 切换，点别处 / Esc 收起）
 function openAddrMenu() {
   document.getElementById('addrMenu').hidden = false;
   document.getElementById('addrCaretBtn').classList.add('open');
@@ -684,17 +810,82 @@ function modifyPin() {
   setTimeout(function () { input.focus(); input.select(); }, 60);
 }
 
-// 初始化主题色块
+// 初始化主题色块 + 亮暗开关
 buildSwatches();
-markSwatch(typeof AD_THEMES !== 'undefined' && AD_THEMES[currentTheme] ? currentTheme : 'sky-blue');
+buildModeToggle();
+markMode(currentMode);
+markSwatch(currentTheme);
 // v5.6：初始化来源徽标与候选池（与真实 popup 的 AD_ADDR.readActive() 对应）
 renderSource('手动');
 renderPool();
 
-// 模拟在线状态
-setTimeout(() => {
-  document.getElementById('statusDot').classList.add('online');
+// v5.6.1: 三行独立连接状态渲染（与真实 popup.js 的 renderConn 对齐）
+var CONN_ROWS = { cloud: 'connCloud', pc: 'connPc', phone: 'connPhone' };
+function renderConn(rows) {
+  Object.keys(CONN_ROWS).forEach(function (k) {
+    var el = document.getElementById(CONN_ROWS[k]);
+    if (!el) return;
+    var r = rows[k] || { state: 'off', text: '—' };
+    el.className = 'conn-row ' + r.state;
+    var v = el.querySelector('.conn-val');
+    if (v) v.textContent = r.text;
+  });
+}
+
+// 模拟探测过程：先「检查中…」（中性灰圆点），500ms 后落到实际状态
+setTimeout(function () {
+  var t = document.getElementById('statusText');
+  var s = document.getElementById('cloudStatus');
+  t.textContent = '服务正常';
+  t.className = 'hero-title ok';
+  s.textContent = '';
+  s.className = 'hero-sub';
+  document.getElementById('statusDot').className = 'status-dot online';
+  renderConn({
+    cloud: { state: 'ok', text: '已连接' },
+    pc:    { state: 'ok', text: '在线' },
+    phone: { state: 'off', text: '离线' }
+  });
 }, 500);
+
+// v6.0：顶栏刷新按钮（演示页用模拟探测代替真实探针，交互与真实 popup 一致）
+var refreshing = false;
+function doRefresh(btn) {
+  if (refreshing) return;
+  refreshing = true;
+  if (btn) { btn.disabled = true; btn.classList.add('spin'); }
+  // ① 主题：重落 CSS 变量 + 重标记色块 / 明暗开关 / 名称
+  AD_APPLY_THEME(currentTheme, currentMode);
+  markSwatch(currentTheme);
+  markMode(currentMode);
+  // ② 连接状态：先落「检查中…」（中性灰），500ms 后落到实际状态
+  var t = document.getElementById('statusText');
+  var s = document.getElementById('cloudStatus');
+  t.textContent = '检查中…';
+  t.className = 'hero-title';
+  s.textContent = '';
+  s.className = 'hero-sub';
+  document.getElementById('statusDot').className = 'status-dot unknown';
+  renderConn({
+    cloud: { state: 'off', text: '检查中' },
+    pc:    { state: 'off', text: '检查中' },
+    phone: { state: 'off', text: '检查中' }
+  });
+  setTimeout(function () {
+    t.textContent = '服务正常';
+    t.className = 'hero-title ok';
+    document.getElementById('statusDot').className = 'status-dot online';
+    renderConn({
+      cloud: { state: 'ok', text: '已连接' },
+      pc:    { state: 'ok', text: '在线' },
+      phone: { state: 'off', text: '离线' }
+    });
+    refreshing = false;
+    if (btn) { btn.disabled = false; btn.classList.remove('spin'); }
+    showToast('已刷新：主题与连接状态');
+  }, 500);
+}
+document.getElementById('refreshBtn').addEventListener('click', function () { doRefresh(document.getElementById('refreshBtn')); });
 </script>
 </body>
 </html>

@@ -85,7 +85,12 @@
   // ═══════════════════════════════════════════════════════════════
   // 主题数据（v5 起统一取自 themes.js 的 AD_THEMES，唯一权威源）
   // ═══════════════════════════════════════════════════════════════
-  const EXT_THEMES = AD_THEMES;
+  // v6.0：主题 = 色相 × 明暗两个正交维度。EXT_THEMES 是"按当前明暗档摊平"后的扁平表 ——
+  // 脚本里 60+ 处 t.accent / t.gradAccent / t.bg2 的写法因此一行都不用改，
+  // 只在切换色相或明暗档时重建一次即可。
+  let currentMode = AD_NORM_MODE(localStorage.getItem('__ad_theme_mode'));
+  let EXT_THEMES = AD_FLAT_ALL(currentMode);
+  function rebuildThemes() { EXT_THEMES = AD_FLAT_ALL(currentMode); }
 
   // ── v5 矢量图标（Phosphor 风格 24 viewBox / stroke 1.8，替代功能 emoji） ──
   const AD_ICON = {
@@ -113,15 +118,27 @@
     return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;pointer-events:none;vertical-align:-3px">' + (AD_ICON[name] || '') + '</svg>';
   }
 
-  // 当前主题（默认天空蓝，与手机端一致）
-  let currentThemeId = localStorage.getItem('__ad_theme') || 'sky-blue';
-  function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES['sky-blue']; }
+  // 当前主题 = 色相 + 明暗（默认 sky-blue + light，与手机端 ThemeManager 一致）
+  let currentThemeId = AD_HAS_THEME(localStorage.getItem('__ad_theme'))
+    ? localStorage.getItem('__ad_theme') : AD_THEME_DEFAULT;
+  function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES[AD_THEME_DEFAULT]; }
+
+  // v6.0：切换明暗档。色相不动，只把整张扁平表按新档位重建，再走一遍 applyTheme 的换肤逻辑
+  function applyMode(mode) {
+    const mk = AD_NORM_MODE(mode);
+    if (mk === currentMode) return;
+    currentMode = mk;
+    localStorage.setItem('__ad_theme_mode', mk);
+    try { chrome.storage.local.set({ __ad_theme_mode: mk }); } catch (_) {}
+    rebuildThemes();
+    applyTheme(currentThemeId);
+  }
 
   function applyTheme(id) {
-    currentThemeId = id;
-    localStorage.setItem('__ad_theme', id);
+    currentThemeId = AD_HAS_THEME(id) ? id : AD_THEME_DEFAULT;
+    localStorage.setItem('__ad_theme', currentThemeId);
     // v5: 同步给 popup/auth（chrome.storage 跨上下文共享）
-    try { chrome.storage.local.set({ __ad_theme: id }); } catch (_) {}
+    try { chrome.storage.local.set({ __ad_theme: currentThemeId }); } catch (_) {}
     const t = T();
     // 刷新拨号按钮（完整刷新所有主题相关属性）
     if (floatEl) {
@@ -778,14 +795,15 @@
               row.innerHTML = adIcon('user', 14) + '<span>PIN: ' + escHtml(phone) + '</span>';
               row.style.color = t.text2;
               row.style.cursor = 'default';
-              // 异步查 PC 状态
+              // 异步查 PC 状态（v5.6.1：在线/离线都显示 —— 原实现离线时整行不插入，
+              // 用户看不到「离线」，与 popup 的三行状态语义不一致）
               chrome.runtime.sendMessage({ type: 'getStatus' }, (status) => {
-                if (status && status.pcAlive === true) {
-                  const pcRow = document.createElement('div');
-                  pcRow.style.cssText = 'padding:0 10px 6px 10px;font-size:11px;color:' + t.text2 + ';';
-                  pcRow.textContent = 'PIN 已就绪，PC 在线';
-                  row.parentNode.insertBefore(pcRow, row.nextSibling);
-                }
+                const pcOn = !!(status && status.pcAlive === true);
+                const pcRow = document.createElement('div');
+                pcRow.style.cssText = 'padding:0 10px 6px 10px;font-size:11px;';
+                pcRow.style.color = pcOn ? t.green : t.text2;
+                pcRow.textContent = 'PIN 已就绪 · PC ' + (pcOn ? '在线' : '离线');
+                row.parentNode.insertBefore(pcRow, row.nextSibling);
               });
             } else {
               row.innerHTML = adIcon('bolt', 14) + '<span>未检测到坐席号</span>';
@@ -879,6 +897,8 @@
         boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
         padding: '12px',
         width: '200px',
+        maxHeight: 'calc(100vh - 180px)',
+        overflowY: 'auto',
         fontFamily: 'system-ui, -apple-system, sans-serif',
         fontSize: '13px',
         color: t.text,
@@ -899,66 +919,77 @@
       title.innerHTML = adIcon('palette', 13) + '<span>选择主题</span>';
       menu.appendChild(title);
 
-      // 主题列表
-      Object.entries(EXT_THEMES).forEach(([id, theme]) => {
-        const row = document.createElement('div');
-        const isActive = id === currentThemeId;
-        Object.assign(row.style, {
-          padding: '8px 10px',
-          borderRadius: '8px',
-          cursor: isActive ? 'default' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          marginBottom: '2px',
-          transition: 'background .15s',
-          background: isActive ? theme.accent + '1A' : 'transparent',
+      // v6.0：明暗档切换（色相与明暗是两个独立维度，挂件菜单里也要能切）
+      const modeRow = document.createElement('div');
+      Object.assign(modeRow.style, { display: 'flex', gap: '6px', marginBottom: '10px' });
+      AD_THEME_MODES.forEach((mk) => {
+        const on = mk === currentMode;
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = AD_THEME_MODE_LABEL[mk];
+        Object.assign(b.style, {
+          flex: '1', fontFamily: 'inherit', fontSize: '12px', lineHeight: '1',
+          padding: '6px 0', borderRadius: '999px', cursor: on ? 'default' : 'pointer',
+          border: '1px solid ' + (on ? t.accent : t.accent + '33'),
+          background: on ? t.accent : 'transparent',
+          color: on ? (t.textOnAccent || '#FFFFFF') : t.text2,
+          transition: 'background .15s, color .15s',
         });
+        if (!on) {
+          b.addEventListener('mouseenter', () => { b.style.background = t.accent + '12'; });
+          b.addEventListener('mouseleave', () => { b.style.background = 'transparent'; });
+          b.addEventListener('click', () => {
+            applyMode(mk);
+            document.getElementById('__ad_thememenu')?.remove();
+            showThemeMenu();   // 就地重建：菜单保持打开并刷新选中态
+          });
+        }
+        modeRow.appendChild(b);
+      });
+      menu.appendChild(modeRow);
 
-        // 色块预览（active 时外圈光环）
+      // 色相网格（16 套 4 列 × 4 行）。
+      // v5.x 是 9 行竖排列表；升到 16 套后竖排会撑满整屏，改网格后高度只有原来的 1/4
+      const grid = document.createElement('div');
+      Object.assign(grid.style, {
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '8px', justifyItems: 'center',
+      });
+      AD_THEME_LIST.forEach((id) => {
+        const theme = EXT_THEMES[id];
+        if (!theme) return;
+        const isActive = id === currentThemeId;
         const swatch = document.createElement('span');
+        swatch.title = theme.name;
         Object.assign(swatch.style, {
-          width: '20px',
-          height: '20px',
-          borderRadius: '50%',
+          width: '26px', height: '26px', borderRadius: '50%',
+          cursor: isActive ? 'default' : 'pointer',
           background: theme.gradAccent,
-          display: 'inline-block',
-          flexShrink: '0',
           boxShadow: isActive
             ? `0 0 0 2px ${t.bg2}, 0 0 0 4px ${theme.accent}55`
             : `0 1px 4px ${theme.accent}55`,
+          transition: 'transform .12s',
         });
-        row.appendChild(swatch);
-
-        // 名称（去掉图标 emoji，仅文字）
-        const label = document.createElement('span');
-        label.textContent = theme.name;
-        label.style.color = isActive ? theme.accent : theme.text;
-        label.style.fontWeight = isActive ? '600' : '400';
-        row.appendChild(label);
-
-        // 选中标记 ✓
-        if (isActive) {
-          const check = document.createElement('span');
-          check.innerHTML = adIcon('check', 14);
-          check.style.marginLeft = 'auto';
-          check.style.color = theme.accent;
-          check.style.display = 'inline-flex';
-          row.appendChild(check);
-        }
-
         if (!isActive) {
-          row.addEventListener('mouseenter', () => { row.style.background = theme.accent + '12'; });
-          row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+          swatch.addEventListener('mouseenter', () => { swatch.style.transform = 'scale(1.12)'; });
+          swatch.addEventListener('mouseleave', () => { swatch.style.transform = 'scale(1)'; });
+          swatch.addEventListener('click', () => {
+            applyTheme(id);
+            document.getElementById('__ad_thememenu')?.remove();
+          });
         }
-
-        row.addEventListener('click', () => {
-          applyTheme(id);
-          document.getElementById('__ad_thememenu')?.remove();
-        });
-
-        menu.appendChild(row);
+        grid.appendChild(swatch);
       });
+      menu.appendChild(grid);
+
+      // 当前生效的「色相 · 明暗」，避免只靠色块光环猜
+      const curRow = document.createElement('div');
+      Object.assign(curRow.style, {
+        marginTop: '10px', textAlign: 'center', fontSize: '11px', color: t.text2,
+      });
+      curRow.textContent = (EXT_THEMES[currentThemeId] ? EXT_THEMES[currentThemeId].name : '') +
+                           ' \u00B7 ' + AD_THEME_MODE_LABEL[currentMode];
+      menu.appendChild(curRow);
 
       // 关闭按钮
       const closeRow = document.createElement('div');
@@ -1587,6 +1618,15 @@
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
+        // v6.0：明暗档是独立维度，任一端（弹窗/其他标签页）改了都要重建扁平表
+        const mv = changes.__ad_theme_mode && changes.__ad_theme_mode.newValue;
+        if (mv && AD_NORM_MODE(mv) !== currentMode) {
+          currentMode = AD_NORM_MODE(mv);
+          localStorage.setItem('__ad_theme_mode', currentMode);
+          rebuildThemes();
+          applyTheme(currentThemeId);
+          return;
+        }
         const nv = changes.__ad_theme && changes.__ad_theme.newValue;
         if (nv && nv !== currentThemeId && EXT_THEMES[nv]) applyTheme(nv);
       });

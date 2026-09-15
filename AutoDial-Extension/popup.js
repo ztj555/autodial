@@ -12,13 +12,20 @@
  *   · 新增来源徽标（手动/自动/默认）与候选池展示。
  *   自动获取只更新候选池，**不自动切换**生效地址（生效地址只由「保存」决定）。
  *
- * v5.6.1：候选服务器改为「输入框内嵌下拉浮层」——
+ * v5.6.0：候选服务器改为「输入框内嵌下拉浮层」——
  *   · 原来候选池是 flex-wrap 的 pill 列表，5 个地址在 340px 弹窗里会折成 3 行、
  *     单独吃掉约 100px 高度（弹窗总高上限仅 600px）。
  *   · 现在收进输入框右侧的 ▾ 浮层（绝对定位覆盖下方内容，不撑高面板）；
  *     「从网络获取」并入浮层底部脚注，脚注同时显示候选个数与更新时间。
  *   · 云中继组高度约 172px → 约 70px。
  *   语义不变：选中候选只填入输入框，仍需点「保存」才生效。
+ *
+ * v5.6.1：状态区改为「云端 / PC / 手机」三行独立状态：
+ *   · 大圆点与大标题**只反映云端连通性**（原实现取 pcConnected||phoneConnected，
+ *     云端明明连通、只是设备离线也照样显示红点，与用户直觉相反）
+ *   · 大标题由写死的「PIN 已就绪」改为动态结论（云端未连接 / 云端已连接 / 服务正常）
+ *   · 颜色语义：绿 = 正常 · 灰 = 中性（设备离线、云端不通时未查询）· 红 = 仅云端故障
+ *   · 云端不通时 PC/手机显示「未查询」而非「离线」，不误导
  *
  * v5.5.2：「清除 PIN」改为「修改 PIN」，且不再清空配对码：
  *   · 「修改 PIN」→ 进入设置页，配对码输入框保留当前值（可改后保存），并显示「返回」
@@ -56,9 +63,28 @@ document.addEventListener('DOMContentLoaded', () => {
     return r;
   }
 
+  // ─── 三行独立连接状态渲染（v5.6.1） ────────────────
+  //   rows: { cloud:{state,text}, pc:{...}, phone:{...} }
+  //   state ∈ 'ok'（绿） | 'off'（中性灰） | 'err'（红，仅云端故障用）
+  const CONN_ROWS = { cloud: 'connCloud', pc: 'connPc', phone: 'connPhone' };
+  function renderConn(rows) {
+    Object.keys(CONN_ROWS).forEach((k) => {
+      const el = $(CONN_ROWS[k]);
+      if (!el) return;
+      const r = rows[k] || { state: 'off', text: '—' };
+      el.className = 'conn-row ' + r.state;
+      const v = el.querySelector('.conn-val');
+      if (v) v.textContent = r.text;
+    });
+  }
+
   // 统一刷新：设置页状态行 + 状态页 Hero 大盘
   //   opts.hero   === false 时只更新设置页那一行（例如正在输入一个还没保存的地址）
   //   opts.prefix 非空时前缀到状态行（用于「已保存」这类一次性确认，避免被探针结果吞掉）
+  //
+  // v5.6.1 重写：大圆点与大标题**只反映云端连通性**。
+  // 原实现里圆点取 `pcConnected || phoneConnected`，导致「云端已连通、但设备都离线」
+  // 时显示红色，与用户直觉相反，也无法第一眼判断云端是否连上。
   async function refreshConnectivity(addr, pin, force, opts) {
     const heroToo = !opts || opts.hero !== false;
     const prefix = (opts && opts.prefix) || '';
@@ -68,33 +94,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!heroToo) return r;
 
-    const el = $('cloudStatus');
+    const tEl = $('statusText');
+    const sEl = $('cloudStatus');
+    const dot = $('statusDot');
+
+    // ① 云端不通 —— 红色只在此处出现；PC/手机标「未查询」而不是「离线」，避免误判
     if (!r.ok) {
-      el.textContent = '○ ' + (r.detail || '云中继不可达');
-      el.className = 'hero-sub err';
-      $('statusDot').className = 'status-dot offline';
+      tEl.textContent = '云端未连接';
+      tEl.className = 'hero-title err';
+      sEl.textContent = r.detail || '云中继不可达';
+      sEl.className = 'hero-sub err';
+      dot.className = 'status-dot offline';
+      renderConn({
+        cloud: { state: 'err', text: '连接失败' },
+        pc:    { state: 'off', text: '未查询' },
+        phone: { state: 'off', text: '未查询' }
+      });
       return r;
     }
-    // 探通了才查业务态（PC/手机在线），避免两处结论打架
-    el.textContent = '● 云中继已连接，查询设备…';
-    el.className = 'hero-sub';
+
+    // ② 云端已通 —— 先把云端行落定，再查业务态
+    renderConn({ cloud: { state: 'ok', text: '已连接' } });
+
+    const queryFailed = () => {
+      tEl.textContent = '云端已连接';
+      tEl.className = 'hero-title ok';
+      sEl.textContent = '设备状态查询失败';
+      sEl.className = 'hero-sub';
+      dot.className = 'status-dot online';
+      renderConn({
+        cloud: { state: 'ok', text: '已连接' },
+        pc:    { state: 'off', text: '未知' },
+        phone: { state: 'off', text: '未知' }
+      });
+    };
+
     try {
       const d = await AD_ADDR.statusOf(addr, pin);
       if (d && d.ok) {
-        const pcStr = d.pcConnected ? 'PC在线' : 'PC离线';
-        const phStr = d.phoneConnected ? '手机在线(' + (d.phoneCount || 0) + ')' : '手机离线';
-        const online = !!(d.pcConnected || d.phoneConnected);
-        el.textContent = '● ' + pcStr + ' | ' + phStr;
-        // v5.5：颜色改由主题 CSS 变量驱动（原为内联硬编码 #40C057/#5880A8/#F03E3E）
-        el.className = 'hero-sub' + (online ? ' ok' : '');
-        $('statusDot').className = 'status-dot ' + (online ? 'online' : 'offline');
+        const pcOn = !!d.pcConnected;
+        const phOn = !!d.phoneConnected;
+        renderConn({
+          cloud: { state: 'ok', text: '已连接' },
+          pc:    { state: pcOn ? 'ok' : 'off', text: pcOn ? '在线' : '离线' },
+          phone: { state: phOn ? 'ok' : 'off', text: phOn ? '在线 ' + (d.phoneCount || 1) + ' 台' : '离线' }
+        });
+        const anyOnline = pcOn || phOn;
+        tEl.textContent = anyOnline ? '服务正常' : '云端已连接';
+        tEl.className = 'hero-title ok';
+        sEl.textContent = '';   // 三行清单已说明一切，副标题留空（CSS :empty 不占行）
+        sEl.className = 'hero-sub';
+        dot.className = 'status-dot online';
       } else {
-        el.textContent = '○ 无法获取设备状态';
-        el.className = 'hero-sub err';
+        queryFailed();
       }
     } catch (e) {
-      el.textContent = '○ 云中继已连接，但状态查询失败';
-      el.className = 'hero-sub err';
+      queryFailed();
     }
     return r;
   }
@@ -104,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     serverStatus.className = 'field-status ' + cls;
   }
 
-  // ─── 来源徽标 / 候选下拉浮层（v5.6.1） ─────────────
+  // ─── 来源徽标 / 候选下拉浮层（v5.6.0） ─────────────
   function renderSource(src) {
     $('serverSource').textContent = AD_ADDR.sourceLabel(src);
   }
@@ -353,20 +408,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // ─── 外观（主题切换） ──────────────────────────────
-  // 与手机端/PC 端/dashboard 共用主题数据（themes.js 的 AD_THEMES = 唯一权威源）
-  const THEME_ORDER = ['sky-blue', 'dark-gold', 'cyber-frost', 'deep-space', 'cyberpunk',
-                       'minimalist', 'forest-green', 'energetic-orange', 'ocean-blue'];
-  let currentTheme = 'sky-blue';
+  // ─── 外观（色相 × 明暗） ───────────────────────────
+  // 与手机端 / PC 端 / dashboard 共用主题数据（themes.js 的 AD_THEMES = 唯一权威源）。
+  // v6.0：色相与明暗拆成两个独立维度，分开存储 ——
+  //   __ad_theme      → 色相 id（16 套，顺序见 AD_THEME_LIST）
+  //   __ad_theme_mode → light 亮白 / dark 暗夜
+  let currentTheme = AD_THEME_DEFAULT;
+  let currentMode = AD_THEME_DEFAULT_MODE;
 
   function buildSwatches() {
     const box = $('swatches');
     if (!box || typeof AD_THEMES === 'undefined') return;
-    box.innerHTML = THEME_ORDER.filter(id => AD_THEMES[id]).map(id => {
+    box.innerHTML = AD_THEME_LIST.filter(id => AD_THEMES[id]).map(id => {
       const t = AD_THEMES[id];
+      // 色块预览固定用亮档配色：色块表达的是"色相"，明暗由右侧开关单独表达
+      const m = t.modes.light;
       return '<button type="button" class="swatch-btn" data-theme="' + id +
              '" title="' + t.name + '" aria-label="' + t.name +
-             '" style="background:linear-gradient(135deg,' + t.accentLight + ',' + t.accentDark + ')"></button>';
+             '" style="background:linear-gradient(135deg,' + m.accentLight + ',' + m.accentDark + ')"></button>';
     }).join('');
     box.addEventListener('click', (e) => {
       const btn = e.target.closest('.swatch-btn');
@@ -374,33 +433,116 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function buildModeToggle() {
+    const box = $('modeToggle');
+    if (!box) return;
+    box.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mode-btn');
+      if (btn) pickMode(btn.dataset.mode);
+    });
+  }
+
   function markSwatch(id) {
-    currentTheme = id;
+    currentTheme = AD_HAS_THEME(id) ? id : AD_THEME_DEFAULT;
     const box = $('swatches');
     if (box) {
       box.querySelectorAll('.swatch-btn').forEach((b) => {
-        b.classList.toggle('active', b.dataset.theme === id);
+        b.classList.toggle('active', b.dataset.theme === currentTheme);
       });
     }
+    renderThemeName();
+  }
+
+  function markMode(mode) {
+    currentMode = AD_NORM_MODE(mode);
+    const box = $('modeToggle');
+    if (box) {
+      box.querySelectorAll('.mode-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.mode === currentMode);
+      });
+    }
+    renderThemeName();
+  }
+
+  function renderThemeName() {
     const nameEl = $('themeName');
-    if (nameEl && typeof AD_THEMES !== 'undefined' && AD_THEMES[id]) nameEl.textContent = AD_THEMES[id].name;
+    if (nameEl && typeof AD_THEMES !== 'undefined' && AD_THEMES[currentTheme]) {
+      nameEl.textContent = AD_THEMES[currentTheme].name + ' · ' + AD_THEME_MODE_LABEL[currentMode];
+    }
   }
 
   function pickTheme(id) {
-    if (typeof AD_APPLY_THEME !== 'function' || typeof AD_THEMES === 'undefined' || !AD_THEMES[id]) return;
-    AD_APPLY_THEME(id);   // 弹窗自身立即换肤
+    if (typeof AD_APPLY_THEME !== 'function' || !AD_HAS_THEME(id)) return;
+    AD_APPLY_THEME(id, currentMode);   // 弹窗自身立即换肤
     markSwatch(id);
     // 写入权威存储：下次打开弹窗由 theme-init.js 读取；
     // 已打开的 CRM 页面由 content-script 的 chrome.storage.onChanged 监听到，悬浮挂件实时跟随
     chrome.storage.local.set({ __ad_theme: id });
   }
 
+  function pickMode(mode) {
+    const mk = AD_NORM_MODE(mode);
+    if (mk === currentMode) return;
+    AD_APPLY_THEME(currentTheme, mk);
+    markMode(mk);
+    chrome.storage.local.set({ __ad_theme_mode: mk });
+  }
+
+  // ─── 顶栏刷新：重读存储 + 强制重查（v6.0） ───────────
+  //   ① 只用现成函数：AD_APPLY_THEME 幂等、refreshConnectivity 支持 force 绕缓存，
+  //      不新增任何网络调用（候选池的「从网络获取」仍是独立按钮，刷新不碰它）；
+  //   ② 主题 / PIN / 地址一律**重新从 storage 读**——若沿用内存里的 currentTheme，
+  //      在别的入口（右键菜单、另一弹窗、dashboard）改过主题后点刷新会刷不出来；
+  //   ③ 刷新期间禁用按钮 + 转圈，避免连点让多个探针并发在飞。
+  let refreshing = false;
+  async function doRefresh(btn) {
+    if (refreshing) return;
+    refreshing = true;
+    if (btn) { btn.disabled = true; btn.classList.add('spin'); }
+    try {
+      const s = await new Promise((res) => chrome.storage.local.get(
+        ['pin', 'self_phone', 'manager_name', '__ad_theme', '__ad_theme_mode'], res));
+
+      // ① 主题：重落 CSS 变量 + 重标记色块/明暗开关/名称
+      const th = AD_HAS_THEME(s.__ad_theme) ? s.__ad_theme : AD_THEME_DEFAULT;
+      const mk = AD_NORM_MODE(s.__ad_theme_mode);
+      AD_APPLY_THEME(th, mk);
+      markSwatch(th);
+      markMode(mk);
+
+      // ② 地址 / 来源 / 候选池（读权威源，顺手同步状态页那一行）
+      const a = await AD_ADDR.readActive();
+      serverInput.value = AD_ADDR.cleanAddr(a.addr);
+      renderSource(a.source);
+      renderPool(a.list, a.addr, a.listAt);
+      const addrEl = $('cloudAddr');
+      if (addrEl) addrEl.textContent = AD_ADDR.cleanAddr(a.addr) + ' · ' + AD_ADDR.sourceLabel(a.source);
+      if (s.manager_name) {
+        mgrNameInput.value = s.manager_name;
+        const m = $('myMgrName');
+        if (m) m.textContent = s.manager_name;
+      }
+
+      // ③ 连接状态：force=true 绕过探针缓存；没 PIN 时状态页不显示，只刷设置页那一行
+      const pin = s.pin || s.self_phone || '';
+      await refreshConnectivity(a.addr, pin, true, { hero: !!pin });
+    } catch (e) {
+      setServerStatus('刷新失败：' + (e && e.message ? e.message : e), 'err');
+    } finally {
+      refreshing = false;
+      if (btn) { btn.disabled = false; btn.classList.remove('spin'); }
+    }
+  }
+  $('refreshBtn').addEventListener('click', () => doRefresh($('refreshBtn')));
+
   // ─── 初始化 ───────────────────────────────────────
   buildSwatches();
+  buildModeToggle();
 
-  chrome.storage.local.get(['self_phone', 'pin', 'manager_name', '__ad_theme'], async (s) => {
+  chrome.storage.local.get(['self_phone', 'pin', 'manager_name', '__ad_theme', '__ad_theme_mode'], async (s) => {
     if (s.manager_name) mgrNameInput.value = s.manager_name;
-    markSwatch(s.__ad_theme && AD_THEMES[s.__ad_theme] ? s.__ad_theme : 'sky-blue');
+    markMode(AD_NORM_MODE(s.__ad_theme_mode));
+    markSwatch(s.__ad_theme);
 
     // v5.6：生效地址 / 来源 / 候选池 统一由 addr.js 提供
     const a = await AD_ADDR.readActive();

@@ -113,12 +113,13 @@
 
 ### 2.1 popup.html（结构级重做，360px）
 
-- 结构：Topbar（图标底座 34 + AutoDial + v5 pill）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（顶部「返回」按钮 `#backToStatusBtn` + Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「修改 PIN」ghost pill → **常驻「外观」卡片 `#themeCard`**（9 套主题色块横排，两个面板下都可见）
+- 结构：Topbar（图标底座 34 + AutoDial + v5 pill + **右侧刷新按钮 `#refreshBtn`**，`margin-left:auto` 靠右；点击重读 storage 并强制重查主题 + 连接状态 + 地址，刷新期间禁用并转圈）→ 状态页 `#statusPanel`（Hero 大盘渐变含状态；信息分组卡：坐席手机号/接待顾问/云端地址三行，22px 图标底座 + › 指示 + divider）→ 设置页 `#setupPanel`（顶部「返回」按钮 `#backToStatusBtn` + Hint 横幅 + 一张分组设置卡装全部：云中继地址+测试 / 配对码+保存 / 接待顾问姓名+保存，组间 divider）→ 次操作「修改服务器」ghost pill +「修改 PIN」ghost pill → **常驻「外观」卡片 `#themeCard`**（v6.0：色相 16 套 8 列 × 2 行网格 + 右上角「亮白 / 暗夜」分段开关 `#modeToggle` + 底部当前组合标签 `#themeName`，两个面板下都可见）
 - 三张设置卡合并为一张分组卡（对齐手机端 settingGroup/settingRow）；主按钮移入 Hero 大盘底部；版本徽章 v4→v5；面板切换加 `.panel-in` 动画
 - **v5.5.1 补充**：面板显隐**回退为原三 handler 写法**（`editServerBtn` / `clearPinBtn` / `backToStatusBtn` 各改一段 DOM）——「修改服务器」隐藏配对码输入框/保存按钮/状态行并显示「返回」按钮；「清除 PIN」一点即清、随后进入完整设置页。v5.5 引入的 `renderPanel(mode)` 状态机与 `#pinGroup` 包裹层已移除。**保留**：状态副标题配色走 `.hero-sub.ok/.err`（不再内联硬编码天空蓝值）、半透明同色走 `--green-rgb` / `--red-rgb`、CSS 变量映射收口到 `themes.js` 的 `AD_APPLY_THEME(id)`、常驻「外观」主题卡片
 - **v5.5.2 补充**：「清除 PIN」改为「修改 PIN」（`#editPinBtn`，`btn-danger` → `btn-ghost`）——点击进入设置页时**配对码保留原值不清空**，自动聚焦 + 全选便于覆盖输入；两个入口（`#editServerBtn` / `#editPinBtn`）**都会显示「返回」按钮** `#backToStatusBtn`，点「返回」＝放弃本次修改（`pinInput` 还原为已保存值）后回状态页；`showStatus()` 内统一隐藏返回按钮；状态页「坐席手机号」行 `#myPhone` 由 `.value` 改为 `.value.link` 并挂 `onclick` → 等同点「修改 PIN」（三行入口统一复用 handler）；「返回」按钮置于 `#setupPanel` **顶部**（面板开标签之后、设置卡片之前，原在面板最底部）。清除能力随之移除
 - **v5.6.0 补充**：「云中继地址」组重构——**测试**（`btn-ghost`，只测不存、显示耗时与分类原因）+ **保存**（`btn-primary`，唯一写入动作）双按钮；`section-head` 右侧新增**来源徽标** `#serverSource`（手动/自动/默认）；候选服务器收进**输入框内嵌下拉浮层**（`#addrCaretBtn` ▾ 展开 `#addrMenu`，`position:absolute` 覆盖下方内容、**不撑高面板**；点某一项只填入输入框，需再点「保存」才生效，当前生效项带「当前」标记；「从网络获取」并入浮层底部脚注 `#fetchPoolBtn`，脚注显示候选个数与更新时间）——云中继分组高度由约 172px 降至约 70px；打开弹窗**只跑一次探针**（30s TTL 缓存），Hero 与设置页状态行共用结果，探通才继续查 `/api/v1/status`；状态页「云端地址」行显示 `地址 · 来源`。地址读写/格式化/探测全部收口到新文件 `addr.js`（`AD_ADDR`，与挂件、background 共用）
-- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus myPhone myMgrName cloudAddr editServerBtn editPinBtn setupHint serverInput testServerBtn saveServerBtn serverSource serverStatus addrRow addrCaretBtn addrMenu addrMenuList fetchPoolBtn backToStatusBtn pinInput savePinBtn pinStatus mgrNameInput saveMgrNameBtn mgrNameStatus themeCard swatches themeName`
+- **v5.6.1 补充**：状态区由「一个圆点 + 一行字」改为**三行独立清单** `#connCloud` / `#connPc` / `#connPhone`（每行 `conn-dot` + `conn-label` + `conn-val`，行级 class `ok` / `off` / `err` 各自着色）。**颜色语义**：绿 = 正常 · 灰 = 中性（设备离线、云端不通时「未查询」）· 红 = **仅云端故障**。大圆点 `#statusDot` 与大标题 `#statusText` 改为**只反映云端连通性**（`云端未连接` / `云端已连接` / `服务正常`），不再由「有没有设备在线」决定、也不再用写死的「PIN 已就绪」；新增 `.status-dot.unknown` 中性灰态表示探测中；`.hero-sub:empty` 不占行。挂件右键菜单的 PC 状态行同步改为在线/离线都显示
+- **冻结 id**：`statusPanel setupPanel statusDot statusText cloudStatus connCloud connPc connPhone myPhone myMgrName cloudAddr editServerBtn editPinBtn setupHint serverInput testServerBtn saveServerBtn serverSource serverStatus addrRow addrCaretBtn addrMenu addrMenuList fetchPoolBtn backToStatusBtn pinInput savePinBtn pinStatus mgrNameInput saveMgrNameBtn mgrNameStatus themeCard swatches modeToggle themeName refreshBtn`
 
 ### 2.2 auth.html
 
@@ -136,6 +137,7 @@
 - 位置提示去掉 monospace；设置弹窗圆角 16px、标题行「20px 图标底座 + 15/700 + ×」
 - **主题数据收口**：新建 `themes.js`（`AD_THEMES` = 原 EXT_THEMES 搬入）；manifest `js: ["themes.js","content-script.js"]`（顺序敏感）；content-script 改 `const EXT_THEMES = AD_THEMES`；popup/auth 引入 themes.js 同步变暗；storage key `__ad_theme`
 - **v5.5 主题相关**：① `themes.js` 新增 `AD_APPLY_THEME(id)`（CSS 变量映射的唯一权威实现，`theme-init.js` / `auth.js` / `popup.js` 共用）；② popup 底部「外观」卡片可运行时换肤；③ content-script 顶层加 `chrome.storage.onChanged` 监听，弹窗换主题后悬浮挂件实时跟随；④ 半透明同色改用 `--green-rgb` / `--red-rgb`；⑤ **`forest-green` 由墨绿深色改为「森林晨雾」浅色**（`bg #0E1810` 近乎纯黑、观感发闷），五端同步：扩展 `themes.js` / `ThemeManager.kt`（`defaultMode` dark→light）/ `pc-app-go` / `pc-app-Electron` / `dashboard.html`
+- **v6.0 主题两维化（色相 × 明暗）**：v5.x 是「9 套主题各自钉死一个明暗」，色相与亮度压在同一个列表里（亮·暗·暗·暗·暗·暗·亮·暗·暗），切换毫无规律 —— 且「极简白」的 `bg` 实为 `#1A1A1A`（纯暗），名实不符。现拆成两个正交维度：**色相 16 套 × 明暗 2 档（`light` 亮白 / `dark` 暗夜）= 32 种外观**。配色不再手写：由 `pc-app-go/frontend/themes/theme-data.js`（16 套 × 7 档，唯一权威源）转录并取 `light` / `dark` 两端档位，与手机端、PC 端逐字节一致（校验：天空蓝 light 的 10 个基础色与 v5.x 完全相同）。`themes.js` 新增 `AD_THEME_LIST`（色相定序，各端 UI 直接消费）/ `AD_FLAT(id, mode)` / `AD_FLAT_ALL(mode)`（内容脚本扁平缓存）/ `AD_MODE_FROM_ANY`（其他端 7 档 → 2 档折叠：`warm/mist/light → 亮`，其余 → `暗`）；`AD_THEME_VARS(id, mode)`、`AD_APPLY_THEME(id, mode)` 均加 mode 参数，并额外写 `dataset.themeMode`。content-script 里 60+ 处 `t.accent` / `t.gradAccent` 消费点**一行未改**（改为切档时调 `rebuildThemes()` 重建扁平表）。storage 新增 `__ad_theme_mode`（跨端共享）；默认仍是 `sky-blue × light`。顺带修复 `glassmorphism` 的 `bg2`/`bg3` 为 `rgba()` 时派生 CSS 变量全变 `NaN`（弹窗整片白屏）—— `_adParse` 现同时支持 `#RRGGBB` 与 `rgba()`，alpha 参与插值。五端同步：扩展 `themes.js` / `popup.html` / `popup.js` / `content-script.js` / `auth.js` / `theme-init.js`（manifest 6.0.0）、云端 `dashboard.html`、`ui-demo-extension.html`
 - **冻结清单**：content-script id（`__ad_float`、`__ad_dial_label`、`__ad_hangup`、`__ad_manual`、`.__ad_manual_paste`、`.__ad_manual_dial`、`__ad_ctxmenu`、`__ad_ctxmenu_overlay`、`__ad_thememenu`、`__ad_position_tip`、`__ad_settings`、`__ad_settings_overlay`）；storage key（`cloud_api`、`cloud_apis_fetched`、`self_phone`、`pin`、`manager_name`、`__ad_theme`、`__ad_hangup_size`）；拖拽边缘 DRAG_EDGE 0.18、缩放 36–100、`window.__adv2` 防重入；`background.js` 一行不改
 
 ---
@@ -162,7 +164,7 @@
 
 ### 3.3 主题系统
 
-复制扩展 `themes.js` 的 `AD_THEMES`（9 套）+ `_adHexRgb`/`_adBlend`/`AD_THEME_VARS` 进 dashboard，再补天空蓝 dark 变体（共 10 项）。`applyTheme(id)`：映射到 CSS 变量 → `dataset.theme = id` → `localStorage.__ad_theme`（与扩展同一 key）。顶栏调色板图标下拉切换，当前项打勾 + 渐变圆点 swatch。保底方案：至少交付「天空蓝 light + dark」两套 + 日月切换钮。
+复制扩展 `themes.js` 的 `AD_THEMES`（v6.0：16 套 × `light` / `dark` 两档）+ `_adParse` / `_adHexRgb` / `_adBlend` / `AD_THEME_VARS` 进 dashboard。`applyTheme(id, mode)`：映射到 CSS 变量 → `dataset.theme` / `dataset.themeMode` → `localStorage.__ad_theme` + `__ad_theme_mode`（与扩展同一 key）。顶栏调色板图标下拉：**明暗分段开关 + 色相 16 套 4 列网格 + 当前组合标签**（v5.x 是 10 行竖排列表，含历史遗留的 `sky-blue-dark` 特例条目，本次已移除，旧值由 `AD_HAS_THEME` 判定失败自动回退 `sky-blue`）。云端专属语义色 `--orange` / `--purple`（图表配色、幸运红、财运紫）不随色相变化、只随明暗切换（见 `AD_SEMANTIC`），`chartBase()` 仍走 `cssVar()` 读取 CSS 变量。
 
 ### 3.4 测试同步（实现时允许的唯一测试改动）
 

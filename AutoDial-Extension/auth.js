@@ -1,8 +1,9 @@
 // v5.5: 变量映射表收口到 themes.js 的 AD_APPLY_THEME()（原先 popup/theme-init.js 与
 // 本文件各抄了一份，弹窗加运行时切换时还要再抄第三份）
 (function () {
-  chrome.storage.local.get(['__ad_theme'], function (s) {
-    AD_APPLY_THEME(s.__ad_theme || 'sky-blue');
+  // v6.0：与 theme-init.js 同源 —— 色相 + 明暗一起读，缺失项由 themes.js 回落默认值
+  chrome.storage.local.get(['__ad_theme', '__ad_theme_mode'], function (s) {
+    AD_APPLY_THEME(s.__ad_theme, s.__ad_theme_mode);
   });
 })();
 

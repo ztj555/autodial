@@ -8,7 +8,9 @@
 //
 // v5.5: 变量映射表收口到 themes.js 的 AD_APPLY_THEME()，本文件只负责"读偏好并应用"。
 (function () {
-  chrome.storage.local.get(['__ad_theme'], function (s) {
-    AD_APPLY_THEME(s.__ad_theme || 'sky-blue');
+  // v6.0：主题拆成 色相(__ad_theme) × 明暗(__ad_theme_mode) 两个维度，两者一起读出；
+  // 任一为空时 AD_APPLY_THEME 会回落到默认值（sky-blue + light）
+  chrome.storage.local.get(['__ad_theme', '__ad_theme_mode'], function (s) {
+    AD_APPLY_THEME(s.__ad_theme, s.__ad_theme_mode);
   });
 })();
