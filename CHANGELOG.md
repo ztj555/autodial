@@ -1,5 +1,86 @@
 # AutoDial 更新日志
 
+## 2026-09-15（扩展 v6.1.1 · 修复：右键菜单与点击浮窗失效）
+
+### 问题
+v6.1.0 拆分第二期把挂件搬进 `cs-20-widgets.js` 时，浮窗「点击拨号」与「右键菜单」两个回调
+调用了 `AD.showContextMenu` / `AD.refreshActivePhone` —— 加 `AD.` 前缀是对的，但主文件
+**漏做了反向导出**，两个符号在 `window.__ADCS` 上始终是 `undefined`。
+
+表现：右键浮窗/挂断按钮**没有菜单**，点击浮窗**没反应**（挂断按钮点击不受影响，因为它只调
+`chrome.runtime.sendMessage`，不跨模块）。事件回调里的 `TypeError` 是静默的，控制台之外看不到。
+
+### 修复
+`content-script.js` 主块内补 2 行反向导出（函数声明在本块内提升，写在块首即可用）：
+- `AD.showContextMenu = showContextMenu`
+- `AD.refreshActivePhone = refreshActivePhone`
+
+业务逻辑零改动，挂件代码零改动。
+
+### 新增护栏（防止同类问题再发生）
+1. **`verify_links.py`**：静态扫描「被引用但从未被赋值」的 `AD.*` 符号 + 裸函数调用检查。
+   本 bug 在修复前被它精准报出（`cs-20-widgets.js 引用了未定义的 refreshActivePhone, showContextMenu`）。
+2. **探针补事件派发能力**：`cs_probe.js` 的 DOM 桩原先 `addEventListener` 是**空实现**，
+   事件回调从未被执行 —— 这正是本 bug 全绿漏网的原因。现已支持真实派发 `contextmenu` /
+   `pointerdown` / `click`，并断言真实副作用（菜单元素是否建出、是否向客户帧发出取号请求）。
+   修复前 3 项 FAIL（行号精确指向 `cs-20-widgets.js:117/130/207`），修复后 3 项 PASS。
+
+### 验证
+修复前 3 FAIL → 修复后全 PASS；全量回归 addr 56 / theme 101 / panel 173 / demo 103 +
+两套探针全绿；静态链接检查 33 个导出符号无断链；全部内容脚本 `node --check` 通过。
+
+## 2026-09-15（扩展 v6.1.0 · content-script 模块化拆分第一期+第二期 + 切客户号码即时刷新）
+
+### 1. 模块化拆分（业务逻辑零改动）
+把 1879 行的 `content-script.js` 按职责切成多个文件，靠 manifest 的 `content_scripts.js`
+数组顺序加载（MV3 无打包工具，文件之间不能 `import`，共享符号统一挂 `window.__ADCS`）。
+
+**第一期（core + theme）**
+- 🆕 `cs-00-core.js`（126 行）：防重入守卫、`isTopFrame`、`isOwnUiNode`、
+  `getMyPhoneAndNameFromCRM`、矢量图标表、HTML 转义
+- 🆕 `cs-10-theme.js`（170 行）：主题表、`applyTheme` / `applyMode`、Toast、挂件句柄
+
+**第二期（挂件层）**
+- 🆕 `cs-20-widgets.js`（537 行）：浮动按钮、挂断按钮（含左下角拖拽缩放）、手动拨号条、
+  号码刷新与状态反馈（`updatePhone` / `flashFloat` / `restoreFloatLabel`）
+- 跨模块引用显式改写 21 处（`T` / `adIcon` / `escHtml` / `showContextMenu` / `refreshActivePhone` → 加 `AD.` 前缀）
+
+**结果**
+- `content-script.js`：1879 → **1201 行**，只剩「菜单 / 弹窗 / 业务」+「子 iframe 号码扫描」
+- 两个拆分点各加「本地别名」若干行，使下方数十处调用点**一行未改**
+- `manifest.json`：`js` 顺序 = `themes.js → addr.js → cs-00-core.js → cs-10-theme.js → cs-20-widgets.js → content-script.js`
+  ⚠️ 新模块必须排在 `content-script.js` **之前**
+
+**验证**（两期都跑了全套）
+- **逐行重构等价**：cs-20 正文 505 行、主文件 1202 行，与原文件比对**差异均为 0 行**
+  （即每行只发生了「去缩进 + `AD.` 前缀」或「删除 + 插入别名」这两种机械变换）
+- 模板字符串内容比对：37 → 37 个，**多重集完全一致**（去缩进没有吃掉 HTML 模板里的空格）
+- 符号守恒：5 个改写项总数**完全相等**（22 / 15 / 16 / 3 / 3）
+- 探针：`cs_probe.js`（含新增「阶段 2 专项：真实副作用」6 项断言）+ `cs_iframe_probe.js` 全 PASS
+- 回归：addr 56 / theme 101 / panel 173 / demo 103 = **433/433**
+
+### 2. 修复：切换客户后，浮窗号码最多滞后 5 秒才更新
+**症状**：在 CRM 里点另一位客户的标签页后，浮窗上显示的还是上一位客户的号码，
+要等约 5 秒才换过来（旧版体感更快）。
+
+**根因**（两条上报通路同时被堵死）：
+1. 多客户场景下 CRM 是靠改**父文档里 `<iframe>` 的 `opacity` / `z-index`** 来切换显示的，
+   被切出来的那一帧**自身文档没有任何 DOM 变化** → 它的 `MutationObserver` 不触发；
+2. 该帧在「仍处于隐藏态」时完成加载/渲染的那一次 `scan()`，会被 `isFrameActive()`
+   正当拦下（这是 v5.2 为防多客户串号加的守卫，不能放开）。
+
+于是唯一还能上报的路径就只剩 5 秒心跳 —— 这正是「等 5 秒才换过来」的来源。
+
+**修复**：补上缺失的「激活态跃迁」事件源。新增 `isFrameShown()`（`isFrameActive()` 的轻量版，
+只读 `opacity` / `zIndex`，不读 `innerWidth/innerHeight`，因此不触发重排），
+每 300ms 采样一次；仅在**隐藏 → 可见**的那一瞬间真正执行一次 `scan()`。
+空闲时零上报、零网络消息。
+
+- `AutoDial-Extension/content-script.js`（新增 `isFrameShown()` + 激活态监听，+46 行）
+- 实测效果：切客户后 **约 180~230ms** 上报（原来最多 5000ms）
+- 串号守卫未放宽：隐藏帧在任何情况下都不上报（探针有断言）
+- `AutoDial-Extension/manifest.json`（6.0.1 → 6.1.0）
+
 ## 2026-09-15（扩展 v6.0.1 · 修复主题切换「看着没反应」：applyTheme 跨块作用域 ReferenceError）
 
 ### 症状（很容易误判成"主题没做对"）

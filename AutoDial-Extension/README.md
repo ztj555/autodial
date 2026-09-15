@@ -1,6 +1,6 @@
 # AutoDial 浏览器扩展
 
-> MV3 | 最后更新：2026-09-14 | PC 直连优先 → 云端兜底 | 16 套色相 × 亮白 / 暗夜
+> MV3 | 最后更新：2026-09-15 | PC 直连优先 → 云端兜底 | 16 套色相 × 亮白 / 暗夜 | v6.1.1（content-script 模块化拆分第一、二期）
 
 坐席手机号即 PIN，打开 CRM 页面自动检测，无需登录，无需密码。
 
@@ -21,10 +21,20 @@
 | `manifest.json` | MV3 清单，匹配 CRM 域名 |
 | `background.js` | Service Worker：PIN 管理 + 双模路由 + 登记 API |
 | `themes.js` | 主题唯一权威源：`AD_THEMES`（16 套 × light/dark）+ `AD_APPLY_THEME` 等 |
-| `content-script.js` | 全帧注入：TreeWalker 扫号 + 浮动按钮 + 主题 + 右键菜单 + UI |
+| `addr.js` | 云中继地址唯一权威源：`AD_ADDR`（候选池 / 探测 / 列表拉取） |
+| `cs-00-core.js` | ① 核心工具层：`isTopFrame` / `isOwnUiNode` / `getMyPhoneAndNameFromCRM` / 图标表 / `escHtml` |
+| `cs-10-theme.js` | ② 主题层：主题表 + `applyTheme` / `applyMode` + Toast + 挂件句柄 |
+| `cs-20-widgets.js` | ③ 挂件层：浮动按钮 / 挂断按钮（含拖拽缩放）/ 手动拨号条 / 号码刷新与状态反馈 |
+| `content-script.js` | ④ 主文件（v6.1 拆分中）：菜单 / 弹窗 / 业务 + 子 iframe 号码扫描 |
 | `popup.html` + `popup.js` | 弹窗：服务器配置 + PIN 设置 + 状态查询 + 顶栏刷新 |
+| `auth.html` + `auth.js` | 设备授权弹窗（外部脚本规避 MV3 CSP） |
+| `theme-init.js` | 弹窗 / 授权页的主题变量注入 |
 | `icons/` | 扩展图标 (16/48/128) |
 | `AutoDial-API.md` | API 参考文档 |
+
+> **注入顺序有讲究**：`content_scripts.js` 数组 = `themes.js → addr.js → cs-00-core.js → cs-10-theme.js → cs-20-widgets.js → content-script.js`。
+> MV3 没有打包工具，文件之间不能 `import`，共享符号统一挂在 `window.__ADCS` 上，靠数组顺序保证先注册后使用。
+> ⚠️ 加新模块必须排在 `content-script.js` **之前**。
 
 ## 安装
 

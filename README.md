@@ -2,7 +2,7 @@
 
 > 仓库：github.com/ztj555/autodial | 最后更新：2026-08-22 11:10
 >
-> **版本号现状**：本仓库各端独立演进，版本号不统一——云中继 API 报 `4.10`（dashboard 面板标 v6.0）、Chrome 扩展 manifest `5.0.0`、Android `versionName 4.53`、Electron `package.json 3.0.0`（页面内标 v6.x）。本文的 v4.x 叙事指系统整体迭代批次，与单端版本号不一一对应。
+> **版本号现状**：本仓库各端独立演进，版本号不统一——云中继 API 报 `4.10`（dashboard 面板标 v6.0）、Chrome 扩展 manifest `6.1.0`、Android `versionName 4.53`、Electron `package.json 3.0.0`（页面内标 v6.x）。本文的 v4.x 叙事指系统整体迭代批次，与单端版本号不一一对应。
 
 ## 项目概述
 
@@ -91,12 +91,15 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
-│   ├── manifest.json                # MV3 配置（v5.0.0）
+│   ├── manifest.json                # MV3 配置（v6.1.0）
 │   ├── background.js                # Service Worker：PIN/路由/登记
-│   ├── content-script.js            # 全帧注入：扫号/按钮/菜单（主题数据取自 themes.js）
+│   ├── themes.js / addr.js          # 主题权威源 / 云中继地址权威源
+│   ├── cs-00-core.js                # 内容脚本①核心工具（扫号/图标/转义）
+│   ├── cs-10-theme.js               # 内容脚本②主题层（换肤/Toast/挂件句柄）
+│   ├── cs-20-widgets.js             # 内容脚本③挂件层（浮动/挂断按钮、手动拨号条）
+│   ├── content-script.js            # 内容脚本④主文件：菜单/弹窗/业务 + iframe 扫号
 │   ├── popup.html + popup.js        # 弹窗：配置 PIN + 服务器
 │   ├── auth.html + auth.js          # 设备授权弹窗（外部脚本规避 MV3 CSP）
-│   ├── themes.js                    # 主题唯一权威源：AD_THEMES（16 套色相 × light/dark）
 │   ├── AutoDial-API.md + README.md  # API文档 + 使用说明
 │   └── icons/                       # 扩展图标 (16/48/128)
 ├── pc-app-Electron/                 # Electron PC 端

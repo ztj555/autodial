@@ -1,700 +1,56 @@
 /**
- * AutoDial Content Script v4.0
- * 1. 主题系统（参考手机端/PC端16套主题）
- * 2. 拨号悬浮按钮 + 挂断悬浮按钮（均主题化、可拖动）
- * 3. 右键菜单（含 PIN 状态 + 主题切换）
- * 4. 子iframe扫描手机号
+ * AutoDial Content Script v6.1（拆分后主文件）
+ *
+ * 本文件保留：
+ *   1. 顶层页面（isTopFrame）的全部挂件、菜单、弹窗、业务逻辑
+ *   2. 子 iframe 的号码扫描与上报
+ *
+ * 共享符号由前面的模块提供（见 manifest content_scripts.js 加载顺序）：
+ *   cs-00-core.js  —— 守卫 / isTopFrame / isOwnUiNode / getMyPhoneAndNameFromCRM / 图标 / escHtml
+ *   cs-10-theme.js —— 主题表 / 换肤 / Toast / 挂件句柄
  */
 (function () {
   'use strict';
-  if (window.__adv2) return;
-  window.__adv2 = true;
+  if (window.__adv2_main) return;
+  window.__adv2_main = true;
 
-  const isTopFrame = (window === window.top);
-  console.log('[AutoDial v4]', isTopFrame ? '顶层页面' : '子iframe', window.location.href);
+  const AD = window.__ADCS;
+  if (!AD) return;
 
-  // ========== v3: 检测坐席手机号（TreeWalker扫描body前部，<1ms）==========
-  // 融鑫汇CRM手机号是裸StaticText节点，在页面顶部，无class/id
-  // TreeWalker从body顶部向下扫，第一个命中的手机号就是坐席的
-
-  /**
-   * v5.1: 判断某个文本节点是否落在"本插件自己注入的挂件"里。
-   *
-   * 这是那条 [P1]「误判号码可能成为生效 PIN」的真正来源：
-   * 浮窗的号码标签 #__ad_dial_label 展示的是**客户号码**，登记弹窗
-   * autodial-register-overlay 展示的是"客户手机号：xxx"，二者都 append 在顶层
-   * document.body 里。而 detectPin() 的 TreeWalker 扫的正是同一个 body ——
-   * 于是"我们自己写进去的客户号码"会被当成坐席号读回来。
-   *
-   * 所有自建节点的 id 均以 __ad_ 或 autodial- 开头，用 closest 做一次前缀匹配即可。
-   */
-  function isOwnUiNode(node) {
-    var el = node && node.parentElement;
-    if (!el || typeof el.closest !== 'function') return false;
-    try {
-      return !!el.closest('[id^="__ad_"], [id^="autodial-"]');
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /**
-   * 从 CRM 页面同时检测坐席手机号和姓名。
-   * DOM 结构（已确认）：div.user-name = 姓名，div.user-phone = 手机号。
-   * CSS 选择器优先；选择器失效时回退到 TreeWalker 文本扫描。
-   */
-  function getMyPhoneAndNameFromCRM() {
-    // 方式一: CSS 选择器（精确匹配已知 DOM 结构）
-    try {
-      var phoneEl = document.querySelector('.user-phone');
-      var nameEl = document.querySelector('.user-name');
-      if (phoneEl && !isOwnUiNode(phoneEl)) {
-        var phoneText = phoneEl.textContent.trim();
-        var m = phoneText.match(/1[3-9]\d{9}/);
-        if (m) {
-          var name = nameEl && !isOwnUiNode(nameEl) ? nameEl.textContent.trim() : '';
-          // v4.15: precise=true 表示选择器精确命中，可作为自动切换坐席号的依据
-          return { phone: m[0], name: name, precise: true };
-        }
-      }
-    } catch(e) {}
-
-    // 方式二: TreeWalker 扫描（兜底，适配未来 DOM 变化）
-    // v5.1: 跳过本插件自己的挂件，避免浮窗/登记弹窗里的客户号码被误判成坐席号
-    var PHONE_RE = /1[3-9]\d{9}/;
-    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode: function (node) {
-        return isOwnUiNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    var prevText = '';
-    while (w.nextNode()) {
-      var text = w.currentNode.textContent.trim();
-      var m = text.match(PHONE_RE);
-      if (m) {
-        return { phone: m[0], name: prevText, precise: false };
-      }
-      // 记录不含数字、长度2-10的纯文本（可能是姓名）
-      if (text && !/\d/.test(text) && text.length >= 2 && text.length <= 10) {
-        prevText = text;
-      }
-    }
-    return null;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // 主题数据（v5 起统一取自 themes.js 的 AD_THEMES，唯一权威源）
-  // ═══════════════════════════════════════════════════════════════
-  // v6.0：主题 = 色相 × 明暗两个正交维度。EXT_THEMES 是"按当前明暗档摊平"后的扁平表 ——
-  // 脚本里 60+ 处 t.accent / t.gradAccent / t.bg2 的写法因此一行都不用改，
-  // 只在切换色相或明暗档时重建一次即可。
-  let currentMode = AD_NORM_MODE(localStorage.getItem('__ad_theme_mode'));
-  let EXT_THEMES = AD_FLAT_ALL(currentMode);
-  function rebuildThemes() { EXT_THEMES = AD_FLAT_ALL(currentMode); }
-
-  // ── v5 矢量图标（Phosphor 风格 24 viewBox / stroke 1.8，替代功能 emoji） ──
-  const AD_ICON = {
-    phone: '<path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/>',
-    phoneX: '<path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/><path d="M16.5 5.5l5 5M21.5 5.5l-5 5"/>',
-    monitor: '<rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M9 21h6M12 17v4"/>',
-    eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
-    chat: '<path d="M2.5 6.5A1.5 1.5 0 0 1 4 5h16a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 16H9.5L5 19.5V16H4a1.5 1.5 0 0 1-1.5-1.5v-8z"/>',
-    pencil: '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>',
-    palette: '<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2.2-1.2 1.6-2.4-.5-1 .1-2 1.3-2H17a4.4 4.4 0 0 0 4-4.4C21 6.7 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>',
-    keypad: '<rect x="3" y="3" width="4" height="4" rx="1"/><rect x="10" y="3" width="4" height="4" rx="1"/><rect x="17" y="3" width="4" height="4" rx="1"/><rect x="3" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="3" y="17" width="4" height="4" rx="1"/><rect x="10" y="17" width="4" height="4" rx="1"/>',
-    gear: '<circle cx="12" cy="12" r="3.5"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
-    user: '<circle cx="12" cy="8" r="3.6"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/>',
-    bolt: '<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5L13 2z"/>',
-    x: '<path d="M6 6l12 12M18 6L6 18"/>',
-    mapPin: '<path d="M12 21s-7-5.5-7-11a7 7 0 1 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/>',
-    clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a3 3 0 0 1 6 0"/><path d="M9 11h6M9 15h6"/>',
-    cloud: '<path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z"/>',
-    lock: '<rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
-    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
-    sync: '<path d="M20 12a8 8 0 0 1-8 8 8 8 0 0 1-6.7-3.8M4 12a8 8 0 0 1 8-8 8 8 0 0 1 6.7 3.8M20 4v4h-4M4 20v-4h4"/>',
-  };
-  function adIcon(name, size) {
-    var s = size || 16;
-    return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;pointer-events:none;vertical-align:-3px">' + (AD_ICON[name] || '') + '</svg>';
-  }
-
-  // 当前主题 = 色相 + 明暗（默认 sky-blue + light，与手机端 ThemeManager 一致）
-  let currentThemeId = AD_HAS_THEME(localStorage.getItem('__ad_theme'))
-    ? localStorage.getItem('__ad_theme') : AD_THEME_DEFAULT;
-  function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES[AD_THEME_DEFAULT]; }
-
-  // ─── v6.0.1：挂件句柄与菜单工具，统一声明在 IIFE 顶层（块级作用域陷阱修复）───
-  // applyMode/applyTheme 定义在本作用域，却要操作挂在下方 `if (isTopFrame) {` 块里的
-  // 浮窗 / 挂断按钮 / 手动拨号条。此前这些绑定用 let 声明在块内 —— JS 里 let 与
-  // 块内 function 声明都是块级作用域（本文件顶部是 'use strict'，不会走 Annex B 提升），
-  // 顶层函数根本看不到它们，于是 applyTheme 一被调用就抛：
-  //     ReferenceError: floatEl is not defined  @ content-script.js:144
-  // 现统一在此声明，块内只做赋值（不要再写 let，否则会又遮蔽回块内）。
-  let floatEl = null;            // #__ad_float 拨号浮窗
-  let currentPhone = null;       // 当前检测到的客户号码
-  let hangupEl = null;           // #__ad_hangup 挂断按钮
-  let hangupResizeHandle = null; // #__ad_hangup 左下角缩放手柄
-  let manualDialBar = null;      // #__ad_manual 手动拨号条
-  let contextMenu = null;        // #__ad_ctxmenu 自定义右键菜单
-  // 真实实现由块内「自定义右键菜单」段赋值；这里先放空实现，
-  // 保证 applyTheme 在任何时序下调用它都不会抛。
-  let hideContextMenu = function () {};
-
-  // v6.0：切换明暗档。色相不动，只把整张扁平表按新档位重建，再走一遍 applyTheme 的换肤逻辑
-  function applyMode(mode) {
-    const mk = AD_NORM_MODE(mode);
-    if (mk === currentMode) return;
-    currentMode = mk;
-    localStorage.setItem('__ad_theme_mode', mk);
-    try { chrome.storage.local.set({ __ad_theme_mode: mk }); } catch (_) {}
-    rebuildThemes();
-    applyTheme(currentThemeId);
-  }
-
-  function applyTheme(id) {
-    currentThemeId = AD_HAS_THEME(id) ? id : AD_THEME_DEFAULT;
-    localStorage.setItem('__ad_theme', currentThemeId);
-    // v5: 同步给 popup/auth（chrome.storage 跨上下文共享）
-    try { chrome.storage.local.set({ __ad_theme: currentThemeId }); } catch (_) {}
-    const t = T();
-    // 刷新拨号按钮（完整刷新所有主题相关属性）
-    if (floatEl) {
-      floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
-      floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
-      floatEl.style.boxShadow = currentPhone
-        ? `0 6px 20px ${t.accent}59`
-        : `0 4px 14px ${t.accent}1F`;
-      floatEl.style.border = `1px solid ${t.accent}33`;
-    }
-    // 刷新挂断按钮（idle = 卡片底 + 红字，语义"挂断"）
-    if (hangupEl) {
-      hangupEl.style.background = t.bg2;
-      hangupEl.style.color = t.red;
-      hangupEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
-      hangupEl.style.border = `1px solid ${t.red}55`;
-      const label = hangupEl.querySelector('span');
-      if (label) label.style.color = t.red;
-    }
-    // 刷新缩放手柄颜色（红色系，与挂断语义一致）
-    if (hangupResizeHandle) {
-      hangupResizeHandle.style.background = `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`;
-    }
-    // 刷新右键菜单（如果打开的话）
-    hideContextMenu();
-    // 刷新手动拨号条主题
-    if (manualDialBar) {
-      manualDialBar.style.background = t.bg2;
-      manualDialBar.style.border = `1px solid ${t.accent}33`;
-      manualDialBar.style.boxShadow = `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`;
-      const input = manualDialBar.querySelector('input');
-      if (input) {
-        input.style.background = t.bg3;
-        input.style.color = t.text;
-        input.style.border = `1px solid ${t.accent}33`;
-      }
-      manualDialBar.querySelectorAll('button').forEach(btn => {
-        if (btn.classList.contains('__ad_manual_paste')) {
-          btn.style.color = t.text2;
-          btn.style.border = `1px solid ${t.accent}44`;
-          btn.style.background = 'transparent';
-        }
-        if (btn.classList.contains('__ad_manual_dial')) {
-          btn.style.background = t.gradAccent;
-          btn.style.color = '#FFFFFF';
-        }
-      });
-    }
-    // 广播主题变更给子 iframe，刷新"点击拨打"链接颜色
-    if (isTopFrame) {
-      try {
-        document.querySelectorAll('iframe').forEach(iframe => {
-          iframe.contentWindow?.postMessage({ type: '__ad_theme_change', accent: t.accent }, '*');
-        });
-      } catch (_) {}
-    }
-  }
-
-  // ═══════════════════════════════════════════════
-  // 顶层页面：创建浮动拖动按钮
-  // ═══════════════════════════════════════════════
-
-  // v5.4: 「同步登记列表」功能整体移除 —— 插件端不再抓取 CRM 来访列表页
-  // （list_user_visit.html）的分页数据，也不再通过 batchSyncVisits 批量写入云端。
-  // 云端接口保留；当前客户的登记仍走「一键登记」registerVisit()。
-
-  // ─── Toast 提示（R6修复: 从 if(isTopFrame) 块内上提到 IIFE 顶层，顶层与 iframe 共用） ───
-  // 当前调用方：「一键登记」结果提示（见下方 register 流程）。
-  function showToast(text) {
-    var old = document.getElementById('__ad_toast');
-    if (old) old.remove();
-    var t = T();
-    var toast = document.createElement('div');
-    toast.id = '__ad_toast';
-    toast.textContent = text;
-    Object.assign(toast.style, {
-      position: 'fixed',
-      bottom: '40px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      zIndex: '2147483647',
-      background: t.bg2,
-      color: t.text,
-      padding: '10px 22px',
-      borderRadius: '12px',
-      fontSize: '14px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
-      border: '1px solid ' + t.accent + '33',
-      backdropFilter: 'blur(12px)',
-      transition: 'opacity .3s',
-    });
-    document.body.appendChild(toast);
-    setTimeout(function() {
-      toast.style.opacity = '0';
-      setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
-    }, 2500);
-  }
+  // v6.1：以下符号已迁至 cs-00-core.js / cs-10-theme.js，这里只做本地别名，
+  //       让下方数十处调用点一行都不用改。
+  const isTopFrame = AD.isTopFrame;
+  const isOwnUiNode = AD.isOwnUiNode;
+  const getMyPhoneAndNameFromCRM = AD.getMyPhoneAndNameFromCRM;
+  const adIcon = AD.adIcon;
+  const escHtml = AD.escHtml;
+  const T = AD.T;
+  const rebuildThemes = AD.rebuildThemes;
+  const applyTheme = AD.applyTheme;
+  const applyMode = AD.applyMode;
+  const showToast = AD.showToast;
 
   if (isTopFrame) {
-    floatEl = null;
-    currentPhone = null;
+    AD.floatEl = null;
+    AD.currentPhone = null;
 
-    // ═══════════════════════════════════════════════
+    // v6.1：以下挂件层函数已迁至 cs-20-widgets.js，这里只做本地别名，
+    //       让下方数十处调用点一行都不用改。
+    const createFloat = AD.createFloat;
+    const createHangupBtn = AD.createHangupBtn;
+    const createManualDial = AD.createManualDial;
+    const toggleManualDial = AD.toggleManualDial;
+    const updatePhone = AD.updatePhone;
+    const flashFloat = AD.flashFloat;
 
-    function createFloat() {
-      if (document.getElementById('__ad_float')) return;
-      const t = T();
-
-      floatEl = document.createElement('div');
-      floatEl.id = '__ad_float';
-      Object.assign(floatEl.style, {
-        position: 'fixed',
-        right: '20px',
-        top: '370px',
-        zIndex: '2147483647',
-        padding: '10px 18px',
-        fontSize: '13px',
-        fontWeight: '600',
-        color: t.text,
-        background: t.bg2,
-        borderRadius: '999px',
-        boxShadow: `0 4px 14px ${t.accent}1F`,
-        cursor: 'grab',
-        userSelect: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        transition: 'background .2s, box-shadow .2s, transform .15s',
-        whiteSpace: 'nowrap',
-        letterSpacing: '0.5px',
-        border: `1px solid ${t.accent}33`,
-      });
-      floatEl.addEventListener('mouseenter', () => {
-        const c = T();
-        floatEl.style.transform = 'translateY(-1px)';
-        floatEl.style.boxShadow = currentPhone
-          ? `0 8px 24px ${c.accent}66`
-          : `0 6px 18px ${c.accent}26`;
-      });
-      floatEl.addEventListener('mouseleave', () => {
-        const c = T();
-        floatEl.style.transform = '';
-        floatEl.style.boxShadow = currentPhone
-          ? `0 6px 20px ${c.accent}59`
-          : `0 4px 14px ${c.accent}1F`;
-      });
-      floatEl.addEventListener('pointerdown', () => { floatEl.style.transform = 'scale(.97)'; });
-      floatEl.addEventListener('pointerup', () => { floatEl.style.transform = ''; });
-      floatEl.addEventListener('pointercancel', () => { floatEl.style.transform = ''; });
-      // 用 span 包内容（图标 + 文字），避免 textContent 覆盖子元素
-      const dialLabel = document.createElement('span');
-      dialLabel.id = '__ad_dial_label';
-      dialLabel.style.pointerEvents = 'none'; // 不拦截指针事件，让父元素处理
-      dialLabel.style.display = 'inline-flex';
-      dialLabel.style.alignItems = 'center';
-      dialLabel.style.gap = '6px';
-      dialLabel.innerHTML = adIcon('phone', 15) + '<span>等待号码...</span>';
-      floatEl.appendChild(dialLabel);
-
-      // ─── 拖动（仅左右边缘启动，中间区域点击拨号） ────
-      let dragging = false, dragStartX = 0, dragStartY = 0, ox = 0, oy = 0;
-      const DRAG_EDGE = 0.18; // 左右各 18% 为拖动区域
-      floatEl.addEventListener('pointerdown', (e) => {
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        const r = floatEl.getBoundingClientRect();
-        const xRatio = (e.clientX - r.left) / r.width;
-        // 中间区域（号码/表情）：不启动拖动，允许 click 正常触发
-        if (xRatio > DRAG_EDGE && xRatio < (1 - DRAG_EDGE)) return;
-        dragging = true;
-        ox = e.clientX - r.left;
-        oy = e.clientY - r.top;
-        floatEl.setPointerCapture(e.pointerId);
-        floatEl.style.cursor = 'grabbing';
-        e.preventDefault();
-      });
-      floatEl.addEventListener('pointermove', (e) => {
-        if (!dragging) return;
-        floatEl.style.left = (e.clientX - ox) + 'px';
-        floatEl.style.top = (e.clientY - oy) + 'px';
-        floatEl.style.right = 'auto';
-        floatEl.style.bottom = 'auto';
-      });
-      floatEl.addEventListener('pointerup', () => {
-        dragging = false;
-        floatEl.style.cursor = 'grab';
-      });
-
-      // ─── 点击拨号 ────────────────────────────────
-      // v4.23: 防连点——2 秒窗口内只发一次，避免连点触发两次拨号指令
-      // v5.3: 点击瞬间先向"当前激活客户帧"取一次实时号码，再拨——消除 5 秒心跳滞后，
-      //       确保拨的永远是"眼前这个客户"（拿不到才提示未检测到号码）
-      let lastFloatDialClick = 0;
-      floatEl.addEventListener('click', (e) => {
-        // 比较按下和抬起的位置，超过 5px 视为拖动，不触发拨号
-        const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
-        if (dist > 5) return;
-        const now = Date.now();
-        if (now - lastFloatDialClick < 2000) return;
-        refreshActivePhone((phone) => {
-          if (!phone) { flashFloat('未检测到号码', false); return; }
-          lastFloatDialClick = Date.now();
-          // v4.15: 点击立即进入"拨号中"状态（清除旧失败提示），结果回来后刷新
-          flashFloat('拨号中…', undefined);
-          chrome.runtime.sendMessage({ type: 'dial', phone });
-        });
-      });
-
-      // ─── 右键菜单 ────────────────────────────────
-      floatEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showContextMenu(e.clientX, e.clientY);
-      });
-
-      document.body.appendChild(floatEl);
-    }
-
-    // ═══════════════════════════════════════════════
-    // 挂断悬浮按钮（椭圆 + "挂断"文字 + 主题化 + 左下角拖拽缩放）
-    // ═══════════════════════════════════════════════
-    hangupEl = null;
-    hangupResizeHandle = null; // 左下角缩放手柄
-    let hangupSize = parseInt(localStorage.getItem('__ad_hangup_size') || '48', 10);
-    const HANGUP_MIN = 36, HANGUP_MAX = 100;
-
-    function createHangupBtn() {
-      if (document.getElementById('__ad_hangup')) return;
-      const t = T();
-
-      hangupEl = document.createElement('div');
-      hangupEl.id = '__ad_hangup';
-      applyHangupSize(hangupSize);
-
-      Object.assign(hangupEl.style, {
-        position: 'fixed',
-        right: '20px',
-        top: '140px',
-        zIndex: '2147483646',
-        borderRadius: '20px',
-        background: t.bg2,
-        boxShadow: `0 4px 14px ${t.accent}1F`,
-        cursor: 'pointer',
-        userSelect: 'none',
-        display: 'flex',  // 始终显示
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '5px',
-        transition: 'box-shadow .2s, background .2s',
-        color: t.red,
-        fontWeight: '700',
-        letterSpacing: '1px',
-        border: `1px solid ${t.red}55`,
-      });
-      // 用 span 包内容（图标 + 文字），文字单独 span 供 flash 更新
-      const hangupLabel = document.createElement('span');
-      hangupLabel.innerHTML = adIcon('phoneX', 13) + '<span class="__ad_hangup_text">挂断</span>';
-      hangupLabel.style.pointerEvents = 'none';
-      hangupLabel.style.display = 'inline-flex';
-      hangupLabel.style.alignItems = 'center';
-      hangupLabel.style.gap = '5px';
-      hangupEl.appendChild(hangupLabel);
-
-      // ─── 点击挂断 ────────────────────────────────
-      hangupEl.addEventListener('click', (e) => {
-        const dist = Math.hypot(e.clientX - hDragStartX, e.clientY - hDragStartY);
-        if (dist > 5) return;
-        e.stopPropagation();
-        chrome.runtime.sendMessage({ type: 'hangup' }, (resp) => {
-          if (chrome.runtime.lastError) {
-            flashHangup('PC端未运行', false);
-            return;
-          }
-          if (resp && resp.success) {
-            flashHangup('已挂断', true);
-            // 挂断后 2 秒隐藏按钮
-            clearTimeout(window.__ad_hangup_timer);
-            window.__ad_hangup_timer = setTimeout(() => {
-              if (hangupEl) hangupEl.style.display = 'none';
-            }, 2000);
-          }
-          else flashHangup(resp?.error || '挂断失败', false);
-        });
-      });
-
-      // ─── 右键菜单（同拨号按钮） ──────────────────
-      hangupEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showContextMenu(e.clientX, e.clientY);
-      });
-
-      // ─── 拖动（仅左右边缘启动，中间区域点击挂断） ───
-      let hDragging = false, hDragStartX = 0, hDragStartY = 0, hOx = 0, hOy = 0;
-      const HANGUP_DRAG_EDGE = 0.18;
-      hangupEl.addEventListener('pointerdown', (e) => {
-        if (hangupResizeHandle && e.target === hangupResizeHandle) return;
-        hDragStartX = e.clientX;
-        hDragStartY = e.clientY;
-        const r = hangupEl.getBoundingClientRect();
-        const xRatio = (e.clientX - r.left) / r.width;
-        if (xRatio > HANGUP_DRAG_EDGE && xRatio < (1 - HANGUP_DRAG_EDGE)) return;
-        hDragging = true;
-        hOx = e.clientX - r.left;
-        hOy = e.clientY - r.top;
-        hangupEl.setPointerCapture(e.pointerId);
-        e.preventDefault();
-      });
-      hangupEl.addEventListener('pointermove', (e) => {
-        if (!hDragging) return;
-        hangupEl.style.left = (e.clientX - hOx) + 'px';
-        hangupEl.style.top = (e.clientY - hOy) + 'px';
-        hangupEl.style.right = 'auto';
-        hangupEl.style.bottom = 'auto';
-      });
-      hangupEl.addEventListener('pointerup', () => { hDragging = false; });
-
-      // ─── 左下角缩放手柄 ─────────────────────────
-      hangupResizeHandle = document.createElement('div');
-      Object.assign(hangupResizeHandle.style, {
-        position: 'absolute',
-        left: '0px',
-        bottom: '0px',
-        width: '14px',
-        height: '14px',
-        cursor: 'nwse-resize',
-        zIndex: '1',
-        // 用三角形视觉提示（红色系，与挂断语义一致）
-        background: `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`,
-        borderRadius: '0 0 0 4px',
-        opacity: '0.6',
-        transition: 'opacity .15s',
-      });
-      // hover 时手柄更明显
-      hangupResizeHandle.addEventListener('mouseenter', () => {
-        hangupResizeHandle.style.opacity = '1';
-      });
-      hangupResizeHandle.addEventListener('mouseleave', () => {
-        hangupResizeHandle.style.opacity = '0.6';
-      });
-
-      // 缩放拖拽逻辑
-      let resizing = false, resizeStartX = 0, resizeStartSize = 0;
-      hangupResizeHandle.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        resizing = true;
-        resizeStartX = e.clientX;
-        resizeStartSize = hangupSize;
-        hangupResizeHandle.setPointerCapture(e.pointerId);
-      });
-      hangupResizeHandle.addEventListener('pointermove', (e) => {
-        if (!resizing) return;
-        const dx = resizeStartX - e.clientX;
-        const newSize = Math.min(HANGUP_MAX, Math.max(HANGUP_MIN, resizeStartSize + dx));
-        if (newSize !== hangupSize) {
-          hangupSize = newSize;
-          localStorage.setItem('__ad_hangup_size', hangupSize);
-          applyHangupSize(hangupSize);
-        }
-      });
-      hangupResizeHandle.addEventListener('pointerup', () => { resizing = false; });
-
-      hangupEl.appendChild(hangupResizeHandle);
-      document.body.appendChild(hangupEl);
-    }
-
-    function applyHangupSize(size) {
-      if (!hangupEl) return;
-      // 椭圆形：宽 = size * 2.0，高 = size * 0.72（扁椭圆，上下不宽）
-      const w = Math.round(size * 2.0);
-      const h = Math.round(size * 0.72);
-      hangupEl.style.width = w + 'px';
-      hangupEl.style.height = h + 'px';
-      hangupEl.style.fontSize = Math.round(h * 0.45) + 'px';
-      hangupEl.style.borderRadius = Math.round(h * 0.45) + 'px';
-    }
-
-    function flashHangup(text, ok) {
-      if (!hangupEl) return;
-      const t = T();
-      const h = Math.round(hangupSize * 0.72);
-      const label = hangupEl.querySelector('.__ad_hangup_text');
-      if (label) label.textContent = text;
-      hangupEl.style.fontSize = Math.round(h * 0.38) + 'px';
-      hangupEl.style.background = t.gradRed; // 挂断按钮点击后始终显示红色
-      hangupEl.style.color = '#FFFFFF';
-      hangupEl.style.border = '1px solid transparent';
-      setTimeout(() => {
-        if (label) label.textContent = '挂断';
-        hangupEl.style.fontSize = Math.round(h * 0.45) + 'px';
-        hangupEl.style.background = t.bg2; // 恢复主题卡片色
-        hangupEl.style.color = t.red;
-        hangupEl.style.border = `1px solid ${t.red}55`;
-      }, 1800);
-    }
-
-    // ═══════════════════════════════════════════════
-    // 手动拨号悬浮条（独立于自动检测按钮，隐藏式）
-    // 输入框 + 粘贴按钮 + 拨号按钮
-    // ═══════════════════════════════════════════════
-    manualDialBar = null;
-
-    function createManualDial() {
-      if (document.getElementById('__ad_manual')) return;
-      const t = T();
-
-      manualDialBar = document.createElement('div');
-      manualDialBar.id = '__ad_manual';
-      Object.assign(manualDialBar.style, {
-        position: 'fixed',
-        right: '20px',
-        bottom: '80px',
-        zIndex: '2147483645',
-        display: 'none',  // 默认隐藏，右键菜单切换
-        alignItems: 'center',
-        gap: '8px',
-        padding: '8px',
-        background: t.bg2,
-        borderRadius: '14px',
-        boxShadow: `0 6px 24px ${t.accent}2E, 0 0 0 1px ${t.accent}1A`,
-        border: `1px solid ${t.accent}33`,
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        backdropFilter: 'blur(16px)',
-        transition: 'opacity .18s ease, transform .18s ease',
-      });
-
-      // ── 输入框 ──
-      const input = document.createElement('input');
-      input.type = 'tel';  // 移动端弹出数字键盘
-      input.placeholder = '输入号码';
-      input.autocomplete = 'off';
-      Object.assign(input.style, {
-        width: '140px',
-        height: '34px',
-        padding: '0 10px',
-        fontSize: '14px',
-        fontWeight: '500',
-        letterSpacing: '1px',
-        color: t.text,
-        background: t.bg3,
-        border: `1px solid ${t.accent}33`,
-        borderRadius: '10px',
-        outline: 'none',
-        textAlign: 'center',
-        transition: 'border-color .15s, box-shadow .15s',
-      });
-      input.addEventListener('focus', () => {
-        const c = T();
-        input.style.borderColor = c.accent;
-        input.style.boxShadow = `0 0 0 3px ${c.accent}26`;
-      });
-      input.addEventListener('blur', () => {
-        input.style.borderColor = T().accent + '33';
-        input.style.boxShadow = 'none';
-      });
-      // 回车直接拨号
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') manualDial();
-      });
-      manualDialBar.appendChild(input);
-
-      // ── 清空按钮 ──
-      const pasteBtn = document.createElement('button');
-      pasteBtn.className = '__ad_manual_paste';
-      pasteBtn.textContent = '清空';
-      Object.assign(pasteBtn.style, {
-        height: '34px',
-        padding: '0 12px',
-        fontSize: '13px',
-        fontWeight: '600',
-        color: t.text2,
-        background: 'transparent',
-        border: `1px solid ${t.accent}44`,
-        borderRadius: '10px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        transition: 'opacity .15s, background .15s',
-      });
-      pasteBtn.addEventListener('click', () => {
-        input.value = '';
-        input.focus();
-      });
-      pasteBtn.addEventListener('mouseenter', () => { pasteBtn.style.opacity = '0.8'; });
-      pasteBtn.addEventListener('mouseleave', () => { pasteBtn.style.opacity = '1'; });
-      manualDialBar.appendChild(pasteBtn);
-
-      // ── 拨号按钮 ──
-      const dialBtn = document.createElement('button');
-      dialBtn.className = '__ad_manual_dial';
-      dialBtn.textContent = '拨号';
-      Object.assign(dialBtn.style, {
-        height: '34px',
-        padding: '0 16px',
-        fontSize: '13px',
-        fontWeight: '700',
-        color: '#FFFFFF',
-        background: t.gradAccent,
-        border: 'none',
-        borderRadius: '10px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        transition: 'opacity .15s',
-      });
-      dialBtn.addEventListener('click', manualDial);
-      dialBtn.addEventListener('mouseenter', () => { dialBtn.style.opacity = '0.85'; });
-      dialBtn.addEventListener('mouseleave', () => { dialBtn.style.opacity = '1'; });
-      manualDialBar.appendChild(dialBtn);
-
-      document.body.appendChild(manualDialBar);
-    }
-
-    function manualDial() {
-      if (!manualDialBar) return;
-      const input = manualDialBar.querySelector('input');
-      const number = (input?.value || '').trim();
-      if (!number) return;
-      chrome.runtime.sendMessage({ type: 'dial', phone: number });
-    }
-
-    function toggleManualDial() {
-      if (!manualDialBar) return;
-      const showing = manualDialBar.style.display !== 'none';
-      if (showing) {
-        manualDialBar.style.display = 'none';
-      } else {
-        manualDialBar.style.display = 'flex';
-        manualDialBar.style.opacity = '0';
-        manualDialBar.style.transform = 'translateY(6px)';
-        requestAnimationFrame(() => {
-          manualDialBar.style.opacity = '1';
-          manualDialBar.style.transform = 'translateY(0)';
-        });
-      }
-    }
+    // v6.1.1: 反向导出 —— 本文件内定义、但 cs-20-widgets.js 的挂件事件需要调用的符号。
+    // 挂件层在 manifest 里排在本文件之前，它加载时还看不到这两个函数，
+    // 所以只能由这里主动挂到 AD 上（函数声明在本块内提升，写在块首即可用）。
+    AD.showContextMenu = showContextMenu;         // 定义于本块内（浮窗/挂断的右键菜单）
+    AD.refreshActivePhone = refreshActivePhone;   // 定义于本块内（点击浮窗取实时号码）
 
     // ─── 自定义右键菜单 ──────────────────────────────
-    contextMenu = null;
+    AD.contextMenu = null;
     let _ctxMousedownHandler = null;
 
     // v5.3: 用最新号码刷新已弹出的菜单文案（号码实时查询回来后调用）
@@ -706,7 +62,7 @@
         const span = row && row.querySelector('span');
         if (span) span.textContent = text;
       };
-      const phone = currentPhone;
+      const phone = AD.currentPhone;
       setLabel('dial', phone ? '拨打 ' + phone : '拨号（未检测号码）');
       setLabel('sms', phone ? '发短信 ' + phone : '发短信（未检测号码）');
       const custName = window.__adCustomerName || '';
@@ -715,7 +71,7 @@
     }
 
     function showContextMenu(x, y) {
-      hideContextMenu();
+      AD.hideContextMenu();
       const t = T();
 
       // 全屏透明遮罩层：负责捕获菜单外的所有点击
@@ -730,18 +86,18 @@
       overlay.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        hideContextMenu();
+        AD.hideContextMenu();
       });
       overlay.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        hideContextMenu();
+        AD.hideContextMenu();
       });
       document.body.appendChild(overlay);
 
-      contextMenu = document.createElement('div');
-      contextMenu.id = '__ad_ctxmenu';
-      Object.assign(contextMenu.style, {
+      AD.contextMenu = document.createElement('div');
+      AD.contextMenu.id = '__ad_ctxmenu';
+      Object.assign(AD.contextMenu.style, {
         position: 'fixed',
         left: x + 'px',
         top: y + 'px',
@@ -762,13 +118,13 @@
         { icon: 'monitor', label: '打开电脑端主界面', action: openDesktopApp },
         { icon: 'eye', label: '显示/隐藏悬浮窗', action: toggleFloatbar },
         { type: 'separator' },
-        { icon: 'phone', key: 'dial', label: currentPhone ? '拨打 ' + currentPhone : '拨号（未检测号码）', action: () => {
-          if (!currentPhone) { flashFloat('未检测到号码', false); return; }
-          chrome.runtime.sendMessage({ type: 'dial', phone: currentPhone });
+        { icon: 'phone', key: 'dial', label: AD.currentPhone ? '拨打 ' + AD.currentPhone : '拨号（未检测号码）', action: () => {
+          if (!AD.currentPhone) { flashFloat('未检测到号码', false); return; }
+          chrome.runtime.sendMessage({ type: 'dial', phone: AD.currentPhone });
         }},
-        { icon: 'chat', key: 'sms', label: currentPhone ? '发短信 ' + currentPhone : '发短信（未检测号码）', action: () => {
-          if (!currentPhone) { flashFloat('未检测到号码', false); return; }
-          sendSms(currentPhone);
+        { icon: 'chat', key: 'sms', label: AD.currentPhone ? '发短信 ' + AD.currentPhone : '发短信（未检测号码）', action: () => {
+          if (!AD.currentPhone) { flashFloat('未检测到号码', false); return; }
+          sendSms(AD.currentPhone);
         }},
         { icon: 'pencil', key: 'register', label: (function() {
           var custName = window.__adCustomerName || '';
@@ -776,7 +132,7 @@
           return custPhone && custName ? '一键登记 ' + custName + ' ' + custPhone : '一键登记（未检测客户）';
         })(), action: () => {
           var custName = window.__adCustomerName || '';
-          var custPhone = window.__adPhone || currentPhone || '';
+          var custPhone = window.__adPhone || AD.currentPhone || '';
           if (!custPhone || !custName) { flashFloat('未检测到客户信息', false); return; }
           showRegisterConfirm(custName, custPhone);
         }},
@@ -793,7 +149,7 @@
         if (item.type === 'separator') {
           const sep = document.createElement('div');
           Object.assign(sep.style, { height: '1px', background: t.accent + '22', margin: '4px 12px' });
-          contextMenu.appendChild(sep);
+          AD.contextMenu.appendChild(sep);
           return;
         }
         if (item.type === 'account') {
@@ -804,7 +160,7 @@
             whiteSpace: 'nowrap', fontSize: '12px',
           });
           row.innerHTML = adIcon('user', 14) + '<span>加载中...</span>';
-          contextMenu.appendChild(row);
+          AD.contextMenu.appendChild(row);
           // PIN 模式：显示自动检测的坐席号 + PC 状态
           chrome.storage.local.get(['self_phone', 'pin'], (s) => {
             const phone = s.pin || s.self_phone;
@@ -829,7 +185,7 @@
               row.style.cursor = 'pointer';
               row.addEventListener('mouseenter', () => { row.style.background = t.accent + '18'; });
               row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
-              row.addEventListener('click', (e) => { e.stopPropagation(); hideContextMenu(); detectPin(); });
+              row.addEventListener('click', (e) => { e.stopPropagation(); AD.hideContextMenu(); detectPin(); });
             }
           });
           return;
@@ -856,20 +212,20 @@
         row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
         row.addEventListener('click', (e) => {
           e.stopPropagation();
-          hideContextMenu();
+          AD.hideContextMenu();
           item.action();
         });
-        contextMenu.appendChild(row);
+        AD.contextMenu.appendChild(row);
       });
 
-      document.body.appendChild(contextMenu);
+      document.body.appendChild(AD.contextMenu);
 
       requestAnimationFrame(() => {
-        const rect = contextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) contextMenu.style.left = (window.innerWidth - rect.width - 8) + 'px';
-        if (rect.bottom > window.innerHeight) contextMenu.style.top = (window.innerHeight - rect.height - 8) + 'px';
-        if (rect.left < 0) contextMenu.style.left = '8px';
-        if (rect.top < 0) contextMenu.style.top = '8px';
+        const rect = AD.contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) AD.contextMenu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+        if (rect.bottom > window.innerHeight) AD.contextMenu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+        if (rect.left < 0) AD.contextMenu.style.left = '8px';
+        if (rect.top < 0) AD.contextMenu.style.top = '8px';
       });
 
       // v5.3: 右键即刷新——弹出菜单的同时向"当前激活客户帧"取最新号码，
@@ -879,26 +235,26 @@
       _ctxMousedownHandler = (e) => {
         const menu = document.getElementById('__ad_ctxmenu');
         if (menu && !menu.contains(e.target)) {
-          hideContextMenu();
+          AD.hideContextMenu();
         }
       };
       // 用 setTimeout 延迟一帧注册，避免与当前右键事件冲突
       setTimeout(() => {
         document.addEventListener('mousedown', _ctxMousedownHandler, true);
       }, 0);
-      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); }, { once: true });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') AD.hideContextMenu(); }, { once: true });
     }
 
-    // v6.0.1: 实体由 IIFE 顶层的 `let hideContextMenu` 持有，这里只赋值
+    // v6.1: 实体由 cs-10-theme.js 的共享命名空间持有（AD.hideContextMenu），这里只赋值
     //（原本是块内 function 声明，顶层 applyTheme 看不到，见文件顶部说明）。
-    hideContextMenu = function () {
+    AD.hideContextMenu = function () {
       // 移除遮罩层
       const overlay = document.getElementById('__ad_ctxmenu_overlay');
       if (overlay) overlay.remove();
       // 移除菜单
       const el = document.getElementById('__ad_ctxmenu');
       if (el) el.remove();
-      contextMenu = null;
+      AD.contextMenu = null;
     };
 
     // ─── 主题选择子菜单 ──────────────────────────────
@@ -942,7 +298,7 @@
       const modeRow = document.createElement('div');
       Object.assign(modeRow.style, { display: 'flex', gap: '6px', marginBottom: '10px' });
       AD_THEME_MODES.forEach((mk) => {
-        const on = mk === currentMode;
+        const on = mk === AD.currentMode;
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = AD_THEME_MODE_LABEL[mk];
@@ -975,9 +331,9 @@
         gap: '8px', justifyItems: 'center',
       });
       AD_THEME_LIST.forEach((id) => {
-        const theme = EXT_THEMES[id];
+        const theme = AD.EXT_THEMES[id];
         if (!theme) return;
-        const isActive = id === currentThemeId;
+        const isActive = id === AD.currentThemeId;
         const swatch = document.createElement('span');
         swatch.title = theme.name;
         Object.assign(swatch.style, {
@@ -1006,8 +362,8 @@
       Object.assign(curRow.style, {
         marginTop: '10px', textAlign: 'center', fontSize: '11px', color: t.text2,
       });
-      curRow.textContent = (EXT_THEMES[currentThemeId] ? EXT_THEMES[currentThemeId].name : '') +
-                           ' \u00B7 ' + AD_THEME_MODE_LABEL[currentMode];
+      curRow.textContent = (AD.EXT_THEMES[AD.currentThemeId] ? AD.EXT_THEMES[AD.currentThemeId].name : '') +
+                           ' \u00B7 ' + AD_THEME_MODE_LABEL[AD.currentMode];
       menu.appendChild(curRow);
 
       // 关闭按钮
@@ -1351,7 +707,7 @@
     //
     // 改为「动作驱动的即时查询」：顶层浮窗左击/右键时广播一次询问，只有 isFrameActive()
     // 为真的那一帧（= 眼前这个客户）会应答自己号码，因此拿到的永远是最新值，既无需等心跳，
-    // 也不会被隐藏的旧客户帧串号。超时（300ms 无应答）时沿用现有 currentPhone，退回旧行为。
+    // 也不会被隐藏的旧客户帧串号。超时（300ms 无应答）时沿用现有 AD.currentPhone，退回旧行为。
     var _adAskSeq = 0;
     function broadcastToFrames(msg) {
       var frames = document.querySelectorAll('iframe');
@@ -1367,8 +723,8 @@
         settled = true;
         clearTimeout(timer);
         window.removeEventListener('message', onReply);
-        if (got && phone !== currentPhone) updatePhone(phone);
-        if (typeof cb === 'function') cb(currentPhone);
+        if (got && phone !== AD.currentPhone) updatePhone(phone);
+        if (typeof cb === 'function') cb(AD.currentPhone);
       }
       function onReply(e) {
         if (!e.data || e.data.type !== '__ad_phone_reply' || e.data.reqId !== reqId) return;
@@ -1379,83 +735,7 @@
       broadcastToFrames({ type: '__ad_ask_phone', reqId: reqId });
     }
 
-    function updatePhone(phone) {
-      currentPhone = phone || null;
-      window.__adPhone = currentPhone;
-      // v4.15: 记录最近一次收到号码的时间，供"残留号码保鲜检查"使用
-      if (currentPhone) window.__adLastPhoneAt = Date.now();
-      // v4.15: 号码清空时同步清除残留的客户姓名，防止"张三 + 李四的号码"错配登记
-      if (!currentPhone) window.__adCustomerName = '';
-      if (!floatEl) return;
-      const t = T();
-      const label = document.getElementById('__ad_dial_label');
-      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
-      if (currentPhone) {
-        floatEl.style.background = t.gradAccent;
-        floatEl.style.color = t.textOnAccent || t.text;
-        floatEl.style.boxShadow = `0 6px 20px ${t.accent}59`;
-      } else {
-        floatEl.style.background = t.bg2;
-        floatEl.style.color = t.text;
-        floatEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
-      }
-      // v4.15: 检测到新号码时恢复挂断按钮——此前挂断成功一次后永久消失，直到刷新页面
-      const hu = document.getElementById('__ad_hangup');
-      if (hu && hu.style.display === 'none') hu.style.display = 'flex';
-    }
-
-    function flashFloat(text, ok) {
-      if (!floatEl) return;
-      const t = T();
-      const label = document.getElementById('__ad_dial_label');
-      // v4.15: ok=undefined 表示"进行中"中性态；失败态不再 1 秒消失——
-      // 业务员正看客户资料很容易错过红闪，误以为已拨出（ customer 永远等不到电话）
-      if (label) label.innerHTML = adIcon('phone', 15) + '<span>' + (ok === false ? '✗ ' : (ok === true ? '✓ ' : '')) + escHtml(text) + '</span>';
-      if (ok === true) {
-        floatEl.style.background = t.gradGreen;
-        floatEl.style.color = '#FFFFFF';
-        floatEl.style.boxShadow = `0 6px 20px ${t.green}55`;
-      } else if (ok === false) {
-        floatEl.style.background = t.gradRed;
-        floatEl.style.color = '#FFFFFF';
-        floatEl.style.boxShadow = `0 6px 20px ${t.red}55`;
-      } else {
-        floatEl.style.background = t.bg2;
-        floatEl.style.color = t.text;
-        floatEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
-      }
-      // 清理旧定时器，防止闪烁冲突
-      clearTimeout(window.__ad_flash_timer);
-      const token = (window.__ad_flash_seq = (window.__ad_flash_seq || 0) + 1);
-      if (ok === true) {
-        // 成功 2.5 秒恢复
-        window.__ad_flash_timer = setTimeout(() => {
-          if (token === window.__ad_flash_seq) restoreFloatLabel(t);
-        }, 2500);
-      } else if (ok === undefined) {
-        // 中性态 10 秒兜底恢复（结果一直没回来时）
-        window.__ad_flash_timer = setTimeout(() => {
-          if (token === window.__ad_flash_seq) restoreFloatLabel(t);
-        }, 10000);
-      }
-      // 失败态（ok===false）保持到下次操作或号码变化，由 updatePhone/下次 flashFloat 清除
-    }
-
-    function restoreFloatLabel(t) {
-      const lb = document.getElementById('__ad_dial_label');
-      if (lb) lb.innerHTML = adIcon('phone', 15) + '<span>' + (currentPhone ? escHtml(currentPhone) : '等待号码...') + '</span>';
-      floatEl.style.background = currentPhone ? t.gradAccent : t.bg2;
-      floatEl.style.color = currentPhone ? (t.textOnAccent || t.text) : t.text;
-      floatEl.style.boxShadow = currentPhone
-        ? `0 6px 20px ${t.accent}59`
-        : `0 4px 14px ${t.accent}1F`;
-    }
-
-    // ─── HTML 转义 ──────────────────────────────────
-    function escHtml(s) {
-      // v4.23 (E-11): 补引号转义——输出若落在 HTML 属性内（如 title/value）不再可注入
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
+    // v6.1: updatePhone / flashFloat / restoreFloatLabel 已迁至 cs-20-widgets.js
 
     // ─── 一键登记确认弹窗 ────────────────────────────
     function showRegisterConfirm(name, phone) {
@@ -1631,7 +911,7 @@
     });
 
     // v5.5: 跟随「扩展弹窗 / 其他端」的主题切换实时换肤。
-    // 此前 currentThemeId 只在脚本注入时从 localStorage 读一次 —— 在弹窗里换了主题，
+    // 此前 AD.currentThemeId 只在脚本注入时从 localStorage 读一次 —— 在弹窗里换了主题，
     // 已打开的 CRM 页面悬浮挂件不跟随，得刷新页面才生效。
     // chrome.storage 是跨上下文共享的，弹窗只需写入 __ad_theme 即可推到所有 CRM 标签页。
     try {
@@ -1639,15 +919,15 @@
         if (area !== 'local') return;
         // v6.0：明暗档是独立维度，任一端（弹窗/其他标签页）改了都要重建扁平表
         const mv = changes.__ad_theme_mode && changes.__ad_theme_mode.newValue;
-        if (mv && AD_NORM_MODE(mv) !== currentMode) {
-          currentMode = AD_NORM_MODE(mv);
-          localStorage.setItem('__ad_theme_mode', currentMode);
+        if (mv && AD_NORM_MODE(mv) !== AD.currentMode) {
+          AD.currentMode = AD_NORM_MODE(mv);
+          localStorage.setItem('__ad_theme_mode', AD.currentMode);
           rebuildThemes();
-          applyTheme(currentThemeId);
+          applyTheme(AD.currentThemeId);
           return;
         }
         const nv = changes.__ad_theme && changes.__ad_theme.newValue;
-        if (nv && nv !== currentThemeId && EXT_THEMES[nv]) applyTheme(nv);
+        if (nv && nv !== AD.currentThemeId && AD.EXT_THEMES[nv]) applyTheme(nv);
       });
     } catch (_) {}
 
@@ -1662,8 +942,8 @@
     // 15 秒（页面已切换/iframe被移除）→ 清空残留号码，防止误拨上一位客户
     window.__adLastPhoneAt = 0;
     setInterval(() => {
-      if (currentPhone && Date.now() - (window.__adLastPhoneAt || 0) > 15000) {
-        console.log('[AutoDial v4] 页面已离开详情页，清除残留号码:', currentPhone);
+      if (AD.currentPhone && Date.now() - (window.__adLastPhoneAt || 0) > 15000) {
+        console.log('[AutoDial v4] 页面已离开详情页，清除残留号码:', AD.currentPhone);
         updatePhone(null);
       }
     }, 5000);
@@ -1703,6 +983,32 @@
       var w = window.innerWidth || document.documentElement.clientWidth || 0;
       var h = window.innerHeight || document.documentElement.clientHeight || 0;
       if (!w || !h) return false;
+      var win = window, depth = 0;
+      while (win && win.frameElement && depth++ < 5) {
+        var cs = win.getComputedStyle(win.frameElement);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        if (parseFloat(cs.opacity) === 0) return false;
+        var z = parseInt(cs.zIndex, 10);
+        if (!isNaN(z) && z < 0) return false;
+        if (win.parent === win) break;
+        win = win.parent;
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // v6.1: isFrameActive() 的「轻量版」——只判可见性，不读 innerWidth/innerHeight。
+  //
+  // 供 300ms 级别的「激活态轮询」使用（见文件末尾）。区别只在最后那两项视口尺寸检查：
+  //   · getComputedStyle().opacity / zIndex 是纯样式读取，不触发重排；
+  //   · window.innerWidth / innerHeight 会强制一次布局（layout flush），
+  //     放进高频轮询里会给 CRM 页面带来无谓的重排。
+  // 因此高频轮询用本函数做「是否被切到前台」的判定，真正扫描前再走完整的 isFrameActive()。
+  function isFrameShown() {
+    try {
+      if (document.visibilityState === 'hidden') return false;
       var win = window, depth = 0;
       while (win && win.frameElement && depth++ < 5) {
         var cs = win.getComputedStyle(win.frameElement);
@@ -1863,6 +1169,28 @@
   // v4.15: 每 5 秒心跳一次——静态详情页也要持续上报号码；心跳停止（页面切换/iframe
   // 被移除）时顶层会在 15 秒后清除残留号码
   setInterval(scan, 5000);
+
+  // v6.1: 切客户「即时刷新」——补上缺失的「激活态跃迁」事件源。
+  //
+  // 现象：切到另一位客户后，浮窗上的号码最多滞后 5 秒才更新（旧版体感更快）。
+  //
+  // 根因：多客户场景下，CRM 是靠改**父文档里 <iframe> 的 opacity/z-index** 来切换显示的
+  //（见上方 isFrameActive 注释）。于是被切出来的那一帧自身文档**没有任何 DOM 变化**，
+  // 它的 MutationObserver 不会触发；而它在「还处于隐藏态」时完成加载/渲染的那一次
+  // scan()（L1628/L1631）又会被 isFrameActive() 正当拦下（防串号）。
+  // 两条路都被堵住，就只剩 5 秒心跳这一条 —— 也就是你看到的「等 5 秒才换过来」。
+  //
+  // 解法：轮询「我是不是被切到前台了」。每 300ms 只调一次 isFrameShown()
+  //（纯样式读取、不重排、不做 TreeWalker），只在【隐藏 → 可见】那一瞬间真正扫描一次。
+  // 空闲时零上报、零网络消息，代价可忽略。
+  var _adWasShown = isFrameShown();
+  setInterval(function () {
+    var shown = isFrameShown();
+    if (shown && !_adWasShown) {
+      try { scan(); } catch (e) { console.warn('[AutoDial] 切客户即时刷新失败:', e); }
+    }
+    _adWasShown = shown;
+  }, 300);
 
   const obs = new MutationObserver(() => {
     clearTimeout(scan._timer);
