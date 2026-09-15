@@ -123,6 +123,23 @@
     ? localStorage.getItem('__ad_theme') : AD_THEME_DEFAULT;
   function T() { return EXT_THEMES[currentThemeId] || EXT_THEMES[AD_THEME_DEFAULT]; }
 
+  // ─── v6.0.1：挂件句柄与菜单工具，统一声明在 IIFE 顶层（块级作用域陷阱修复）───
+  // applyMode/applyTheme 定义在本作用域，却要操作挂在下方 `if (isTopFrame) {` 块里的
+  // 浮窗 / 挂断按钮 / 手动拨号条。此前这些绑定用 let 声明在块内 —— JS 里 let 与
+  // 块内 function 声明都是块级作用域（本文件顶部是 'use strict'，不会走 Annex B 提升），
+  // 顶层函数根本看不到它们，于是 applyTheme 一被调用就抛：
+  //     ReferenceError: floatEl is not defined  @ content-script.js:144
+  // 现统一在此声明，块内只做赋值（不要再写 let，否则会又遮蔽回块内）。
+  let floatEl = null;            // #__ad_float 拨号浮窗
+  let currentPhone = null;       // 当前检测到的客户号码
+  let hangupEl = null;           // #__ad_hangup 挂断按钮
+  let hangupResizeHandle = null; // #__ad_hangup 左下角缩放手柄
+  let manualDialBar = null;      // #__ad_manual 手动拨号条
+  let contextMenu = null;        // #__ad_ctxmenu 自定义右键菜单
+  // 真实实现由块内「自定义右键菜单」段赋值；这里先放空实现，
+  // 保证 applyTheme 在任何时序下调用它都不会抛。
+  let hideContextMenu = function () {};
+
   // v6.0：切换明暗档。色相不动，只把整张扁平表按新档位重建，再走一遍 applyTheme 的换肤逻辑
   function applyMode(mode) {
     const mk = AD_NORM_MODE(mode);
@@ -239,8 +256,8 @@
   }
 
   if (isTopFrame) {
-    let floatEl = null;
-    let currentPhone = null;
+    floatEl = null;
+    currentPhone = null;
 
     // ═══════════════════════════════════════════════
 
@@ -361,8 +378,8 @@
     // ═══════════════════════════════════════════════
     // 挂断悬浮按钮（椭圆 + "挂断"文字 + 主题化 + 左下角拖拽缩放）
     // ═══════════════════════════════════════════════
-    let hangupEl = null;
-    let hangupResizeHandle = null; // 左下角缩放手柄
+    hangupEl = null;
+    hangupResizeHandle = null; // 左下角缩放手柄
     let hangupSize = parseInt(localStorage.getItem('__ad_hangup_size') || '48', 10);
     const HANGUP_MIN = 36, HANGUP_MAX = 100;
 
@@ -541,7 +558,7 @@
     // 手动拨号悬浮条（独立于自动检测按钮，隐藏式）
     // 输入框 + 粘贴按钮 + 拨号按钮
     // ═══════════════════════════════════════════════
-    let manualDialBar = null;
+    manualDialBar = null;
 
     function createManualDial() {
       if (document.getElementById('__ad_manual')) return;
@@ -677,7 +694,7 @@
     }
 
     // ─── 自定义右键菜单 ──────────────────────────────
-    let contextMenu = null;
+    contextMenu = null;
     let _ctxMousedownHandler = null;
 
     // v5.3: 用最新号码刷新已弹出的菜单文案（号码实时查询回来后调用）
@@ -872,7 +889,9 @@
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); }, { once: true });
     }
 
-    function hideContextMenu() {
+    // v6.0.1: 实体由 IIFE 顶层的 `let hideContextMenu` 持有，这里只赋值
+    //（原本是块内 function 声明，顶层 applyTheme 看不到，见文件顶部说明）。
+    hideContextMenu = function () {
       // 移除遮罩层
       const overlay = document.getElementById('__ad_ctxmenu_overlay');
       if (overlay) overlay.remove();
@@ -880,7 +899,7 @@
       const el = document.getElementById('__ad_ctxmenu');
       if (el) el.remove();
       contextMenu = null;
-    }
+    };
 
     // ─── 主题选择子菜单 ──────────────────────────────
     function showThemeMenu() {

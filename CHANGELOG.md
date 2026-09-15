@@ -1,5 +1,47 @@
 # AutoDial 更新日志
 
+## 2026-09-15（扩展 v6.0.1 · 修复主题切换「看着没反应」：applyTheme 跨块作用域 ReferenceError）
+
+### 症状（很容易误判成"主题没做对"）
+在 CRM 页面上切主题时看起来没生效：
+- 右键浮窗 → 点主题色块：**菜单不自动关闭**，浮窗 / 挂断按钮颜色当场不变，得刷新页面才生效
+- 点「亮白 / 暗夜」明暗档按钮：同上
+- 在扩展弹窗里换主题：已打开的 CRM 页面悬浮挂件**不跟随**
+  —— 即 README 里写的"实时同步给已打开的 CRM 页面悬浮挂件"实际是失效的
+
+### 根因：顶层函数引用了深处块级变量
+`AutoDial-Extension/content-script.js` 中 `applyTheme()` / `applyMode()` 定义在 **IIFE 顶层作用域**，
+但它们要操作的挂件句柄 `floatEl` / `currentPhone` / `hangupEl` / `hangupResizeHandle` /
+`manualDialBar` / `hideContextMenu`，全部用 `let` / `function` 声明在下方 `if (isTopFrame) {` **块内部**。
+
+JS 里 `let` 与**块内函数声明**都是块级作用域（该文件顶部是 `'use strict'`，不会走 Annex B 的
+兼容提升），顶层函数根本看不到这些绑定 —— 于是 `applyTheme()` 一被调用就在第一行
+`if (floatEl)` 抛 `ReferenceError: floatEl is not defined`。
+
+因为抛错发生在函数中部，**调用点之后的语句被整体跳过**，一连串功能被静默废掉：
+菜单 `remove()`、明暗档按钮的"就地重建"、`storage.onChanged` 的实时换肤。
+popup / auth 侧不受影响（它们走 `themes.js` 的 `AD_APPLY_THEME`，那份实现是正确的）。
+
+### 修复
+把这 6 个绑定统一上提到 IIFE 顶层声明，块内只做赋值（`function hideContextMenu() {}` 改为
+`hideContextMenu = function () {}` 形式，避免再次遮蔽回块内）。**`applyTheme` 的换肤逻辑本身一行未改。**
+- `AutoDial-Extension/content-script.js`（+17 / -11）
+- `AutoDial-Extension/manifest.json`（5.6.0 之后的补丁位：6.0.0 → 6.0.1）
+
+### 验证：这次是**真跑起来**测的，不是静态推断
+此前 4 个测试台对 `content-script.js` 只做**字符串断言**（`cs.indexOf(...) > 0`），
+从未真实执行过它，所以 433 项全绿也没能发现这个 Bug。
+
+本次新增 `cs_probe.js`：用 Node `vm` + 最小 DOM 桩**真实加载并执行** `content-script.js`，
+再把块内的 `applyTheme/applyMode/hideContextMenu/createFloat` 导出到断言上下文。
+- 修复前：`ReferenceError: floatEl is not defined @ content-script.js:144` → 2 项 FAIL
+- 修复后：作用域 3 项 + 端到端 4 项全过
+  - 端到端断言：`createFloat()` 后连续 `applyTheme(A)` → `applyTheme(B)`，
+    断言浮窗 `style.background` 确实随之改变，且等于新主题的 `bg2`（证明用的是新 token）
+  - `localStorage.__ad_theme` 落盘为新主题
+- 回归：`addr_test` 56 · `theme_test` 101 · `panel_test` 173 · `demo_test` 103 · `cs_probe` 9
+  = **442 / 442 通过，0 失败**
+
 ## 2026-09-14（扩展 v6.0.0 · 主题重构为「色相 × 亮暗」两个维度）
 
 > 用户反馈：「主题感觉有的是暗的、有的是亮色系的，切换没有逻辑，不如搞 2 套，然后可以切换亮暗」。
