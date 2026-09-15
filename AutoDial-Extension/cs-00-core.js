@@ -116,6 +116,86 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
+  // ─── 色彩工具（v6.3.3）─────────────────────────
+  /* 归一化解析：必须同时吃 #RRGGBB / #RGB / rgb() / rgba()。
+   * 「毛玻璃」档的 bg2 是 rgba(255,255,255,.5)，只认 #RRGGBB 会拿到 null ——
+   * v6.0 就栽在这：派生 CSS 变量全废、弹窗整片白屏。 */
+  function adParseColor(c) {
+    const s = String(c == null ? '' : c).trim();
+    let m = /^#([0-9a-f]{6})$/i.exec(s);
+    if (m) { const v = parseInt(m[1], 16); return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255, a: 1 }; }
+    m = /^#([0-9a-f]{3})$/i.exec(s);
+    if (m) { const h = m[1]; return { r: parseInt(h[0] + h[0], 16), g: parseInt(h[1] + h[1], 16), b: parseInt(h[2] + h[2], 16), a: 1 }; }
+    m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(s);
+    if (m) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] };
+    return null;
+  }
+  function adHex(p) {
+    const h = (x) => { const t = Math.max(0, Math.min(255, Math.round(x))).toString(16); return t.length < 2 ? '0' + t : t; };
+    return '#' + h(p.r) + h(p.g) + h(p.b);
+  }
+  /* 半透明色合成到实底上 → 实色。挂断按钮底色要"压卡片底"，而卡片底在毛玻璃档是
+   * 半透明的；先合成为实色，算出来的对比度才等于浏览器里真实看到的那个。 */
+  function adSolidColor(color, backdrop) {
+    const p = adParseColor(color);
+    if (!p) return null;
+    if (p.a >= 1) return p;
+    const b = adParseColor(backdrop) || { r: 255, g: 255, b: 255, a: 1 };
+    return { r: p.r * p.a + b.r * (1 - p.a), g: p.g * p.a + b.g * (1 - p.a), b: p.b * p.a + b.b * (1 - p.a), a: 1 };
+  }
+  function adSolidHex(color, backdrop) {
+    const p = adSolidColor(color, backdrop);
+    return p ? adHex(p) : color;
+  }
+  function adLum(p) {
+    if (!p) return null;
+    const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(p.r) + 0.7152 * f(p.g) + 0.0722 * f(p.b);
+  }
+  function adContrast(fg, bg) {
+    const x = adLum(fg), y = adLum(bg);
+    if (x === null || y === null) return null;
+    const hi = Math.max(x, y), lo = Math.min(x, y);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  // ─── 危险色填充（v6.3.2，仍用于挂断按钮的"点击反馈态"）───
+  /* 挂断按钮点击后要"实心红底 + 白字"，但主题红只保证在**卡片底上当文字**够清楚，
+   * 拿它当**底**再压白字就未必：亮白档 3.84:1、暗夜档只有 3.46:1（都低于 AA 4.5:1）。
+   * 统一叠一层 26% 中性黑把底压深（scrim，材质设计里的常规手法，不引入任何色相）。
+   * 16 套色相 × 2 档实测：叠加后白字对比度 4.90 ~ 9.56:1，32 组全部达标 AA。 */
+  var AD_DANGER_SCRIM = 'rgba(0,0,0,.26)';
+  function adDangerFill(redGrad) {
+    return 'linear-gradient(' + AD_DANGER_SCRIM + ',' + AD_DANGER_SCRIM + '), ' + redGrad;
+  }
+
+  // ─── 「可读版主题色」（v6.3.3 供空心挂断按钮的文字/描边）───
+  /* 空心按钮 = 卡片底 + 主题色描边/文字。但主题色**直接**当文字有一半主题看不清：
+   * 亮白档底色接近纯白，而 16 套主题色里 10 套是中等明度 —— 实测 16/32 组低于 AA 4.5:1
+   * （最差只有 2.30:1）。所以保留色相、只调明度：亮底往黑混、暗底往白混，混到刚好
+   * ≥4.5:1 为止。结果 32 组全部达标（最差 4.50:1），观感仍是"主题色"，只是深/亮了一档。 */
+  const AD_INK_MIN = 4.5;
+  const AD_INK_CACHE = {};
+  function adInk(color, cardBg, pageBg) {
+    const key = color + '|' + cardBg + '|' + (pageBg == null ? '' : pageBg);
+    if (AD_INK_CACHE[key]) return AD_INK_CACHE[key];
+    const base = adSolidColor(color, pageBg);
+    const bg = adSolidColor(cardBg, pageBg);
+    if (!base || !bg) return color;              // 解析失败：原样返回，绝不抛
+    const target = adLum(bg) > 0.35 ? { r: 0, g: 0, b: 0 } : { r: 255, g: 255, b: 255 };
+    let out = color;
+    for (let k = 0; k <= 1.0001; k += 0.01) {
+      const cand = {
+        r: base.r + (target.r - base.r) * k,
+        g: base.g + (target.g - base.g) * k,
+        b: base.b + (target.b - base.b) * k, a: 1
+      };
+      if (adContrast(cand, bg) >= AD_INK_MIN) { out = adHex(cand); break; }
+    }
+    AD_INK_CACHE[key] = out;
+    return out;
+  }
+
   /* ---------- 对外出口 ---------- */
   AD.isTopFrame = isTopFrame;
   AD.isOwnUiNode = isOwnUiNode;
@@ -123,4 +203,9 @@
   AD.AD_ICON = AD_ICON;
   AD.adIcon = adIcon;
   AD.escHtml = escHtml;
+  AD.adParseColor = adParseColor;
+  AD.adSolidHex = adSolidHex;
+  AD.adContrast = adContrast;
+  AD.adInk = adInk;
+  AD.adDangerFill = adDangerFill;
 })(window.__ADCS = window.__ADCS || {});

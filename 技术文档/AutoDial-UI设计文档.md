@@ -136,7 +136,12 @@
 
 - 新增 `adStyles(t)` helper（从 token 派生 card/input/btnPrimary/btnGhost 片段）+ `adIcon(pathD,size)` SVG helper（phone/phoneX/monitor/mapPin/palette/gear/clipboard/sync）
 - 拨号球 `__ad_float`：borderRadius→999px；idle=白底+text 色+`1px solid accent33`；有号码=gradAccent+白字+发光 `0 6px 20px accent59`；hover 抬升、press scale(.97)；图标 emoji📞→16px SVG
-- 挂断钮 `__ad_hangup`：idle=白底红字+phoneX 图标（语义"挂断=红"）；点击后 gradRed+白字；缩放手柄三角 accent66→red55
+- 挂断钮 `__ad_hangup`：**v6.3.3 起 idle = 空心**（底色 `AD.adSolidHex(t.bg2, t.bg)` 卡片底 + `1.5px solid` 可读版主题色描边 + 同色文字）+ `0 2px 10px accent33` 阴影 + phoneX 图标；**点击后 2 秒 = 实心红底 + 白字**（`AD.adDangerFill(t.gradRed)` 叠 26% 中性黑、2px 淡白描边），成功与失败**一律** 2 秒后把**样式**复位回常态；**按钮本身留在原位**（v6.3.4 起不再 2 秒收起，用户要求）；缩放手柄三角用主题色（常态是卡片底，白三角反而看不见）
+  > ⚠️ **绝不要给外层包裹 span 写 `color`**：内联色优先级高于继承，会盖掉容器上的文字色，导致"红字压红底"（对比度 1.2:1，文字等于消失）。这是 v5.5~v6.3.1 的真实缺陷，探针已加断言盯着。
+  > ⚠️ **主题色不能直接当文字**：亮白档卡片底接近纯白，16 套主题色里 10 套是中等明度 —— `t.red` / `t.accent` 各 **16/32 组低于 AA**（最差 2.30:1）。必须走 `AD.adInk(color, cardBg, pageBg)`：保色相、只调明度（亮底加深 / 暗底提亮），32 组实测 **4.50~15.88:1** 全部达标。`adInk` 的缓存 key 含三个入参，换主题自动失效。
+  > ⚠️ **常态外观只有一处定义**：`cs-10-theme.js` 的 `applyTheme` 不得自己写一套挂断配色，必须转调 `AD.resetHangupLabel()` —— v6.3.2 曾"创建处与 applyTheme 各写一套"，改一处忘一处。`applyTheme` 还需判 `AD.hangupState !== 'flash'` 才重绘，否则会打断点击后那 2 秒的反馈。
+  > 底色的对比度必须按**合成后的实色**算：毛玻璃档 `t.bg2` 是 `rgba(255,255,255,.5)`，不合成就会算出一个与实际所见不符的数字（`AD.adSolidHex` 负责合成）。
+  > 历史：v6.3.4 = 删掉「成功挂断 2 秒后收起按钮」（v4.15 旧行为，用户要求留在原位）；v6.3.2 = idle 实心红 + 白字（用户反馈色块偏重）；v5.5~v6.3.1 = 白底红字（对比度仅 3.06~6.79:1，亮白档普遍不达 AA，且点击后红字压红底）
 - 手动拨号条 `__ad_manual`：套 adStyles(card)，input 高 34px focus 变色，清空=btnGhost、拨号=btnPrimary，显隐加过渡
 - 右键菜单/主题菜单：圆角 14px、「16px SVG + 文字」flex 行、hover 底 accent14、危险项 t.red；主题菜单 active=行底 accent1A + 右侧 ✓
 - 位置提示去掉 monospace；设置弹窗圆角 16px、标题行「20px 图标底座 + 15/700 + ×」

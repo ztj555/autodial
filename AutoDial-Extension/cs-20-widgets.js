@@ -144,6 +144,7 @@ const HANGUP_MIN = 36, HANGUP_MAX = 100;
 function createHangupBtn() {
   if (document.getElementById('__ad_hangup')) return;
   const t = AD.T();
+  const ink = AD.adInk(t.accent, t.bg2, t.bg);   // 可读版主题色：保色相、明度刚好达标
 
   AD.hangupEl = document.createElement('div');
   AD.hangupEl.id = '__ad_hangup';
@@ -155,19 +156,36 @@ function createHangupBtn() {
     top: '140px',
     zIndex: '2147483646',
     borderRadius: '20px',
-    background: t.bg2,
-    boxShadow: `0 4px 14px ${t.accent}1F`,
+    // v6.3.3：常态 = 空心 —— 卡片底 + 主题色描边/文字。
+    //   ① 实心色块太"重"（用户反馈浮窗与按钮两个色块分不清）；空心与浮窗同色系，
+    //      又与点击后的「实心红 + 白字」一眼可分。
+    //   ② 主题色直接当文字会有一半主题看不清（实测 16/32 低于 AA），
+    //      故走 AD.adInk 只调明度、保色相 —— 32 组全部 ≥4.5:1。
+    //   ③ 底色用 adSolidHex 合成实色：毛玻璃档 bg2 是半透明的，合成后算出的
+    //      对比度才等于浏览器里真实看到的那个。
+    background: AD.adSolidHex(t.bg2, t.bg),
+    color: ink,
+    border: `1.5px solid ${ink}`,
+    boxShadow: `0 2px 10px ${t.accent}33`,
     cursor: 'pointer',
     userSelect: 'none',
     display: 'flex',  // 始终显示
     alignItems: 'center',
     justifyContent: 'center',
     gap: '5px',
-    transition: 'box-shadow .2s, background .2s',
-    color: t.red,
+    transition: 'box-shadow .2s, background .2s, border-color .2s, color .2s',
     fontWeight: '700',
     letterSpacing: '1px',
-    border: `1px solid ${t.red}55`,
+  });
+  // 悬停给一点"可点"的反馈（只动阴影，不动位置 —— 本元素要参与拖拽）
+  // 闪示态（实心红）期间不抢阴影，免得与状态色打架
+  AD.hangupEl.addEventListener('mouseenter', () => {
+    if (AD.hangupState !== 'idle') return;
+    AD.hangupEl.style.boxShadow = `0 4px 14px ${AD.T().accent}59`;
+  });
+  AD.hangupEl.addEventListener('mouseleave', () => {
+    if (AD.hangupState !== 'idle') return;
+    AD.hangupEl.style.boxShadow = `0 2px 10px ${AD.T().accent}33`;
   });
   // 用 span 包内容（图标 + 文字），文字单独 span 供 flash 更新
   const hangupLabel = document.createElement('span');
@@ -183,20 +201,20 @@ function createHangupBtn() {
     const dist = Math.hypot(e.clientX - hDragStartX, e.clientY - hDragStartY);
     if (dist > 5) return;
     e.stopPropagation();
+    resetHangupLabel(); // 先回到常态，避免上一次的闪示残留与本次状态混在一起
     chrome.runtime.sendMessage({ type: 'hangup' }, (resp) => {
       if (chrome.runtime.lastError) {
-        flashHangup('PC端未运行', false);
+        flashHangup('PC端未运行');
         return;
       }
       if (resp && resp.success) {
-        flashHangup('已挂断', true);
-        // 挂断后 2 秒隐藏按钮
-        clearTimeout(window.__ad_hangup_timer);
-        window.__ad_hangup_timer = setTimeout(() => {
-          if (AD.hangupEl) AD.hangupEl.style.display = 'none';
-        }, 2000);
+        /* v6.3.4：不再收起按钮 —— 用户明确要求「成功挂断后按钮留在原位」。
+         * 旧行为（v4.15~v6.3.3）会在这里排一个 2 秒的 display:none，等 updatePhone
+         * 收到新号码才恢复显示；现在按钮始终在位，flashHangup 自带的 2 秒复位
+         * 会把它带回空心常态，用户不用重新等号码出现才能再按一次。 */
+        flashHangup('已挂断');
       }
-      else flashHangup(resp?.error || '挂断失败', false);
+      else flashHangup(resp?.error || '挂断失败');
     });
   });
 
@@ -242,8 +260,8 @@ function createHangupBtn() {
     height: '14px',
     cursor: 'nwse-resize',
     zIndex: '1',
-    // 用三角形视觉提示（红色系，与挂断语义一致）
-    background: `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`,
+    // 用三角形视觉提示（主题色 —— 常态是卡片底，白三角压上去反而看不见）
+    background: `linear-gradient(135deg, ${ink} 50%, transparent 50%)`,
     borderRadius: '0 0 0 4px',
     opacity: '0.6',
     transition: 'opacity .15s',
@@ -293,23 +311,47 @@ function applyHangupSize(size) {
   AD.hangupEl.style.borderRadius = Math.round(h * 0.45) + 'px';
 }
 
-function flashHangup(text, ok) {
+/* 复位挂断按钮的常态外观：空心 —— 卡片底 + 主题色描边/文字 + "挂断"文案（v6.3.3）。
+ * 同一个函数既服务「点击 2 秒后的回位」，也服务 applyTheme / 换号时的重绘：
+ * 常态颜色只有这一处定义，不会再出现两处漂移（v6.3.2 就吃过"创建处与 applyTheme
+ * 各写一套颜色、改一处忘一处"的亏）。 */
+function resetHangupLabel() {
+  if (!AD.hangupEl) return;
+  const t = AD.T();
+  const h = Math.round(hangupSize * 0.72);
+  const ink = AD.adInk(t.accent, t.bg2, t.bg);
+  const label = AD.hangupEl.querySelector('.__ad_hangup_text');
+  if (label) label.textContent = '挂断';
+  AD.hangupEl.style.fontSize = Math.round(h * 0.45) + 'px';
+  AD.hangupEl.style.background = AD.adSolidHex(t.bg2, t.bg);
+  AD.hangupEl.style.color = ink;
+  AD.hangupEl.style.border = `1.5px solid ${ink}`;
+  AD.hangupEl.style.boxShadow = `0 2px 10px ${t.accent}33`;
+  AD.hangupState = 'idle';
+}
+
+/* 点击反馈态：实心红 + 白字（与常态"空心"形成强对比，一眼看出真按到了）。
+ * v6.3.3：成功 / 失败**一律** 2 秒后回常态（用户要求，行为统一、不做特例）。
+ *   注意这推翻了 v6.3.2 的"失败态保留到下次操作"策略 —— 若以后又想恢复，
+ *   改这一处即可，但要同步改 cs_probe.js 第 8 节的定时器断言。 */
+function flashHangup(text) {
   if (!AD.hangupEl) return;
   const t = AD.T();
   const h = Math.round(hangupSize * 0.72);
   const label = AD.hangupEl.querySelector('.__ad_hangup_text');
   if (label) label.textContent = text;
-  AD.hangupEl.style.fontSize = Math.round(h * 0.38) + 'px';
-  AD.hangupEl.style.background = t.gradRed; // 挂断按钮点击后始终显示红色
+  AD.hangupEl.style.fontSize = Math.round(h * 0.40) + 'px'; // 文案变长，略缩一号
+  AD.hangupEl.style.background = AD.adDangerFill(t.gradRed);
+  /* 白字必须写在这里、且**外层包裹 span 不能有自己的颜色**：
+   * 旧版 applyTheme 把 t.red 写死在外层 span 上，内联色优先级高于继承，
+   * 于是这行 #FFFFFF 被悄悄覆盖 → 红字压红底（对比度 1.2:1，看不见）。 */
   AD.hangupEl.style.color = '#FFFFFF';
-  AD.hangupEl.style.border = '1px solid transparent';
-  setTimeout(() => {
-    if (label) label.textContent = '挂断';
-    AD.hangupEl.style.fontSize = Math.round(h * 0.45) + 'px';
-    AD.hangupEl.style.background = t.bg2; // 恢复主题卡片色
-    AD.hangupEl.style.color = t.red;
-    AD.hangupEl.style.border = `1px solid ${t.red}55`;
-  }, 1800);
+  AD.hangupEl.style.boxShadow = `0 6px 20px ${t.red}66`;
+  AD.hangupEl.style.border = '2px solid rgba(255,255,255,.85)'; // 描边加粗＝状态已变
+  AD.hangupState = 'flash';
+  // 每次闪示重置定时器，避免上一次的定时器把这一次的文案提前还原
+  clearTimeout(window.__ad_hangup_flash_timer);
+  window.__ad_hangup_flash_timer = setTimeout(resetHangupLabel, 2000);
 }
 
 // ═══════════════════════════════════════════════
@@ -452,6 +494,7 @@ function toggleManualDial() {
 }
 
 function updatePhone(phone) {
+  const prevPhone = AD.currentPhone;
   AD.currentPhone = phone || null;
   window.__adPhone = AD.currentPhone;
   // v4.15: 记录最近一次收到号码的时间，供"残留号码保鲜检查"使用
@@ -471,9 +514,13 @@ function updatePhone(phone) {
     AD.floatEl.style.color = t.text;
     AD.floatEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
   }
-  // v4.15: 检测到新号码时恢复挂断按钮——此前挂断成功一次后永久消失，直到刷新页面
+  // v6.3.4：当前已无任何代码会隐藏挂断按钮（挂断成功也留在原位），
+  //   这条仅作历史状态自愈的兜底保留 —— 万一 display 被外部改掉能自动拉回来。
   const hu = document.getElementById('__ad_hangup');
   if (hu && hu.style.display === 'none') hu.style.display = 'flex';
+  // 只有"号码真的变了"才复位按钮外观 —— 5 秒心跳会重复推同一个号码，
+  // 若每次都复位，会把正在进行中的点击闪示（2 秒）打断成不足 2 秒。
+  if (hu && AD.currentPhone !== prevPhone) resetHangupLabel();
 }
 
 function flashFloat(text, ok) {
@@ -528,6 +575,7 @@ function restoreFloatLabel(t) {
   AD.createHangupBtn = createHangupBtn;
   AD.applyHangupSize = applyHangupSize;
   AD.flashHangup = flashHangup;
+  AD.resetHangupLabel = resetHangupLabel;
   AD.createManualDial = createManualDial;
   AD.manualDial = manualDial;
   AD.toggleManualDial = toggleManualDial;

@@ -91,7 +91,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
-│   ├── manifest.json                # MV3 配置（v6.3.1）
+│   ├── manifest.json                # MV3 配置（v6.3.4）
 │   ├── background.js                # Service Worker：PIN/路由/登记
 │   ├── themes.js / addr.js          # 主题权威源 / 云中继地址权威源
 │   ├── cs-00-core.js                # 内容脚本①核心工具（扫号/图标/转义）

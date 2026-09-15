@@ -40,6 +40,7 @@
   AD.currentPhone = null;       // 当前检测到的客户号码
   AD.hangupEl = null;           // #__ad_hangup 挂断按钮
   AD.hangupResizeHandle = null; // #__ad_hangup 左下角缩放手柄
+  AD.hangupState = 'idle';      // 'idle' 空心常态 / 'flash' 点击后 2 秒的实心反馈态
   AD.manualDialBar = null;      // #__ad_manual 手动拨号条
   AD.contextMenu = null;        // #__ad_ctxmenu 自定义右键菜单
   // 真实实现由 cs-30-menu.js 赋值；这里先放空实现，
@@ -72,18 +73,20 @@
         : `0 4px 14px ${t.accent}1F`;
       AD.floatEl.style.border = `1px solid ${t.accent}33`;
     }
-    // 刷新挂断按钮（idle = 卡片底 + 红字，语义"挂断"）
+    // 刷新挂断按钮（v6.3.3：常态 = 空心，由 AD.resetHangupLabel 统一绘制）
     if (AD.hangupEl) {
-      AD.hangupEl.style.background = t.bg2;
-      AD.hangupEl.style.color = t.red;
-      AD.hangupEl.style.boxShadow = `0 4px 14px ${t.accent}1F`;
-      AD.hangupEl.style.border = `1px solid ${t.red}55`;
+      /* 闪示态（点击后那 2 秒）不打断 —— 换主题多半发生在没拨号时，但万一正好撞上，
+       * 保留用户刚触发的反馈比立刻刷回常态更合理。 */
+      if (AD.hangupState !== 'flash' && AD.resetHangupLabel) AD.resetHangupLabel();
+      /* ⚠️ 这里**不能**给外层 span 写 color：那是内联色，优先级高于继承，
+       * 会把 flashHangup 写在容器上的 #FFFFFF 悄悄盖掉 → 红字压红底（对比度 1.2:1）看不见。
+       * 图标用 stroke="currentColor"，随容器颜色走即可。若历史版本留下过内联色，这里清掉。 */
       const label = AD.hangupEl.querySelector('span');
-      if (label) label.style.color = t.red;
+      if (label) label.style.color = '';
     }
-    // 刷新缩放手柄颜色（红色系，与挂断语义一致）
+    // 刷新缩放手柄颜色（主题色 —— 常态是卡片底，白三角压上去反而看不见）
     if (AD.hangupResizeHandle) {
-      AD.hangupResizeHandle.style.background = `linear-gradient(135deg, ${t.red}55 50%, transparent 50%)`;
+      AD.hangupResizeHandle.style.background = `linear-gradient(135deg, ${AD.adInk(t.accent, t.bg2, t.bg)} 50%, transparent 50%)`;
     }
     // 刷新右键菜单（如果打开的话）
     AD.hideContextMenu();
