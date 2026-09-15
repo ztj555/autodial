@@ -1,5 +1,96 @@
 # AutoDial 更新日志
 
+## 2026-09-15（扩展 v6.3.1 · content-script 模块化拆分第五期：主文件改名收尾）
+
+拆分收尾。`content-script.js` → **`cs-70-boot.js`**，至此 1879 行单文件 → 10 个模块，
+拆分方案全部落地（主文件只剩 81 行启动编排）。
+
+- `AutoDial-Extension/content-script.js` → `cs-70-boot.js`：**纯改名（`mv`），内容零改动**
+  （改名后 md5 `b2fd02ff…` 与改名前一致），随后仅补一句头注释说明其来历
+- `manifest.json`：`js` 顺序末位 `content-script.js` → `cs-70-boot.js`；version 6.3.0 → **6.3.1**
+- 注释同步：`cs-20-widgets.js`（加载顺序行 + 对外出口行）、`cs-30-menu.js`、`cs-40-dialogs.js`；
+  `cs-50-biz.js` / `cs-60-iframe.js` 原本就写的是 `cs-70-boot.js`，改名后自动对齐
+- `cs_probe.js`：锚点注入改为同时认新旧两个文件名（`cs-70-boot.js` / `content-script.js`），
+  这样它既能测项目现状，也能用 `EXT` 环境变量指向旧快照做 A/B
+- 验证：10 个内容脚本 `node --check` ✅ · 符号守恒 ✅ · 断链 0 ✅ · 主探针（含阶段 4 专项 8 项）✅ ·
+  切客户 A/B 探针 ✅ · 基础回归 433 项 ✅
+- 附：全仓 `executeScript` / `getURL('*.js')` **零命中**，即没有任何"按文件名加载脚本"的运行时依赖
+  → 改名不涉及行为变更。浏览器侧唯一影响：扩展重新加载后，已打开的 CRM 页面需刷新一次
+- 文档同步：`技术文档/AutoDial技术文档.md`（文件树补齐 8 个模块 + 主题改 16 色相×2 档 + 3.3 节改为
+  「cs-*.js 8 模块职责表」）、`技术文档/AutoDial-UI设计文档.md`（2.3 节标注组件现所属模块）、
+  根 `README.md` 文件树、`测试与质量.md` 与 `未闭环问题清单-2026-09-12.md`（补 v6.3.1 说明，
+  E-1~E-11 的旧行号改为「现所在模块」——旧单文件已不存在，原行号无法定位）
+
+## 2026-09-15（扩展 v6.3.0 · content-script 模块化拆分第四期：业务层 + 子 iframe）
+
+### 拆分（业务逻辑零改动）
+- 🆕 `cs-50-biz.js`（156 行）：实时取号（`refreshActivePhone` / `broadcastToFrames`）、
+  坐席号检测（`detectPin`）、DOM 就绪编排（`onDomReady`）、后台消息监听注册（`registerContentListeners`）
+- 🆕 `cs-60-iframe.js`（278 行）：子 iframe 全段 —— 激活态判定（`isFrameActive` / `isFrameShown`）、
+  详情页号码与姓名提取、5 秒心跳上报、切客户即时刷新轮询、DOM 变化触发扫描
+- `content-script.js`：477 → **81 行**，只剩顶层启动编排
+- `manifest.json`：`js` 顺序追加 `cs-50-biz.js → cs-60-iframe.js`（仍在 `content-script.js` 之前）
+
+### 本次的关键设计点
+- **cs-60 的顶层短路**：原主块末尾的 `return;` 是靠「顶层页面提前返回」才让 iframe 段只在子帧跑。
+  拆成独立文件后，这段语义改由文件顶部 `if (AD.isTopFrame) return;` 承接 —— 若漏写，
+  顶层页面会开始扫描并上报号码（最严重的串号事故）。
+- **反向导出改为正向导出**：`refreshActivePhone` / `detectPin` 原先需要从主文件块内反向挂到 `AD`，
+  现在直接由 cs-50 自己导出，主文件那两行随之删除。
+- **清理 6 个已失效的本地别名**（`isOwnUiNode` / `adIcon` / `escHtml` / `applyMode` / `showToast` /
+  `toggleManualDial`）：调用点已随模块搬走，别名不再被引用。
+
+### 验证
+- **逐行重构等价**：cs-50 三段（34+54+25 行）、cs-60 全段（232 行）、boot 尾段（35 行）
+  与原文件比对**差异均为 0 行**（连续行块匹配，允许 ±2 缩进）
+- **预期变更白名单主动验证**：6 个被删别名逐一确认「boot 中已无引用」、
+  2 个反向导出逐一确认「cs-50 出口已存在」
+- 符号守恒：37 函数 / 36 变量，缺失 0、重复 0（`verify_symbols.py` 升级为**动态扫描全部模块**）
+- **静态链接检查**：46 个 `AD.*` 引用全部有对应赋值、无断链；10 个内容脚本模块守卫齐全
+- **探针新增「阶段 4 专项」（8 项）**：cs-50 五个出口齐全、`registerContentListeners()` 真的注册了
+  onMessage、派发 `dialResult` 消息 → 浮窗文案变「已拨出」、`refreshActivePhone` → 广播
+  `__ad_ask_phone`、客户帧回话 → 号码即刻回填、cs-60 在顶层帧零监听器零上报
+- **A/B 反证（判据 = 护栏整体由 PASS 翻转为 FAIL）**：
+  - 删掉 cs-60 的顶层短路 → 探针报「加载 cs-60 后 message 监听器 0 → 2」
+  - 注释掉 boot 的 `registerContentListeners()` → 探针报「onMessage 监听器没注册」
+  - 删掉 cs-50 的 `AD.detectPin` 导出 → `verify_links` 报断链
+- 全量回归 addr 56 / theme 101 / panel 173 / demo 103 + 两套探针（iframe 切客户 A/B 229ms / 184ms），全绿
+
+### 过程中修正的两个自身缺陷
+- **探针断言一度恒真**：原本只看 `phoneDetected` 上报，但探针 body 为空、扫不到号码，
+  无论短路是否生效都不会上报 → A/B 抓不到 A1。已改为「加载 cs-60 前后 window 上 message
+  监听器数量差分」，A1 随即被捕获。
+- **`verify_symbols.py` 硬编码 3 个文件**：自阶段 2/3 起就在误报（把已迁走的符号报成「缺失」），
+  本次改为按目录动态发现 `cs-*.js`。
+
+## 2026-09-15（扩展 v6.2.0 · content-script 模块化拆分第三期：菜单层 + 弹窗层）
+
+### 拆分（业务逻辑零改动）
+- 🆕 `cs-30-menu.js`（368 行）：自定义右键菜单、菜单项文案刷新（`refreshContextMenuLabels`）、
+  主题选择子菜单（`showThemeMenu`）
+- 🆕 `cs-40-dialogs.js`（415 行）：设置弹窗（PIN + 云地址）、一键登记确认弹窗、
+  区块/按钮辅助（`mkSection` / `mkBtn`）、`openDesktopApp` / `toggleFloatbar` / `sendSms`
+- `content-script.js`：1207 → **477 行**，只剩「业务层（实时取号 + 检测 PIN + DOM 就绪编排）」+「子 iframe 号码扫描」
+- `manifest.json`：`js` 顺序 = `themes.js → addr.js → cs-00-core.js → cs-10-theme.js → cs-20-widgets.js → cs-30-menu.js → cs-40-dialogs.js → content-script.js`
+
+### 本次搬迁的跨模块引用处理
+- **cs-30** 内改写 18 处为 `AD.` 前缀（`adIcon` / `escHtml` / `T` / `applyMode` / `applyTheme` /
+  `toggleManualDial` / `flashFloat` / `refreshActivePhone` / `detectPin` / `sendSms` / `showRegisterConfirm`）
+- **cs-30** 中 3 处「菜单项 action 指向 cs-40 函数」改为箭头函数转发（防御性写法，不依赖 items 的构造时机）
+- **cs-40** 内改写 29 处（`adIcon` / `escHtml` / `T` / `showToast` / `flashFloat`）
+- 主文件新增反向导出 `AD.detectPin`（cs-30 菜单账号行点击后需要），移除已迁走的 `AD.showContextMenu`
+
+### 验证
+- **逐行重构等价**：cs-30 正文 343 行、cs-40 正文 390 行、主文件 477 行，与原文件比对**差异均为 0 行**
+- 符号守恒：全部符号零减少；`let AD.` 非法声明 0、`AD..` 双点 0
+- **静态链接检查**：43 个 `AD.*` 引用全部有对应赋值，无断链；无可疑裸调用
+- **探针新增「阶段 3 专项」（5 项）**：菜单渲染出 13 行、点菜单「设置」→ 设置弹窗建出、
+  点「切换主题」→ 主题子菜单建出、一键登记弹窗建出、8 个跨模块动作符号齐全
+- **A/B 验证**（证明护栏有效）：模拟「cs-40 漏导出 `showSettingsDialog`」→ 探针精确报出
+  `TypeError: AD.showSettingsDialog is not a function @ cs-30-menu.js:110:51`，
+  静态检查器同时报 `[FAIL] cs-30-menu.js 引用了未定义的 showSettingsDialog`
+- 全量回归 addr 56 / theme 101 / panel 173 / demo 103 + 两套探针，全绿
+
 ## 2026-09-15（扩展 v6.1.1 · 修复：右键菜单与点击浮窗失效）
 
 ### 问题

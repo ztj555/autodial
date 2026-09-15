@@ -344,25 +344,41 @@ python cloud_relay_v2.py                           # 单命令启动，WS+REST+�
 
 ---
 
-## 三、Chrome 扩展（v5.0.0，MV3）
+## 三、Chrome 扩展（v6.3.1，MV3）
 
 ### 3.1 项目结构
 
 ```
 AutoDial-Extension/
-├── manifest.json           ← MV3 清单（v5.0.0，host_permissions + content_scripts）
-├── background.js           ← Service Worker：双模路由 + PIN 管理 + 拨号 + 右键同步
-├── content-script.js       ← 内容脚本：CRM 浮动按钮 + 号码扫描 + 主题应用（数据取自 themes.js）
-├── themes.js               ← 9 套主题唯一定义源 AD_THEMES（v5 起与 popup 共用，manifest 首个注入）
-├── addr.js                 ← 云中继地址唯一权威实现 AD_ADDR（v5.6：popup/挂件/background 三端共用）
+├── manifest.json           ← MV3 清单（v6.3.1，host_permissions + content_scripts）
+├── background.js           ← Service Worker：双模路由 + PIN 管理 + 拨号 + 登记 API
+├── cs-00-core.js           ← 内容脚本①核心工具层：isTopFrame / isOwnUiNode / 坐席号与姓名提取 / 图标表 / escHtml
+├── cs-10-theme.js          ← 内容脚本②主题层：主题表 + applyTheme / applyMode + Toast + 挂件句柄
+├── cs-20-widgets.js        ← 内容脚本③挂件层：浮动按钮 / 挂断按钮（含拖拽缩放）/ 手动拨号条
+├── cs-30-menu.js           ← 内容脚本④菜单层：自定义右键菜单 + 主题选择子菜单
+├── cs-40-dialogs.js        ← 内容脚本⑤弹窗层：设置弹窗 / 一键登记弹窗
+├── cs-50-biz.js            ← 内容脚本⑥业务层：实时取号 / 检测 PIN / DOM 就绪编排 / 后台消息监听
+├── cs-60-iframe.js         ← 内容脚本⑦子 iframe：激活判定 / 详情页扫号 / 心跳上报 / 切客户即时刷新
+├── cs-70-boot.js           ← 内容脚本⑧启动编排（**原 content-script.js**，v6.3.1 改名）
+├── themes.js               ← 主题唯一定义源 AD_THEMES（16 色相 × 亮白/暗夜，数据取自 PC 端 theme-data.js）
+├── addr.js                 ← 云中继地址唯一权威实现 AD_ADDR（popup / 内容脚本 / background 三端共用）
 ├── popup.html / popup.js   ← 弹窗：云中继地址 + PIN 配置 + 状态大盘
 ├── auth.html / auth.js     ← 设备授权页（外部脚本规避 MV3 CSP，v4.14 修复）
+├── theme-init.js           ← 弹窗 / 授权页的主题变量注入（避免首屏闪白）
 ├── icons/                  ← 扩展图标（icon16/48/128.png）
 ├── AutoDial-API.md / README.md
 └── create-icons.ps1
 ```
 
-**manifest 关键点**：`permissions: ["activeTab","storage","clipboardWrite","alarms","contextMenus"]`；`host_permissions` 含 `http://127.0.0.1:35432/*` 使扩展可绕过 CORS 访问本地 PC；content_scripts 仅注入三类 CRM 域名（guwen.zhudaicms.com / *.zhudaicms.com / *.rxhcrm.com / *.rongxinhui.com），`js: ["themes.js", "addr.js", "content-script.js"]`（顺序敏感 —— `addr.js` 依赖 `themes.js` 之后的注入位，`content-script.js` 依赖 `AD_ADDR` 已存在），`run_at: document_idle`，`all_frames: true`。
+**manifest 关键点**：`permissions: ["activeTab","storage","clipboardWrite","alarms","contextMenus"]`；`host_permissions` 含 `http://127.0.0.1:35432/*` 使扩展可绕过 CORS 访问本地 PC；content_scripts 仅注入四个 CRM 域名（guwen.zhudaicms.com / *.zhudaicms.com / *.rxhcrm.com / *.rongxinhui.com），
+`js: ["themes.js","addr.js","cs-00-core.js","cs-10-theme.js","cs-20-widgets.js","cs-30-menu.js","cs-40-dialogs.js","cs-50-biz.js","cs-60-iframe.js","cs-70-boot.js"]`
+（**顺序敏感** —— MV3 没有打包器，各文件之间不能 `import`，共享符号统一挂在 `window.__ADCS` 上，靠数组顺序保证"先注册后使用"；`themes.js`/`addr.js` 必须最前，`cs-70-boot.js` 必须最后），`run_at: document_idle`，`all_frames: true`。
+
+> **v6.3.1 模块化拆分**：原 1879 行的单文件 `content-script.js` 已按职责拆成 8 个 `cs-*.js` 模块
+> （上表①~⑧），主文件改名为 `cs-70-boot.js`，只剩 83 行启动编排。**业务行为零改动**，
+> 拆分前后逐行等价、符号守恒、跨模块引用零断链均已验证。⚠️ 加新模块**必须排在 `cs-70-boot.js` 之前**，
+> 且新文件同样要写 `'use strict'` + `if (window.__adv2_xxx) return;` 防重入守卫。
+> 详见 `技术文档/AutoDial-扩展端模块化拆分方案.md`。
 
 ### 3.2 background.js — Service Worker
 
@@ -386,7 +402,23 @@ AutoDial-Extension/
 
 **右键菜单（v5.4 起已清空）**：原 v4.11 的 3 个菜单项（🔁 一键同步上门数据（CRM 页面）/ 同步登记列表当前页（仅列表页）/ 🔁 扩展图标右键同款）已随「同步登记列表」功能一并移除。启动时仅保留一次 `chrome.contextMenus.removeAll()`，用于清理旧版本遗留在浏览器中的菜单项；本扩展不再注册任何右键菜单。
 
-### 3.3 content-script.js — 内容脚本
+### 3.3 cs-*.js — 内容脚本（8 个模块，v6.3.1 拆分后）
+
+> 拆分前本节的标题是 `content-script.js`（1879 行单文件），现已按职责切为 8 个模块并**改名收尾**。
+> 下表按 manifest 注入顺序列出各模块职责；跨模块调用一律经 `window.__ADCS`（代码内别名 `AD`）。
+
+| 顺序 | 模块 | 行数 | 职责 |
+|---|---|---|---|
+| ① | `cs-00-core.js` | 127 | 防重入守卫、`isTopFrame`、`isOwnUiNode`、`getMyPhoneAndNameFromCRM`、矢量图标表 `AD_ICON`、`escHtml` |
+| ② | `cs-10-theme.js` | 171 | 主题表 + `applyTheme` / `applyMode` / `T()`、`showToast`、挂件句柄归属 |
+| ③ | `cs-20-widgets.js` | 538 | 浮动按钮、挂断按钮（拖拽缩放）、手动拨号条、`updatePhone` / `flashFloat` 状态反馈 |
+| ④ | `cs-30-menu.js` | 369 | 自定义右键菜单、菜单项文案刷新、主题选择子菜单 |
+| ⑤ | `cs-40-dialogs.js` | 416 | 设置弹窗、一键登记弹窗、区块与按钮辅助、桌面与短信操作 |
+| ⑥ | `cs-50-biz.js` | 157 | 实时取号 `refreshActivePhone`、`detectPin`、`onDomReady`、`registerContentListeners`（后台消息监听） |
+| ⑦ | `cs-60-iframe.js` | 279 | 子 iframe 全段：激活态判定、详情页扫号与姓名提取、5 秒心跳上报、切客户即时刷新 |
+| ⑧ | `cs-70-boot.js` | 83 | 顶层启动编排（**原 `content-script.js`**）：挂件与业务启动、跨页换肤、姓名接收、残留号码保鲜 |
+
+**功能一览**（与拆分前一致，业务零改动）：
 
 | 功能 | 说明 |
 |------|------|
@@ -397,7 +429,7 @@ AutoDial-Extension/
 | 手动拨号条 | 独立悬浮条：输入框（不限长度/支持*#）+ 清空 + 拨号 |
 | 设置弹窗 | PIN 设置 + 云端服务器（测试连接/一键获取），与 popup.html 双向同步 |
 | 右键菜单 | 主题切换、手动拨号、设置、拨号、短信、PC 状态、PIN 显示 |
-| 9 套主题 | 默认「天空蓝」+ 8 套（dark-gold 暗金 / cyber-frost 冰蓝冷峻 / deep-space 深空紫 / cyberpunk 赛博朋克 / minimalist 极简白 / forest-green 森林绿 / energetic-orange 活力橙 / ocean-blue 海洋蓝） |
+| 主题（16 色相 × 2 档明暗） | v6.0 起色相与明暗是两个**正交维度**，默认 `sky-blue × light`。色相 16 套：天空蓝 / 暗金 / 冰蓝冷峻 / 深空紫 / 赛博朋克 / 极简白 / 毛玻璃 / 森林绿 / 活力橙 / 海洋蓝 / 蓝绿渐变 / 薄荷清新 / 珊瑚日落 / 薰衣草 / 暖光米色 / 圆润糖果；明暗 2 档：亮白 `light` / 暗夜 `dark`。storage：`__ad_theme`（色相）+ `__ad_theme_mode`（明暗），跨端共享；配色不手写，由 PC 端 `theme-data.js` 转录 |
 
 **号码格式**：支持任意号码（手机号、固话、10086、400/800、*100# 等），最小 3 位、最长 20 位，允许 `+ * #` 和格式化字符（空格、`-`、括号）；端到端校验点在云中继和 PC 端 HTTP handler，插件端不做拦截。
 
@@ -435,7 +467,7 @@ AutoDial-Extension/
 2. fetch 超时：PC 直连探测 AbortController 500ms（PC_PING_TIMEOUT）；云端/列表/测试连接/顾问姓名上传均 8s（v4.23 补齐测试连接与 uploadAdvisorName，防止无限等待）
 3. 浮窗/结果 DOM 输出统一经 `escHtml()`（v4.23 E-11 补引号转义，属性位置不再可注入）
 4. 云中继所有 JSON 响应统一 `Access-Control-Allow-Origin: *`；扩展经 host_permissions 不受 CORS 限制
-5. 扩展自动更新后需刷新 CRM 页面才能注入新版 content-script
+5. 扩展自动更新后需刷新 CRM 页面才能注入新版内容脚本（`cs-*.js`）
 
 ---
 

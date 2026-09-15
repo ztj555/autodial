@@ -1,6 +1,6 @@
 /* ============================================================
  * AutoDial 云中继地址 v5.6（唯一权威源）
- * popup.html / content-script.js / background.js 共用：
+ * popup.html / 内容脚本(cs-*.js) / background.js 共用：
  *   JS 侧   — AD_ADDR 下的纯函数与异步读写
  *   DOM 侧  — 无（仅 storage / fetch）
  *
@@ -12,7 +12,7 @@
  *
  * 加载方式：
  *   popup.html            <script src="addr.js">
- *   manifest content_scripts.js  ["themes.js","addr.js","content-script.js"]
+ *   manifest content_scripts.js  ["themes.js","addr.js","cs-00-core.js", …, "cs-70-boot.js"]
  *   background.js         importScripts('addr.js')
  * ============================================================ */
 

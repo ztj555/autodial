@@ -7,7 +7,7 @@
  * 挂件句柄（AD.floatEl / AD.hangupEl / AD.hangupResizeHandle / AD.manualDialBar）
  * 由 cs-10-theme.js 声明并持有，本模块只赋值/读取。
  *
- * 加载顺序：... → cs-10-theme.js → 本文件 → cs-30-menu.js → ... → content-script.js
+ * 加载顺序：... → cs-10-theme.js → 本文件 → cs-30-menu.js → ... → cs-70-boot.js
  */
 (function (AD) {
   'use strict';
@@ -523,7 +523,7 @@ function restoreFloatLabel(t) {
     : `0 4px 14px ${t.accent}1F`;
 }
 
-  /* ---------- 对外出口（供 content-script.js / 后续 cs-30~70 模块调用）---------- */
+  /* ---------- 对外出口（供 cs-70-boot.js / 后续模块调用）---------- */
   AD.createFloat = createFloat;
   AD.createHangupBtn = createHangupBtn;
   AD.applyHangupSize = applyHangupSize;

@@ -125,7 +125,12 @@
 
 结构不变（卡片居中），样式与 popup 同源：顶部 48px 圆角方形红色警告底座（内嵌警告三角 SVG）、`--r-lg` 卡 + 入场动画、信息卡分组化、拒绝=ghost pill / 允许=渐变主按钮 pill 高 42px；`:root` token 块与 popup 逐字一致。
 
-### 2.3 content-script.js 悬浮组件
+### 2.3 内容脚本悬浮组件（原 `content-script.js`，现分散在 `cs-*.js`）
+
+> ⚠️ **v6.3.1 起 `content-script.js` 已拆为 8 个模块并改名为 `cs-70-boot.js`**，本节描述的悬浮组件
+> 现分布于：拨号球/挂断钮/手动拨号条 → `cs-20-widgets.js`；右键菜单与主题子菜单 → `cs-30-menu.js`；
+> 设置弹窗/登记弹窗 → `cs-40-dialogs.js`；`adStyles` / `adIcon` / `escHtml` → `cs-00-core.js`；
+> 换肤与 `T()` → `cs-10-theme.js`。下文各条按当时版本记为 `content-script.js`，内容仍然有效。
 
 约束：无 CSS 文件，全部 `Object.assign(el.style,…)` 内联；id/class、拖拽、缩放、消息逻辑、z-index 不动。
 

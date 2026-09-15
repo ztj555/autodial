@@ -377,9 +377,116 @@ cp %TEMP%\adpopup\v6.0.1-backup/manifest.json       AutoDial-Extension/
 **验证**：新增 `verify_links.py` 在修复前精准报出这 2 个断链；
 探针补 `trigger()` 派发能力后，修复前 3 项 FAIL（行号 `cs-20-widgets.js:117/130/207`）→ 修复后 3 项 PASS。
 
-### ⏳ 阶段 3-5：未开始
+### ✅ 阶段 3：抽出菜单层 + 弹窗层（代码完成，**待实机验证**）
 
-### ⚠️ 本次踩到的 5 个坑（后续阶段务必沿用对策）
+产出：
+
+| 文件 | 行数 | 内容 |
+|---|---|---|
+| `cs-30-menu.js` | 368 | 右键菜单 + `refreshContextMenuLabels` + 主题子菜单 + `AD.hideContextMenu` 实体 |
+| `cs-40-dialogs.js` | 415 | 设置弹窗 + 登记弹窗 + `mkSection`/`mkBtn` + `openDesktopApp`/`toggleFloatbar`/`sendSms` |
+| `content-script.js` | 477 | 业务层（`broadcastToFrames` / `refreshActivePhone` / `detectPin` / `onDomReady`）+ iframe 段 |
+
+切割点（相对阶段 2 完成态）：`A = L52-395` → cs-30；`B = L396-701` + `C = L740-822` → cs-40。
+
+跨模块处理：cs-30 改写 18 处 + 3 处菜单项 action 箭头转发；cs-40 改写 29 处；
+主文件补 `AD.detectPin` 反向导出、移除已迁走的 `AD.showContextMenu`。
+
+验证结果：
+
+| 项 | 结果 |
+|---|---|
+| 逐行重构等价 | ✅ cs-30 正文 343 行 / cs-40 正文 390 行 / 主文件 477 行，差异均 **0 行** |
+| 符号守恒 | ✅ 全项零减少；`let AD.` 0 处、`AD..` 0 处 |
+| `verify_links.py` | ✅ 43 个 `AD.*` 引用无断链、无可疑裸调用 |
+| 探针（新增阶段 3 专项 5 项） | ✅ 含「点菜单『设置』→ 弹窗建出」的**跨模块链路**断言 |
+| A/B（证明护栏有效） | ✅ 模拟漏导出 → 探针精确报 `TypeError: AD.showSettingsDialog is not a function @ cs-30-menu.js:110:51` |
+| 回归 433 项 + 两套探针 | ✅ |
+
+**阶段 3 新增经验**：`cs-30` 的菜单项 `action` 引用 `cs-40` 的函数时，用箭头函数转发
+（`action: () => AD.showSettingsDialog()`）而非直接取函数值 —— 虽然后者在当前代码里
+（`items` 在 `showContextMenu()` 内构造，运行时求值）恰好也能工作，但箭头写法不依赖
+"数组构造时机"这个隐含前提。**探针的「阶段 3 专项」是唯一能验证这条链路的手段** ——
+静态检查只能看"符号是否存在"，无法证明"点下去真能跑通"。
+
+### ✅ 阶段 4：抽出业务层 + 子 iframe（代码完成，**待实机验证**）
+
+切割点（相对阶段 3 完成态 477 行）：
+- `cs-50-biz.js` ← L55-88（实时取号）+ L94-151（detectPin + onDomReady）+ L157-181（onMessage，**包成 `registerContentListeners()`**）
+- `cs-60-iframe.js` ← L224-476（整段，原样保留缩进，顶部加 `if (AD.isTopFrame) return;` 承接原主块末尾的 `return;`）
+- `content-script.js` ← 其余（启动编排），并清理 6 个已失效别名、删掉 2 行反向导出
+
+| 文件 | 行数 | 内容 |
+|---|---|---|
+| `cs-50-biz.js` | 🆕 156 | `broadcastToFrames` / `refreshActivePhone` / `detectPin` / `onDomReady` / `registerContentListeners` |
+| `cs-60-iframe.js` | 🆕 278 | 激活态判定 / 详情页号码与姓名 / `scan` 心跳 / 切客户轮询 / MutationObserver |
+| `content-script.js` | 477 → **81** | 顶层启动编排（挂件与业务启动 / 跨页换肤 / 姓名接收 / 保鲜定时器） |
+
+验证结果：
+
+| 项 | 结果 |
+|---|---|
+| `node --check` × 3 | ✅ |
+| 逐行重构等价 | ✅ cs-50 三段 113 行 / cs-60 232 行 / boot 尾段 35 行，差异均 **0 行** |
+| 预期变更白名单 | ✅ 6 个删除别名逐一验证「boot 无引用」、2 个反向导出验证「cs-50 出口已存在」 |
+| 符号守恒（37 函数 / 36 变量） | ✅ 缺失 0、重复 0（脚本升级为动态扫描全部模块） |
+| `verify_links.py` | ✅ 46 个 `AD.*` 引用无断链、10 个模块守卫齐全 |
+| 探针（新增阶段 4 专项 8 项） | ✅ 含「派发 dialResult → 浮窗变『已拨出』」「广播取号 → 收到回话即刻回填」 |
+| A/B 反证 | ✅ 三个注入（cs-60 短路失效 / boot 漏调注册 / cs-50 漏导出）**全部由 PASS 翻转为 FAIL** |
+| 回归 433 项 + 两套探针 | ✅ |
+
+**阶段 4 新增经验（写入护栏）**：
+1. **断言必须能区分「短路生效/失效」** —— 最初用「有无 `phoneDetected` 上报」判 cs-60 是否偷跑，
+   但探针 DOM 是空的、根本扫不到号码，于是**两种情况下都不上报，断言恒真**，A/B 直接抓不到。
+   改为「加载 cs-60 前后 window 上 `message` 监听器数量的差分」后立刻有效。
+   → **规则：新断言写完必须做 A/B 反证，恒真的护栏等于没有护栏。**
+2. **A/B 的判据应是「护栏结论翻转」**（PASS → FAIL），而不是「某个报错关键字出现」——
+   后者会漏掉「报了错但不是你预期的那个」的情况。
+3. **每阶段都要跑 A/B**：阶段 3 只跑了探针 A/B，阶段 4 补上了 `verify_links` 的 A/B。
+
+### ✅ 阶段 5：收尾（`content-script.js` → `cs-70-boot.js` 改名 + 原文件删除）
+
+执行方式：`mv content-script.js cs-70-boot.js`（**纯改名，内容零改动** —— 改名后 md5
+`b2fd02ff…` 与改名前一致，随后仅补一句头注释说明来历）。
+
+| 改动点 | 内容 |
+|---|---|
+| `manifest.json` | `js` 数组末位 `content-script.js` → `cs-70-boot.js`（**唯一有功能影响的一处**） |
+| `cs-20-widgets.js` | 加载顺序行 + 对外出口注释行 |
+| `cs-30-menu.js` / `cs-40-dialogs.js` | 加载顺序行 |
+| `cs-70-boot.js` | 头注释补充"即原 content-script.js" |
+| `cs_probe.js` | 锚点注入改为**同时认新旧两个文件名**，使探针既能测现状、也能用 `EXT` 指旧快照做 A/B |
+| 文档 | 扩展 README 文件表 + 注入顺序、根 README 文件树、CHANGELOG |
+
+前置检查（决定"能不能安全改名"）：
+```bash
+grep -rn "executeScript\|getURL('.*\.js'" AutoDial-Extension/*.js   # → 零命中
+```
+**结论：没有任何"按文件名加载脚本"的运行时依赖**（MV3 的 content_scripts 走 manifest 数组），
+所以改名不涉及行为变更。浏览器侧唯一影响：扩展重新加载后，已打开的 CRM 页面需刷新一次。
+
+验证结果：
+
+| 项 | 结果 |
+|---|---|
+| 改名后 md5 vs 改名前 | ✅ 一致（`b2fd02ff…`） |
+| `node --check` × 10（themes/addr + 8 个 cs-*） | ✅ |
+| 符号守恒 / 断链 0 / 模块守卫 | ✅ |
+| 主探针（含阶段 4 专项 8 项） | ✅ |
+| 切客户 A/B 探针（`cs-60-iframe.js`） | ✅ |
+| 基础回归 433 项 | ✅ |
+
+**阶段 5 新增经验：**
+8. ⚠️ **改名要分两步查**：① 有没有"运行时按文件名加载"的地方（`executeScript` / `getURL('x.js')`）
+   —— 有就不能简单 `mv`；② 改名后要同步**四类引用**：manifest `js` 数组（功能性）、
+   模块头注释的"加载顺序"行、探针里的文件名判断、README/文档文件表。
+9. ⚠️ **只 grep 旧文件名会漏**：`cs-50-biz.js` / `cs-60-iframe.js` 的头注释**早就写成了
+   `cs-70-boot.js`**（阶段 4 时按计划预留），改名后自动对齐 —— 所以改动清单要"反向也查一遍"
+   （grep 新文件名，看哪些地方已经提到它）。
+10. 📌 **回归防线目前在系统临时目录**（`%TEMP%\adpopup\`），有被清理风险。建议迁入仓库
+   （如 `AutoDial-Extension/tools/`）后，这份拆分才算真正有可持续的护栏。
+
+### ⚠️ 本次踩到的 7 个坑（后续阶段务必沿用对策）
 
 1. **生成器必须读"不可变的源"** —— 项目里的 `content-script.js` 落盘后已被覆盖，
    重跑生成器若仍读项目文件，会拿拆分后的半成品当输入（已改为固定读 v6.0.1 备份）。

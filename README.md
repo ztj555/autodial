@@ -91,13 +91,17 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
-│   ├── manifest.json                # MV3 配置（v6.1.0）
+│   ├── manifest.json                # MV3 配置（v6.3.1）
 │   ├── background.js                # Service Worker：PIN/路由/登记
 │   ├── themes.js / addr.js          # 主题权威源 / 云中继地址权威源
 │   ├── cs-00-core.js                # 内容脚本①核心工具（扫号/图标/转义）
 │   ├── cs-10-theme.js               # 内容脚本②主题层（换肤/Toast/挂件句柄）
 │   ├── cs-20-widgets.js             # 内容脚本③挂件层（浮动/挂断按钮、手动拨号条）
-│   ├── content-script.js            # 内容脚本④主文件：菜单/弹窗/业务 + iframe 扫号
+│   ├── cs-30-menu.js                # 内容脚本④菜单层（右键菜单/主题子菜单）
+│   ├── cs-40-dialogs.js             # 内容脚本⑤弹窗层（设置/登记弹窗、辅助构造）
+│   ├── cs-50-biz.js                 # 内容脚本⑥业务层（实时取号/检测PIN/消息监听注册）
+│   ├── cs-60-iframe.js              # 内容脚本⑦子iframe（激活判定/扫号/心跳/切客户刷新）
+│   ├── cs-70-boot.js                # 内容脚本⑧启动编排（原 content-script.js）
 │   ├── popup.html + popup.js        # 弹窗：配置 PIN + 服务器
 │   ├── auth.html + auth.js          # 设备授权弹窗（外部脚本规避 MV3 CSP）
 │   ├── AutoDial-API.md + README.md  # API文档 + 使用说明

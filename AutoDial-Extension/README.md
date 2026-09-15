@@ -1,6 +1,6 @@
 # AutoDial 浏览器扩展
 
-> MV3 | 最后更新：2026-09-15 | PC 直连优先 → 云端兜底 | 16 套色相 × 亮白 / 暗夜 | v6.1.1（content-script 模块化拆分第一、二期）
+> MV3 | 最后更新：2026-09-15 | PC 直连优先 → 云端兜底 | 16 套色相 × 亮白 / 暗夜 | v6.3.1（content-script 模块化拆分第一~五期，主文件已改名 `cs-70-boot.js`）
 
 坐席手机号即 PIN，打开 CRM 页面自动检测，无需登录，无需密码。
 
@@ -25,16 +25,23 @@
 | `cs-00-core.js` | ① 核心工具层：`isTopFrame` / `isOwnUiNode` / `getMyPhoneAndNameFromCRM` / 图标表 / `escHtml` |
 | `cs-10-theme.js` | ② 主题层：主题表 + `applyTheme` / `applyMode` + Toast + 挂件句柄 |
 | `cs-20-widgets.js` | ③ 挂件层：浮动按钮 / 挂断按钮（含拖拽缩放）/ 手动拨号条 / 号码刷新与状态反馈 |
-| `content-script.js` | ④ 主文件（v6.1 拆分中）：菜单 / 弹窗 / 业务 + 子 iframe 号码扫描 |
+| `cs-30-menu.js` | ④ 菜单层：自定义右键菜单 / 菜单项文案刷新 / 主题选择子菜单 |
+| `cs-40-dialogs.js` | ⑤ 弹窗层：设置弹窗 / 一键登记弹窗 / 区块与按钮辅助 / 桌面与短信操作 |
+| `cs-50-biz.js` | ⑥ 业务层：实时取号（`refreshActivePhone`）/ 检测 PIN / DOM 就绪编排 / 后台消息监听注册 |
+| `cs-60-iframe.js` | ⑦ 子 iframe：激活态判定 / 详情页号码与姓名提取 / 5 秒心跳上报 / 切客户即时刷新 |
+| `cs-70-boot.js` | ⑧ 启动编排（**原 `content-script.js`**，v6.3 改名为模块名）：挂件与业务启动 / 跨页换肤 / 客户姓名接收 / 残留号码保鲜 |
 | `popup.html` + `popup.js` | 弹窗：服务器配置 + PIN 设置 + 状态查询 + 顶栏刷新 |
 | `auth.html` + `auth.js` | 设备授权弹窗（外部脚本规避 MV3 CSP） |
 | `theme-init.js` | 弹窗 / 授权页的主题变量注入 |
 | `icons/` | 扩展图标 (16/48/128) |
 | `AutoDial-API.md` | API 参考文档 |
 
-> **注入顺序有讲究**：`content_scripts.js` 数组 = `themes.js → addr.js → cs-00-core.js → cs-10-theme.js → cs-20-widgets.js → content-script.js`。
+> **注入顺序有讲究**：`content_scripts.js` 数组 = `themes.js → addr.js → cs-00-core.js → cs-10-theme.js → cs-20-widgets.js → cs-30-menu.js → cs-40-dialogs.js → cs-50-biz.js → cs-60-iframe.js → cs-70-boot.js`。
 > MV3 没有打包工具，文件之间不能 `import`，共享符号统一挂在 `window.__ADCS` 上，靠数组顺序保证先注册后使用。
-> ⚠️ 加新模块必须排在 `content-script.js` **之前**。
+> ⚠️ 加新模块必须排在 `cs-70-boot.js` **之前**。
+>
+> v6.3.1 起主文件由 `content-script.js` 改名为 `cs-70-boot.js`（纯改名，内容零改动），
+> 拆分前那份 1879 行的 `content-script.js` 已不存在。
 
 ## 安装
 

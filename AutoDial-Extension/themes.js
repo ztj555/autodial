@@ -1,6 +1,6 @@
 /* ============================================================
  * AutoDial 主题数据 v6（唯一权威源）
- * popup.html / auth.html / content-script.js 共用：
+ * popup.html / auth.html / 内容脚本(cs-*.js) 共用：
  *  - AD_THEMES:              色相 × 明暗 双维度原始字段
  *  - AD_THEME_LIST:          色相展示顺序
  *  - AD_FLAT(id, mode):      摊平成 v5.x 那种单档扁平对象
