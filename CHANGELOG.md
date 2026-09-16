@@ -1,5 +1,202 @@
 # AutoDial 更新日志
 
+## 2026-09-16（功能：人员管理改为「固定人员名册」为准 · v4.26）
+
+需求：「人员管理」要参考插件端「一键登记」用的那份人员来源；**这批人就是全部人员，不会有其他人**，
+直接内置进云端代码。
+
+**人员来源**：插件端「一键登记」弹窗的「接待顾问」下拉框，取自 CRM 顾问列表
+（`https://guwen.zhudaicms.com/bserve/search`，`brand=1833`）。**该接口无需登录即可读取**，实测：
+```bash
+curl -s -X POST https://guwen.zhudaicms.com/bserve/search \
+     -H 'Content-Type: application/x-www-form-urlencoded' -d 'keyword=&brand=1833'
+# → {"code":1,"data":[{"id":"170745","name":"韩俊"}, ...]}  共 11 条
+```
+
+**改动**：
+
+| 文件 | 改动 |
+|---|---|
+| `cloud_relay_v2.py` | 新增 `ADVISOR_ROSTER` 常量（11 条，含 CRM 工号 + 姓名，保留 CRM 原序）；`APP_VERSION` 4.23 → **4.26** |
+| `cloud_relay_v2.py` | `/api/v1/pins` 改为**名册逐条展开 + 与已注册记录按姓名合并**：新增 `roster/roster_id/bound` 字段与 `roster_size/bound_count` 统计；名册外确实注册过的人（改名/试岗/姓名兜底成手机号）仍保留，避免数据凭空消失 |
+| `dashboard.html` | 「人员管理」页加名册说明行（共 N 人 / 已绑定 / 未绑定）；行渲染分三态：已绑定（PIN + 分组可选）、名册未绑定（PIN 显示「未绑定」、分组显示「—」、姓名只读带「名册」标记）、名册外（姓名可手填） |
+| `dashboard.html` | 上门登记的「按人员筛选」下拉**跳过无 PIN 的行**（否则与「不限（全部）」的 `value=""` 撞车） |
+
+**⚠️ 设计取舍（用户已确认）**：名册里未绑定的人**无法设置分组** —— 分组存在 `advisor_names.group_id`，
+主键是 PIN，而 CRM 名单只有 `id + 姓名`、没有手机号。该人员首次用插件登记后会自动绑定并可以分组。
+两个汇总账号（补录上门账号 / 融鑫汇总账号）按用户要求**保留**在名册内。
+
+**验证**：
+
+| 项 | 结果 |
+|---|---|
+| `/health` | version = 4.26 |
+| `/api/v1/pins`（空库） | 11 行、`bound_count=0`、全部「未绑定」✓ |
+| 绑定路径 | 模拟插件上报 `pin=13800001111&name=韩俊` → 该行绑定成功（`roster=True, bound=True`）；名册外 `测试试岗` → 独立成行（`roster=False`）✓ |
+| 真实浏览器（CDP） | 登录 → 人员管理：11 行、说明行正确、名册未绑定行分组列为「—」✓ |
+| 回归 | 面板冒烟 40 项 / 静态体检（id 103、标签 0 问题、CSS 变量 0 未定义、内联事件 45）/ 登录探针 24 项 全绿 |
+| 项目自带单测 | `test_cloud_relay_v2.py` 70 项，**69 通过**；唯一失败 `test_new_stat_cards_exist`（找 `id="stat-active-names"`）是**既存问题**——该元素在 v4.24 面板改版时被移除（用户 12:46 备份里还在），与本次改动无关 |
+
+**已清理**：验证用的两条测试数据（`13800001111` / `13900002222`）已从本地 `.devdata/visits.db` 删除。
+
+## 2026-09-16（修复：登录失败时的提示被 CSS 藏掉 → 表现为「点登录没反应」）
+
+现象：用户在浏览器打开 http://127.0.0.1:35430/ ，点「登 录」**屏幕上毫无反馈**。
+
+**根因**：登录门禁规则 `body.locked > *:not(.login-overlay) { visibility: hidden !important; }`
+会把 body 的其它直接子元素一并隐藏，而**提示用的 `#toast-container` 正是 body 的直接子元素**。
+于是账号密码错 / 网络错时，`doLogin()` 里 `toast('登录失败: …')` 生成的提示**存在但不可见**：
+
+```
+bodyClass:              locked
+toastText:              "登录失败: 账号或密码错误"
+toastVisibility:        hidden        ← 关键：提示其实生成了，只是看不见
+```
+
+> 另外 `#toast-container` 的 `z-index: 2000` 低于登录遮罩的 `9999`，即便不隐藏也会被盖住。
+
+**修复**（`cloud-relay/python/dashboard.html`，v4.25.1）：
+
+| # | 改动 | 说明 |
+|---|---|---|
+| 1 | `body.locked > *:not(.login-overlay):not(#toast-container)` | 门禁规则豁免 toast 容器 |
+| 2 | `#toast-container { z-index: 10000 }` | 提到登录遮罩（9999）之上 |
+| 3 | 新增 `loginErr(msg)`，`doLogin()` 失败/异常改走它 | 错误显示在**登录框内部**（与「请输入账号」同一个 `#login-err`，必然可见） |
+| 4 | 两个输入框加 `oninput="loginErr('')"` | 重新输入时自动清掉上一次的错误 |
+| 5 | `submitLogin()` 的两处校验也改走 `loginErr()` | 统一提示通道 |
+
+**验证**（真实 Chrome CDP 驱动，四场景）：
+
+| 场景 | 结果 |
+|---|---|
+| 正常环境 + 正确密码 | `locked` → 进入面板 ✓ |
+| 正常环境 + 错误密码 | 登录框内红字「登录失败：账号或密码错误」（`computed visibility=visible`）✓ |
+| 禁本地存储 + 正确密码 | 就地进入面板（v4.25 降级路径）✓ |
+| 禁本地存储 + 错误密码 | 登录框内红字可见 ✓ |
+
+回归：面板冒烟 40 项 / 登录探针 24 项 / 静态体检（id 102、标签 0 问题、CSS 变量 0 未定义、内联事件 45 个）全绿。
+
+## 2026-09-16（修复：受限环境下「点登录没反应」）
+
+现象：「打开 http://127.0.0.1:35430/，点击登录没反应」。
+
+**根因**（用 Chrome CDP 直连真实浏览器，注入 `localStorage` 抛错复现确认）：
+面板有 7 处裸调 `localStorage`。在内嵌预览面板 / 沙箱 iframe / 隐私模式下，
+`localStorage` 一访问就抛 `SecurityError`，于是：
+
+- 「登录门禁」IIFE 首行 `isLoggedIn()` 就抛错 → `body.locked` 与登录框 `show` 都没加上，
+  页面既不锁定也不弹登录框；
+- 点「登 录」时 `setSessionToken()` 抛错，异常被 `catch` 吞成**误导性的「登录失败: 网络错误」**，
+  且登录框不关闭、页面不跳转 —— 用户看到的就是「怎么点都没反应」。
+
+> 排查结论：前端逻辑、服务端接口（token 签发/校验/401）、真实浏览器登录全流程本身都是**正常**的，
+> 只有存储受限这一条路径会坏。登录探针 24 项 + 面板冒烟 40 项在修复前就已全绿 ——
+> 说明这两个用例集**覆盖不到**入口脚本块（`panel_smoke.js` 只执行 `blocks[0]`，登录逻辑在 `blocks[1]`）。
+
+**修复**（`cloud-relay/python/dashboard.html`，v4.25）：
+
+- 新增 `AD_STORE` 安全存储封装：先探测，可用走 `localStorage`，不可用**自动降级为内存存储**；
+  7 处调用（主题 ×4、会话 ×3）全部改走它。
+- `doLogin` 成功分支：持久存储可用才 `location.reload()`；降级时改调新增的 `enterPanel()`
+  **就地进入面板** —— 否则 reload 会把内存里的 token 丢掉、又被弹回登录框。
+- 错误提示区分「存储被禁用」与「真网络错误」，不再误导。
+- 门禁 IIFE 整体加 `try/catch` 兜底：万一抛错也会把登录框放出来，不留「无门禁」的空白态。
+- 登录框新增 `#login-store-hint`，受限环境自动显示「刷新后需重新登录，建议用独立窗口打开」。
+
+**验证**（同一受限环境下前后对比）：
+
+| 项 | 修复前 | 修复后 |
+|---|---|---|
+| 未捕获异常 | 2 个 `SecurityError` | **0 个**（降为 console.warning） |
+| 页面状态 | 无门禁、登录框 `display:none` | `locked` + 登录框 `display:flex` |
+| 点「登 录」 | 登录框纹丝不动 | **关闭登录框、进入面板** |
+| 提示语 | 「登录失败: 网络错误」 | 「当前环境禁止本地存储，已直接进入（刷新后需重新登录）」 |
+
+回归：登录探针 24 项 + 面板冒烟 40 项全绿；正常环境（`localStorage` 可用）流程不变。
+
+## 2026-09-16（新增本地开发运行器 dev.bat / devwatch.py）
+
+背景：「本地电脑运行，有没有方便的命令，这样我修改后更方便检查修改」。
+
+核心痛点：`dashboard.html` 由 `load_dashboard_html()` 在**模块导入时**读一次
+（`HTML_CONTENT = load_dashboard_html()`，第 1358 行）——**改面板必须重启进程**，刷新浏览器无效。
+
+- 新增 `cloud-relay/dev.bat`（纯 ASCII，负责建 venv + 装依赖）+ `cloud-relay/devwatch.py`
+  （纯标准库，330 行，零侵入不碰业务代码）。用法：执行/双击 `dev.bat`，之后改任意
+  `python/*.py` 或 `dashboard.html` 保存即自动重启；支持 `--port` / `--no-watch` /
+  `--no-open` / `--db`。
+- 开发态数据隔离到 `cloud-relay/.devdata/`（日志 + SQLite），子进程一律带 `-B` 不写
+  `__pycache__` —— 实测源码目录零污染；`.gitignore` 补 `.venv/`、`.devdata/`、
+  `*.db-wal`、`*.db-shm`。
+- 开发态管理员固定 `admin` / `admin`，避开「未设 `AUTODIAL_ADMIN_PASS` 则随机生成且只打在日志里」的分支。
+- 端口预检按 `0.0.0.0` 探测并识别占用者版本，避免 `main()` 弹 Windows 对话框阻塞。
+
+### 实测踩到并已修复的两个坑
+
+1. **端口预检用 `127.0.0.1` 会漏检**：Windows 下已有 socket 绑 `0.0.0.0:35430` 时，另一个
+   socket 仍能成功绑到 `127.0.0.1:35430`（两个地址不被视为冲突）⇒ 表现为「预检通过、
+   子进程一启动就崩」。已改为绑 `0.0.0.0`（Windows 另加 `SO_EXCLUSIVEADDRUSE`），
+   并在 `main()` 绑 `127.0.0.1`（原实现）这一处留下同样的隐患备注。
+2. **bat 文件里不能出现中文**：cmd.exe 解析含多字节字符的 bat 会错乱行边界，实测连锁出现
+   `set` 被吞掉、`goto deps` 变成执行 `deps`、`%VENV_PY%` 未定义。`dev.bat` 已改为纯 ASCII，
+   中文提示全部由 `devwatch.py` 输出（`chcp 65001` + `PYTHONUTF8=1`）。
+
+**验证（全部实跑）**：改 `dashboard.html` → 自动重启且新内容生效（uptime 33 → 0）、
+还原后 MD5 与线上一致（`5af0e4e4`）；对入口注入语法错误 → 不重启且旧服务继续运行
+（uptime 30 → 38），还原后自动恢复（md5 `1bb90de0` 一致）；端口被占 → 预检拦截、
+报出占用者版本、退出码 1。
+
+文档：README「快速启动 → 云中继」与目录结构；技术文档新增 §2.13。
+
+## 2026-09-16（云端部署刷新 · 双实例对齐 v4.23 + 面板换 v6.0 主题 + 数据清零）
+
+背景：「之前在云端 1Panel 做过部署配置旧版，现在本地代码更新了」，要求刷新腾讯云
+101.34.65.254 并把累积数据清干净。
+
+**代码侧只差一个文件**：`cloud_relay_v2.py` 线上/本地 MD5 均为 `1bb90de0`（线上早已是 v4.23，
+无需重传）；只有 `dashboard.html` 落后 —— 逐行 diff 确认 6 处改动**全部是 v6.0「色相 × 明暗」
+主题重构**（9 套钉死明暗 → 16 色相 × 亮白/暗夜，与扩展端 `themes.js` 同源），无夹带。
+
+- **主实例 35430**：`dashboard.html` 173261 B → **182871 B**（MD5 `5af0e4e4`），原子替换后
+  `supervisorctl` 重启，`/health` = 4.23。
+- **备用实例 35440（原落后 13 个版本）**：v4.10 → **v4.23**。新镜像
+  `autodial-cloud-relay:v4.23`（158 MB），容器带 `--restart=always` 重建并 **healthy**；
+  容器内 `/app/{cloud_relay_v2.py,dashboard.html}` 指纹与本地逐字节一致。
+- **管理员账号不再靠"从日志里捞随机密码"**：supervisor conf 与容器 `-e` 双双注入
+  `AUTODIAL_ADMIN_USER=18335162275` / `AUTODIAL_ADMIN_PASS=123456`。清库后
+  `_seed_default_admin()` 按注入值重建。（🔴 改口令必须同步改这两处，否则下次重启随机化。）
+- **数据清零**（用户明确要求不留备份）：主库 `visits` 2639 → 0、`phones` 102 → 0、
+  `advisor_names` 20 → 0；备用库本就空壳。同步清掉 `__pycache__`、宿主
+  `/home/ubuntu/autodial-cloud-relay/{stats.json,cloud-relay.log}`、supervisor 与
+  `/var/log/autodial.log`。清后两库均 102400 B、仅 `admin_accounts` 1 行。
+
+### ⚠️ 踩到并已定位的新坑：生产服务器出网受限
+
+第一次 `docker build` 挂了（日志无输出、7 分钟无果），定位后确认**不是基础镜像的问题**：
+
+| 目标 | 实测结果 |
+|---|---|
+| `registry-1.docker.io` 直连 | ❌ 超时 |
+| `mirror.ccs.tencentyun.com`（daemon.json 已配） | ✅ HTTP 200，0.07 s |
+| `pypi.org/simple/` | ❌ 失败 |
+| `pypi.tuna.tsinghua.edu.cn/simple/` | ✅ 4.4 MB/s |
+
+⇒ 构建失败卡在**容器内 `pip install`**。服务器改用
+`/opt/autodial/docker-build/Dockerfile`（= 仓库 Dockerfile + 清华 pypi 源 + 用 python 写健康
+检查替代 `apt-get install curl`，少一个 Debian 源依赖），**仓库那份 Dockerfile 在这台机器上
+无法直接构建**，已在 README「已知部署坑」补第 3 条。
+
+### 验证（全部实跑）
+
+- 双实例 `/health` 均 `version=4.23`（本机 + 公网各测一遍）；面板 HTTP 200 / 182871 B
+- v6.0 主题特征串（`AD_THEME_MODES`/`AD_SEMANTIC`/`tm-mode`）两实例各命中 11 处
+- `POST /api/v1/login` 两实例均 `ok:true`；未授权 `/api/status` 均 **401**
+- 两库逐表点数全 0（仅 `admin_accounts` 1 行）
+- 运维脚本同步更新：`scripts/build-docker.sh`（新增）、`scripts/rebuild-docker.sh`（镜像 tag
+  v2 → v4.23 + 补全 `TZ`/`AUTODIAL_DATA_DIR`/`AUTODIAL_ADMIN_*`），旧版留 `.bak-`
+- 旧镜像 `:v1` / `:v2` 保留，可一键回滚；代码旧版留
+  `*.bak-pre-v6.0theme_20260915`
+
 ## 2026-09-15（扩展 v6.3.4 · 成功挂断后按钮留在原位）
 
 反馈：「希望成功挂断后按钮留在原位。」

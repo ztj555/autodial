@@ -56,6 +56,12 @@ Desktop.ini
 *.bak
 test_output*.txt
 
+# 本地开发环境（dev.bat 使用，勿提交）
+cloud-relay/.venv/
+cloud-relay/.devdata/
+*.db-wal
+*.db-shm
+
 # ����״̬��reasonix/workbuddy��
 .reasonix/
 reasonix.toml

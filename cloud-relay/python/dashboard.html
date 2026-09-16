@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AutoDial 云中转 - 管理面板 v6.0</title>
+    <title>AutoDial 云中转 - 管理面板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* ===== v6 设计 Token（唯一权威值，与手机端 ThemeManager sky-blue/light 及扩展端 popup.html 对齐） ===== */
@@ -213,22 +213,82 @@
             background: rgba(var(--primary-rgb),.10);
             border-radius: var(--r-pill); padding: 2px 10px; margin-left: 6px;
         }
-
-        /* ===== Hero 状态横幅（手机端 heroCard） ===== */
-        .hero-card {
-            background: var(--grad-hero); border: 1px solid var(--hero-border);
-            border-radius: var(--r-xl); box-shadow: var(--shadow-card);
-            padding: 20px 24px; margin-bottom: 20px;
-            display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+        /* v4.24: 表格内联小图标按钮（一键复制号码），平时低对比、hover 才显色 */
+        .icon-btn-inline {
+            background: none; border: none; padding: 2px 4px; margin-left: 4px;
+            color: var(--text-2); cursor: pointer; border-radius: var(--r-sm);
+            vertical-align: -4px; opacity: .5; transition: opacity .15s, color .15s;
+            font-family: inherit; line-height: 0;
         }
-        .hero-left { display: flex; align-items: center; gap: 14px; }
-        .status-indicator {
+        .icon-btn-inline:hover { opacity: 1; color: var(--primary); }
+
+        /* ===== 连接状态条（v4.24：值班看板首屏第一位，替代原 hero 卡） ===== */
+        .conn-bar {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-xl); box-shadow: var(--shadow-card);
+            padding: 18px 22px; margin-bottom: 16px;
+        }
+        .conn-bar.is-empty { border-color: rgba(240,62,62,.45); background: rgba(240,62,62,.05); }
+        .conn-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .conn-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+        .conn-tile {
             width: 46px; height: 46px; border-radius: 50%;
             background: var(--icon-tile); display: grid; place-items: center; flex-shrink: 0;
         }
-        .status-indicator .status-dot { width: 12px; height: 12px; }
-        .hero-title { font-size: 16px; font-weight: 700; }
-        .hero-sub { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+        .conn-tile .status-dot { width: 12px; height: 12px; }
+        .conn-title { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+        .conn-sub { font-size: 12.5px; color: var(--text-2); margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .conn-names { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .conn-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(64,192,87,.13); color: #2B7A3D;
+            border-radius: var(--r-pill); padding: 3px 10px; font-size: 12px; font-weight: 600;
+        }
+        .conn-chip .t { font-weight: 400; opacity: .75; }
+        .conn-chip.is-pc { background: rgba(240,140,0,.14); color: #8A5000; }
+        .conn-offline-toggle {
+            background: none; border: none; cursor: pointer; font-family: inherit;
+            font-size: 12px; color: var(--text-2); text-decoration: underline; padding: 0;
+        }
+        .conn-offline-list { margin-top: 10px; font-size: 12.5px; color: var(--text-2); line-height: 1.9; display: none; }
+        .conn-offline-list.show { display: block; }
+
+        /* ===== 待处理提醒 ===== */
+        .alert-bar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: rgba(240,140,0,.09); border: 1px solid rgba(240,140,0,.32);
+            border-radius: var(--r-lg); padding: 11px 16px; margin-bottom: 16px;
+            font-size: 13px; color: #8A5000;
+        }
+        .alert-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; }
+        .alert-item:hover { text-decoration: underline; }
+        .alert-sep { color: rgba(138,80,0,.35); }
+
+        /* ===== 快捷入口（v4.24：把最常用的三个动作提到首屏） ===== */
+        .quick-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
+        @media (max-width: 700px) { .quick-row { grid-template-columns: 1fr; } }
+        .quick-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-card);
+            padding: 14px 16px; font-family: inherit; font-size: 13.5px; font-weight: 600;
+            color: var(--text); cursor: pointer; transition: transform .15s, border-color .15s, color .15s;
+        }
+        .quick-btn:hover { transform: translateY(-2px); border-color: var(--primary); color: var(--primary); }
+        .quick-btn svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+        /* ===== 运维区（v4.24：默认折叠，出问题才展开） ===== */
+        .ops-head {
+            display: flex; align-items: center; gap: 10px; width: 100%;
+            background: none; border: none; padding: 0; cursor: pointer;
+            font-family: inherit; text-align: left; color: inherit;
+        }
+        .ops-head .ops-caret { margin-left: auto; color: var(--text-2); transition: transform .18s; }
+        .ops-head.open .ops-caret { transform: rotate(180deg); }
+        .ops-body { display: none; margin-top: 18px; }
+        .ops-body.show { display: block; }
+        .ops-info { display: flex; gap: 28px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); margin-bottom: 18px; }
+        .ops-info b { color: var(--text); font-weight: 600; margin-left: 4px; }
 
         /* ===== 统计卡（手机端 StatsFragment：图标底座 + 大数字） ===== */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 16px; }
@@ -362,6 +422,17 @@
         .filter-group .input { min-width: 130px; }
         .tool-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
         .tool-label { font-size: 12px; color: var(--text-2); padding-bottom: 8px; }
+        /* ===== 快捷日期（v4.24：常用区间一键到位，省掉手点两个日期框） ===== */
+        .quickdates { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+        .qd-label { font-size: 11px; font-weight: 600; color: var(--text-2); margin-right: 2px; }
+        .qd-chip {
+            background: var(--surface); border: 1px solid var(--border-input);
+            color: var(--text-2); border-radius: var(--r-pill); padding: 5px 14px;
+            font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+            transition: border-color .15s, color .15s, background .15s;
+        }
+        .qd-chip:hover { border-color: var(--primary); color: var(--primary); }
+        .qd-chip.active { background: rgba(var(--primary-rgb),.12); border-color: var(--primary); color: var(--primary); }
         .form-group { margin-bottom: 14px; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 12px; color: var(--text-2); }
         .form-msg { margin-top: 12px; font-size: 13px; }
@@ -410,7 +481,9 @@
 
         /* ===== 登录框 ===== */
         /* ===== 登录门禁：未登录时隐藏登录框以外的全部内容 ===== */
-        body.locked > *:not(.login-overlay) { visibility: hidden !important; }
+        /* v4.25.1: toast 容器必须豁免 —— 它也是 body 的直接子元素，被一起隐藏后
+           「密码错误 / 网络错误」的提示完全看不见，用户表现就是「点登录没反应」 */
+        body.locked > *:not(.login-overlay):not(#toast-container) { visibility: hidden !important; }
         body.locked { overflow: hidden; }
 
         .login-overlay { z-index: 9999; }
@@ -469,7 +542,8 @@
         .info-list code { background: var(--input-bg); padding: 2px 8px; border-radius: 6px; font-size: 12px; }
 
         /* ===== Toast ===== */
-        #toast-container { position: fixed; top: 76px; right: 24px; z-index: 2000; display: flex; flex-direction: column; gap: 10px; }
+        /* v4.25.1: z-index 必须高于登录遮罩(9999)，否则未登录时的提示被遮罩盖住看不见 */
+        #toast-container { position: fixed; top: 76px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; }
         .toast {
             display: flex; align-items: center; gap: 10px;
             background: var(--surface); border: 1px solid var(--border);
@@ -525,7 +599,7 @@
             </div>
             <div class="logo-text">
                 <strong>AutoDial 云中转</strong>
-                <span class="ver-pill">v6.0</span>
+                <span class="ver-pill" id="ver-pill" title="云中继服务版本（原来这里写死面板设计版本 v6.0，容易误判线上版本）">v-</span>
             </div>
         </div>
         <nav class="side-nav">
@@ -579,18 +653,20 @@
             <div class="api-banner" id="api-banner" style="display:none;"></div>
             <!-- ==================== 首页总览 ==================== -->
             <div id="page-dashboard" class="page active">
-                <div class="hero-card">
-                    <div class="hero-left">
-                        <div class="status-indicator"><span class="status-dot"></span></div>
-                        <div class="hero-text">
-                            <div class="hero-title">云中继运行中</div>
-                            <div class="hero-sub">端口 <span id="hero-port">-</span> · 已运行 <span id="hero-uptime">-</span> · 当前连接 <span id="hero-conn">0</span></div>
+                <!-- v4.24: 首屏第一位——现在有谁在线（原 hero 卡只报服务自身健康，已下沉到运维区） -->
+                <div class="conn-bar" id="conn-bar">
+                    <div class="conn-main">
+                        <div class="conn-left">
+                            <div class="conn-tile"><span class="status-dot" id="conn-dot"></span></div>
+                            <div style="min-width:0;">
+                                <div class="conn-title" id="conn-title">正在读取连接状态...</div>
+                                <div class="conn-sub" id="conn-sub">-</div>
+                                <div class="conn-names" id="conn-names"></div>
+                            </div>
                         </div>
+                        <button class="btn btn-outline btn-sm" id="conn-offline-toggle" onclick="toggleOfflineList()" style="display:none;">离线 0 台</button>
                     </div>
-                    <button class="btn btn-primary" onclick="refreshAll()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
-                        立即刷新
-                    </button>
+                    <div class="conn-offline-list" id="conn-offline-list"></div>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -603,34 +679,54 @@
                         <div class="stat-value" id="stat-today-visits">0</div>
                         <div class="stat-sub">上门登记记录</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico tone-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div><div class="stat-label">在线手机</div></div>
-                        <div class="stat-value" id="stat-phones">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico tone-orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12.5" rx="2.5"/><path d="M8 20.5h8"/><path d="M12 17v3.5"/></svg></div><div class="stat-label">在线PC</div></div>
-                        <div class="stat-value" id="stat-pcs">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4"/></svg></div><div class="stat-label">最近活跃</div></div>
-                        <div class="stat-value stat-value-sm" id="stat-active-names">-</div>
-                        <div class="stat-sub">最近连接的人员</div>
-                    </div>
                 </div>
-                <div class="card-row">
-                    <div class="card">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>连接数趋势（最近4小时）</div>
-                        <div class="chart-wrap"><canvas id="conn-chart"></canvas></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z"/></svg></div>消息类型分布</div>
-                        <div class="chart-wrap-sm"><canvas id="msg-chart"></canvas></div>
-                    </div>
+                <!-- v4.24: 待处理提醒——有内容才出现，点击直达对应页 -->
+                <div class="alert-bar" id="alert-bar" style="display:none;"></div>
+                <!-- v4.24: 快捷入口——把每天最高频的三个动作提到首屏 -->
+                <div class="quick-row">
+                    <button class="quick-btn" onclick="quickSearchNumber()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+                        查号码
+                    </button>
+                    <button class="quick-btn" onclick="quickImport()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+                        批量导入
+                    </button>
+                    <button class="quick-btn" onclick="quickExportToday()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                        导出今日
+                    </button>
                 </div>
                 <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></div>最近连接的客户端</div>
-                    <table class="data-table"><thead><tr><th>设备名称</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th></tr></thead>
+                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></div>最近连接记录<span class="count-pill" id="recent-count">0</span>条</div>
+                    <table class="data-table"><thead><tr><th>设备</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th></tr></thead>
                     <tbody id="recent-clients"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                </div>
+                <!-- v4.24: 运维信息（服务自身健康 + 趋势图）默认折叠，出问题才展开 -->
+                <div class="card">
+                    <button class="ops-head" id="ops-head" onclick="toggleOps()">
+                        <div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>
+                        <span class="card-title" style="margin-bottom:0;">服务详情与趋势</span>
+                        <svg class="ops-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="ops-body" id="ops-body">
+                        <div class="ops-info">
+                            <span>端口<b id="hero-port">-</b></span>
+                            <span>已运行<b id="hero-uptime">-</b></span>
+                            <span>当前连接<b id="hero-conn">0</b></span>
+                            <span>服务版本<b id="ops-version">-</b></span>
+                        </div>
+                        <div class="card-row">
+                            <div class="card">
+                                <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>连接数趋势（最近4小时）</div>
+                                <div class="chart-wrap"><canvas id="conn-chart"></canvas></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z"/></svg></div>消息类型分布</div>
+                                <div class="chart-wrap-sm"><canvas id="msg-chart"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -649,6 +745,8 @@
                     </div>
                     <table class="data-table"><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th></tr></thead>
                     <tbody id="phones-list"><tr><td colspan="9" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <!-- v4.24: 分页控件从表体里挪出来，与其它列表页统一 -->
+                    <div class="pagination" id="phones-pagination"></div>
                 </div>
             </div>
 
@@ -657,22 +755,32 @@
                 <div class="card">
                     <div class="card-head">
                         <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg></div>通话记录<span class="count-pill" id="calls-total">0</span>条</div>
+                        <div class="tool-row">
+                            <button class="btn btn-success btn-sm" onclick="exportCallsCSV()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                                导出CSV
+                            </button>
+                        </div>
+                    </div>
+                    <!-- v4.24: 常用区间一键到位 -->
+                    <div class="quickdates">
+                        <span class="qd-label">快捷</span>
+                        <button class="qd-chip" id="cqd-today" onclick="setCallRange('today')">今天</button>
+                        <button class="qd-chip" id="cqd-yesterday" onclick="setCallRange('yesterday')">昨天</button>
+                        <button class="qd-chip" id="cqd-7d" onclick="setCallRange('7d')">近 7 天</button>
+                        <button class="qd-chip" id="cqd-all" onclick="setCallRange('all')">全部</button>
                     </div>
                     <div class="filters">
                         <div class="filter-group"><label>设备筛选</label><select class="input" id="call-device-filter" onchange="loadCalls()"><option value="">全部设备</option></select></div>
                         <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="call-date-from" onchange="loadCalls()"></div>
                         <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="call-date-to" onchange="loadCalls()"></div>
                         <div class="filter-group"><label>号码搜索</label><input type="text" class="input" id="call-number" placeholder="输入号码..." oninput="callSearchDebounce()"></div>
-                        <button class="btn btn-primary btn-sm" onclick="loadCalls()">
+                        <button class="btn btn-outline btn-sm" onclick="loadCalls()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
                             查询
                         </button>
-                        <button class="btn btn-success btn-sm" onclick="exportCallsCSV()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
-                            导出CSV
-                        </button>
                     </div>
-                    <table class="data-table"><thead><tr><th>设备ID</th><th>号码</th><th>通话时间</th><th>时长(秒)</th><th>类型</th><th>SIM</th><th>模型</th><th>版本</th></tr></thead>
+                    <table class="data-table"><thead><tr><th>设备</th><th>号码</th><th>通话时间</th><th>时长(秒)</th><th>类型</th><th>SIM</th><th>模型</th><th>版本</th></tr></thead>
                     <tbody id="calls-list"><tr><td colspan="8" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                     <div class="pagination" id="calls-pagination"></div>
                 </div>
@@ -683,6 +791,24 @@
                 <div class="card">
                     <div class="card-head">
                         <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg></div>上门登记管理</div>
+                        <div class="tool-row">
+                            <button class="btn btn-primary btn-sm" onclick="showImportModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+                                批量导入
+                            </button>
+                            <button class="btn btn-success btn-sm" onclick="exportCSV()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                                导出CSV
+                            </button>
+                        </div>
+                    </div>
+                    <!-- v4.24: 常用区间一键到位（原来必须手点两个日期框才出数据） -->
+                    <div class="quickdates">
+                        <span class="qd-label">快捷</span>
+                        <button class="qd-chip" id="vqd-today" onclick="setVisitRange('today')">今天</button>
+                        <button class="qd-chip" id="vqd-yesterday" onclick="setVisitRange('yesterday')">昨天</button>
+                        <button class="qd-chip" id="vqd-7d" onclick="setVisitRange('7d')">近 7 天</button>
+                        <button class="qd-chip" id="vqd-all" onclick="setVisitRange('all')">全部</button>
                     </div>
                     <div class="filters">
                         <div class="filter-group"><label>业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()"><option value="">不限（全部）</option><option value="__group__">按分组筛选...</option></select></div>
@@ -690,25 +816,18 @@
                         <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="onVisitFilterChange()"></div>
                         <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="onVisitFilterChange()"></div>
                         <div class="filter-group"><label>来源</label><select class="input" id="visit-filter-source" onchange="onVisitFilterChange()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">未同步</option></select></div>
-                        <button class="btn btn-primary btn-sm" onclick="onVisitFilterChange()">
+                        <button class="btn btn-outline btn-sm" onclick="onVisitFilterChange()">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
                             刷新
                         </button>
-                        <button class="btn btn-success btn-sm" onclick="exportCSV()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
-                            导出CSV
-                        </button>
-                        <button class="btn btn-primary btn-sm" onclick="showImportModal()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
-                            批量导入
-                        </button>
                     </div>
                     <table class="data-table"><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>顾问(电话)</th><th>顾问姓名</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
-                    <tbody id="visits-list"><tr><td colspan="11" class="empty-state">请选择筛选条件</td></tr></tbody></table>
-                    <div id="visit-pager" style="display:flex;align-items:center;gap:12px;padding:10px 4px 2px;font-size:13px;color:var(--text2);">
-                        <button class="btn btn-sm" id="visit-prev" onclick="visitGoPage(-1)">上一页</button>
+                    <tbody id="visits-list"><tr><td colspan="11" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <!-- v4.24: 翻页按钮原来写成 class="btn btn-sm"（漏修饰类）⇒ .btn 基类无背景/边框，渲染成裸文字 -->
+                    <div class="pagination" id="visit-pager">
+                        <button class="pager-btn" id="visit-prev" onclick="visitGoPage(-1)"><span class="chev-flip" id="visit-prev-ico"></span> 上一页</button>
                         <span id="visit-page-info">-</span>
-                        <button class="btn btn-sm" id="visit-next" onclick="visitGoPage(1)">下一页</button>
+                        <button class="pager-btn" id="visit-next" onclick="visitGoPage(1)">下一页 <span id="visit-next-ico"></span></button>
                     </div>
                 </div>
                 <div class="card">
@@ -736,8 +855,9 @@
                             </button>
                         </div>
                     </div>
+                    <div id="pins-roster-hint" style="font-size:12px;color:var(--text-2);margin:0 0 12px;line-height:1.6;">人员名册加载中…</div>
                     <table class="data-table"><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>更新时间</th></tr></thead>
-                    <tbody id="pins-list"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <tbody id="pins-list"><tr><td colspan="4" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
@@ -843,7 +963,7 @@
     <div class="modal-overlay z-top" id="confirm-modal">
         <div class="modal" style="max-width:400px;">
             <h3><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 16.5v.5"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div><span id="confirm-title">确认操作</span></h3>
-            <div id="confirm-message" style="font-size:13.5px;line-height:1.7;color:var(--text);"></div>
+            <div id="confirm-message" style="font-size:13.5px;line-height:1.7;color:var(--text);white-space:pre-line;"></div>
             <div class="form-actions">
                 <button class="btn btn-outline" id="confirm-cancel">取消</button>
                 <button class="btn btn-danger" id="confirm-ok">确定</button>
@@ -909,11 +1029,12 @@
             </div>
             <div class="sub">请输入管理员账号和密码</div>
             <label>账号</label>
-            <input type="text" class="input" id="login-user" placeholder="请输入账号">
+            <input type="text" class="input" id="login-user" placeholder="请输入账号" oninput="loginErr('')">
             <label>密码</label>
-            <input type="password" class="input" id="login-pass" placeholder="请输入密码" onkeydown="if(event.key==='Enter')submitLogin()">
+            <input type="password" class="input" id="login-pass" placeholder="请输入密码" oninput="loginErr('')" onkeydown="if(event.key==='Enter')submitLogin()">
             <button class="btn btn-primary" onclick="submitLogin()">登 录</button>
             <div class="err" id="login-err"></div>
+            <div id="login-store-hint" style="display:none;margin-top:10px;padding:9px 11px;font-size:12px;line-height:1.65;border-radius:8px;background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.30);color:#b45309;">此浏览器环境禁止本地存储（内嵌预览 / 隐私模式），登录后<b>刷新页面需重新登录</b>。建议改用独立浏览器窗口打开。</div>
         </div>
     </div>
 
@@ -928,6 +1049,42 @@
         let refreshPaused = false;   // v4.20: 自动刷新暂停开关（供长时间填写表格时使用）
         let _timerRefresh = false;   // v4.21.2: 定时刷新标记（软刷新，不重置分页/筛选/展开）
         let _loadSeq = { phones: 0, calls: 0, visits: 0 };  // v4.21.2: 列表请求序号（防慢响应覆盖）
+
+        // ==================== 本地存储安全封装（v4.25） ====================
+        // 内嵌预览面板 / 沙箱 iframe / 隐私模式下，localStorage 一访问就抛 SecurityError。
+        // 原先 7 处裸调用一旦抛错，「登录门禁」那个 IIFE 会整个中断：页面既不锁定也不弹登录框，
+        // 点「登 录」的异常又被 catch 成含义错误的「网络错误」—— 表现为「怎么点都没反应」。
+        // 统一走这里：能用就用 localStorage；不能用自动降级为内存存储（本标签页内有效）。
+        const _memStore = {};
+        const AD_STORE = {
+            _usable: null,
+            _probe() {
+                if (this._usable === null) {
+                    try {
+                        localStorage.setItem('__ad_probe', '1');
+                        localStorage.removeItem('__ad_probe');
+                        this._usable = true;
+                    } catch (e) {
+                        this._usable = false;
+                        console.warn('[AutoDial] localStorage 不可用，已降级为内存存储（刷新页面后需重新登录）:', e.name);
+                    }
+                }
+                return this._usable;
+            },
+            persistent() { return this._probe(); },
+            get(k) {
+                if (this._probe()) { try { return localStorage.getItem(k); } catch (e) { /* 降级 */ } }
+                return Object.prototype.hasOwnProperty.call(_memStore, k) ? _memStore[k] : null;
+            },
+            set(k, v) {
+                if (this._probe()) { try { localStorage.setItem(k, v); return; } catch (e) { /* 降级 */ } }
+                _memStore[k] = String(v);
+            },
+            remove(k) {
+                if (this._probe()) { try { localStorage.removeItem(k); } catch (e) { /* 降级 */ } }
+                delete _memStore[k];
+            }
+        };
 
         // ==================== SVG 图标（Phosphor 风格：24 viewBox / stroke 1.8 / round） ====================
         const ICONS = {
@@ -949,6 +1106,7 @@
             'pencil': '<path d="M4 20l1.2-4.2L16.5 4.5a2.1 2.1 0 013 3L8.2 18.8 4 20z"/><path d="M14.5 6.5l3 3"/>',
             'trash': '<path d="M4 7h16"/><path d="M10 4h4a1.5 1.5 0 011.5 1.5V7"/><path d="M6.5 7l1 12a2 2 0 002 1.9h5a2 2 0 002-1.9l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/>',
             'check': '<path d="M5 13l4 4 10-10"/>',
+            'copy': '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0013.5 4h-8A1.5 1.5 0 004 5.5v8A1.5 1.5 0 005.5 15"/>',
             'warning': '<path d="M12 4L2.5 20h19L12 4z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
             'info': '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.5h.01"/>',
             'chevron': '<path d="M9 6l6 6-6 6"/>',
@@ -1092,12 +1250,14 @@
                 primaryRgb: _adHexRgb(t.accent).join(',')
             };
         }
+        // v4.24: 首屏启动标志位——启动过程中 applyTheme 不再重复触发首页取数（init 会取一次）
+        let _booting = true;
         function getThemeId() {
-            const t = localStorage.getItem('__ad_theme');
+            const t = AD_STORE.get('__ad_theme');
             return AD_HAS_THEME(t) ? t : 'sky-blue';
         }
         function getThemeMode() {
-            return AD_NORM_MODE(localStorage.getItem('__ad_theme_mode'));
+            return AD_NORM_MODE(AD_STORE.get('__ad_theme_mode'));
         }
         function applyTheme(id, mode) {
             if (!AD_HAS_THEME(id)) id = 'sky-blue';
@@ -1128,11 +1288,13 @@
             r.setProperty('--primary-rgb', v.primaryRgb);
             document.documentElement.dataset.theme = id;
             document.documentElement.dataset.themeMode = mk;
-            localStorage.setItem('__ad_theme', id);
-            localStorage.setItem('__ad_theme_mode', mk);
+            AD_STORE.set('__ad_theme', id);
+            AD_STORE.set('__ad_theme_mode', mk);
             buildThemeMenu();
             chartDefaults();
-            const p = document.querySelector('.page.active');
+            // v4.24: 首屏启动时 applyTheme 也会走到这里，而紧随其后的 init 又会取一次数据 ⇒
+            // 首页 5 个接口白请求两遍。用启动标志位跳过这次（换肤时仍照常重绘）。
+            const p = _booting ? null : document.querySelector('.page.active');
             if (p) {
                 const pid = p.id.replace('page-', '');
                 if (pid === 'dashboard') loadDashboard();
@@ -1343,19 +1505,29 @@
 
         // ==================== 登录管理 ====================
         function getSessionToken() {
-            return localStorage.getItem('__ad_session_token');
+            return AD_STORE.get('__ad_session_token');
         }
         function setSessionToken(token) {
-            localStorage.setItem('__ad_session_token', token);
+            AD_STORE.set('__ad_session_token', token);
         }
         function clearSessionToken() {
-            localStorage.removeItem('__ad_session_token');
+            AD_STORE.remove('__ad_session_token');
         }
         function isLoggedIn() {
             return !!getSessionToken();
         }
 
+        // v4.25.1: 登录错误必须显示在登录框内部 —— 未登录时 body.locked 会隐藏 body 的其他
+        // 直接子元素（toast 容器就在其中），错误提示落进 toast 等于没提示，用户看到的是「点了没反应」。
+        function loginErr(msg) {
+            const el = document.getElementById('login-err');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.style.display = msg ? 'block' : 'none';
+        }
+
         async function doLogin(user, pass) {
+            loginErr('');
             try {
                 // v4.21.2 (D-8): 凭据走 POST body，不再放进网址（防进访问日志/浏览器历史）
                 const r = await fetch(API_BASE + '/api/v1/login', {
@@ -1364,9 +1536,30 @@
                     body: JSON.stringify({ user: user, pass: pass })
                 });
                 const d = await r.json();
-                if (d.ok) { setSessionToken(d.token); location.reload(); }
-                else toast('登录失败: ' + (d.message || '账号或密码错误'), 'error');
-            } catch(e) { toast('登录失败: 网络错误', 'error'); }
+                if (d.ok) {
+                    setSessionToken(d.token);
+                    // v4.25: 存储不可用时 reload 会把内存里的 token 丢掉、又被弹回登录框，
+                    // 所以降级路径改为就地进入面板（刷新页面后需重新登录）。
+                    if (AD_STORE.persistent()) location.reload();
+                    else { enterPanel(); toast('当前环境禁止本地存储，已直接进入（刷新后需重新登录）', 'info'); }
+                }
+                else loginErr('登录失败：' + (d.message || '账号或密码错误'));
+            } catch(e) {
+                loginErr('登录失败：' + (e && e.name === 'SecurityError'
+                    ? '浏览器禁用了本地存储，请换独立窗口打开（勿用内嵌预览）'
+                    : '网络错误，请确认中继服务正在运行'));
+            }
+        }
+
+        // v4.25: 不重载页面、就地进入面板 —— 供「localStorage 不可用」的降级路径使用
+        function enterPanel() {
+            document.body.classList.remove('locked');
+            const ov = document.getElementById('login-overlay');
+            if (ov) { ov.classList.remove('show'); ov.dataset.locked = ''; }
+            const lb = document.getElementById('login-btn'), ob = document.getElementById('logout-btn');
+            if (lb) lb.style.display = 'none';
+            if (ob) ob.style.display = '';
+            try { loadDashboard(); } catch (e) { console.warn('[AutoDial] 登录后加载首页失败:', e); }
         }
 
         function doLogout() {
@@ -1600,7 +1793,159 @@
 
         const CALL_TYPES = {0:'未知', 1:'呼入', 2:'呼出', 3:'未接'};
 
-        // ==================== 首页总览 ====================
+        // ==================== 首页总览（v4.24 值班看板） ====================
+        // 信息层级：① 现在谁在线 → ② 今日两数 → ③ 待处理 → ④ 快捷入口 → ⑤ 最近连接 → ⑥ 运维区(折叠)
+        // 核心变化：手机在线数改用设备表实时现算，不再读 30 秒一次的 /api/history 快照
+        //（原实现重启后 history 不足 2 个点会跳过赋值 ⇒ 头 30~60 秒恒显示 0，且与同屏实时值打架）
+        let _deviceList = [];        // 手机设备表（含离线设备），来自 /api/v1/devices
+        let _lastHistory = null;     // 连接数快照，供折叠区展开后重绘
+        let _lastByType = null;      // 消息类型分布，同上
+
+        function todayISO() {
+            const n = new Date();
+            return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+        }
+
+        // 设备别名映射：全站统一显示「别名」，不再显示认不出的 32 位设备ID
+        function deviceLabelOf(idOrName) {
+            if (!idOrName) return '';
+            for (let i = 0; i < _deviceList.length; i++) {
+                const d = _deviceList[i];
+                if (d.device_id === idOrName || d.device_name === idOrName) {
+                    if (d.label) return d.label;
+                    if (d.current_name) return d.current_name;
+                    break;
+                }
+            }
+            return idOrName.length > 14 ? idOrName.slice(0, 12) + '…' : idOrName;
+        }
+
+        function renderConnBar(clients) {
+            const bar = document.getElementById('conn-bar');
+            const tEl = document.getElementById('conn-title');
+            if (!bar || !tEl) return;
+            const dot = document.getElementById('conn-dot');
+            const sEl = document.getElementById('conn-sub');
+            const nEl = document.getElementById('conn-names');
+            const tgl = document.getElementById('conn-offline-toggle');
+            const list = document.getElementById('conn-offline-list');
+
+            const phones = _deviceList.filter(function(d) { return d.is_online; });
+            const pcs = (clients || []).filter(function(c) { return c.role === 'pc'; });
+
+            if (phones.length === 0) {
+                bar.classList.add('is-empty');
+                if (dot) dot.classList.remove('on');
+                tEl.textContent = '当前没有手机在线';
+                sEl.textContent = pcs.length > 0
+                    ? 'PC 端 ' + pcs.length + ' 台仍连接，但手机掉线时无法拨号'
+                    : '手机与 PC 都没连上，检查手机端 App 是否在运行';
+            } else {
+                bar.classList.remove('is-empty');
+                if (dot) dot.classList.add('on');
+                tEl.textContent = '手机 ' + phones.length + ' 台在线';
+                sEl.textContent = pcs.length > 0 ? 'PC 端 ' + pcs.length + ' 台在线' : 'PC 端未连接';
+            }
+
+            nEl.innerHTML = phones.map(function(d) {
+                const nm = d.label || d.current_name || '未命名';
+                const ago = d.last_seen ? timeAgo(d.last_seen) : '';
+                return '<span class="conn-chip">' + esc(nm) +
+                    (ago ? '<span class="t">' + esc(ago) + '</span>' : '') + '</span>';
+            }).join('') + pcs.map(function(c) {
+                return '<span class="conn-chip is-pc">PC · ' + esc(c.device_name || '未命名') + '</span>';
+            }).join('');
+
+            const offline = _deviceList.filter(function(d) { return !d.is_online; });
+            if (tgl && list) {
+                if (offline.length > 0) {
+                    tgl.style.display = '';
+                    tgl.textContent = '离线 ' + offline.length + ' 台';
+                    list.innerHTML = offline.slice(0, 30).map(function(d) {
+                        return '<div>' + esc(d.label || d.device_id || '未知设备') + ' · 最后活跃 ' +
+                            (d.last_seen ? timeAgo(d.last_seen) : '未知') + '</div>';
+                    }).join('');
+                } else {
+                    tgl.style.display = 'none';
+                    list.classList.remove('show');
+                }
+            }
+        }
+
+        function toggleOfflineList() {
+            const list = document.getElementById('conn-offline-list');
+            if (list) list.classList.toggle('show');
+        }
+
+        // 待处理提醒：只有真有内容时才出现，点击直达对应页
+        async function renderDashboardAlerts() {
+            const el = document.getElementById('alert-bar');
+            if (!el) return;
+            const items = [];
+            const stale = _deviceList.filter(function(d) {
+                if (d.is_online || !d.last_seen) return false;
+                return (Date.now() - new Date(d.last_seen).getTime()) > 3600000;
+            }).length;
+            if (stale > 0) {
+                items.push('<span class="alert-item" onclick="showPage(\'phones\')">' +
+                    ic('warning', 14) + ' ' + stale + ' 台设备离线超 1 小时</span>');
+            }
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/visits?source=unsynced&page=1&page_size=1'));
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d && d.ok === true && d.total > 0) {
+                        items.push('<span class="alert-item" onclick="quickUnsynced()">' +
+                            ic('warning', 14) + ' ' + d.total + ' 条登记未同步 CRM</span>');
+                    }
+                }
+            } catch (e) {}
+            if (items.length === 0) { el.style.display = 'none'; return; }
+            el.innerHTML = items.join('<span class="alert-sep">·</span>');
+            el.style.display = '';
+        }
+
+        function toggleOps() {
+            const head = document.getElementById('ops-head');
+            const body = document.getElementById('ops-body');
+            if (!body) return;
+            const open = body.classList.toggle('show');
+            if (head) head.classList.toggle('open', open);
+            // 折叠状态下 canvas 高度为 0，展开后必须重绘，否则图表是空白
+            if (open) {
+                if (_lastHistory) renderConnChart(_lastHistory);
+                if (_lastByType) renderMsgChart(_lastByType);
+            }
+        }
+
+        // 快捷入口（把每天最高频的三个动作提到首屏）
+        function quickSearchNumber() {
+            showPage('calls');
+            setTimeout(function() {
+                const el = document.getElementById('call-number');
+                if (el) { el.focus(); el.select(); }
+            }, 120);
+        }
+        function quickImport() {
+            showPage('visits');
+            setTimeout(showImportModal, 150);
+        }
+        function quickExportToday() {
+            const t = todayISO();
+            const f = document.getElementById('visit-filter-date-from');
+            const e = document.getElementById('visit-filter-date-to');
+            if (f) f.value = t;
+            if (e) e.value = t;
+            showPage('visits');
+            exportCSV();
+        }
+        function quickUnsynced() {
+            showPage('visits');
+            const s = document.getElementById('visit-filter-source');
+            if (s) s.value = 'unsynced';
+            setTimeout(onVisitFilterChange, 80);
+        }
+
         async function loadDashboard() {
             const d = await apiGet('/api/status');
             if (!d) return;
@@ -1612,43 +1957,51 @@
             const hc = document.getElementById('hero-conn'); if (hc) hc.textContent = d.total_connections;
             // v4.23 (M-8): 系统信息页显示真实服务版本（此前写死"设计系统 6.0"，易误判线上版本）
             const sv = document.getElementById('svc-version'); if (sv) sv.textContent = d.version || '-';
+            const ov = document.getElementById('ops-version'); if (ov) ov.textContent = d.version || '-';
+            // v4.24: 顶栏徽标显示真实服务版本（原来写死 v6.0，看着像线上版本，实际是面板设计版本）
+            const vp = document.getElementById('ver-pill'); if (vp && d.version) vp.textContent = 'v' + d.version;
 
             document.getElementById('stat-today-dials').textContent = d.today_dials || 0;
             document.getElementById('stat-today-visits').textContent = d.today_visits || 0;
 
-            const activeEl = document.getElementById('stat-active-names');
-            if (d.recent_active && d.recent_active.length > 0) {
-                const names = d.recent_active.map(function(a) {
-                    return a.name || a.pin || '未知';
-                });
-                activeEl.innerHTML = names.map(function(n) {
-                    return '<span class="tag">' + esc(n) + '</span>';
-                }).join(' ');
-            } else {
-                activeEl.textContent = '暂无';
-            }
-
-            const h = await apiGet('/api/history');
-            if (h && h.history && h.history.length > 1) {
-                document.getElementById('stat-phones').textContent = h.history[h.history.length-1].phones || 0;
-                document.getElementById('stat-pcs').textContent = h.history[h.history.length-1].pcs || 0;
-                renderConnChart(h.history);
-            }
-
-            const s = await apiGet('/api/stats');
-            if (s && s.by_type) renderMsgChart(s.by_type);
-
+            // ① 现在谁在线：手机取设备表（含离线设备），PC 取客户端列表 —— 全部实时
+            const dev = await apiGet('/api/v1/devices');
+            _deviceList = (dev && dev.devices) ? dev.devices : [];
             const c = await apiGet('/api/clients');
+            const clients = (c && c.clients) ? c.clients : [];
+            renderConnBar(clients);
+
+            // ⑤ 最近连接记录（设备列改显示别名）
             const tbody = document.getElementById('recent-clients');
-            if (!c || !c.clients || c.clients.length === 0) {
+            const rc = document.getElementById('recent-count');
+            if (rc) rc.textContent = clients.length;
+            if (clients.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无客户端连接</td></tr>';
             } else {
-                tbody.innerHTML = c.clients.slice(0, 10).map(function(cl) { return '<tr>' +
-                    '<td><strong>' + esc(cl.device_name) + '</strong></td>' +
+                tbody.innerHTML = clients.slice(0, 10).map(function(cl) { return '<tr>' +
+                    '<td><strong>' + esc(deviceLabelOf(cl.device_name) || '未命名') + '</strong></td>' +
                     '<td><span class="badge badge-' + cl.role + '">' + (cl.role==='pc'?'PC':'手机') + '</span></td>' +
                     '<td>' + (cl.pin?esc(cl.pin):'') + '</td><td>' + (cl.ip?esc(cl.ip):'') + '</td>' +
                     '<td>' + new Date(cl.connected_at).toLocaleString('zh-CN') + '</td>' +
                 '</tr>'; }).join('');
+            }
+
+            // ③ 待处理提醒
+            renderDashboardAlerts();
+
+            // ⑥ 运维区（默认折叠：只缓存数据，展开时才画图）
+            const h = await apiGet('/api/history');
+            if (h && h.history && h.history.length > 1) {
+                _lastHistory = h.history;
+                const ob = document.getElementById('ops-body');
+                if (ob && ob.classList.contains('show')) renderConnChart(h.history);
+            }
+
+            const s = await apiGet('/api/stats');
+            if (s && s.by_type) {
+                _lastByType = s.by_type;
+                const ob2 = document.getElementById('ops-body');
+                if (ob2 && ob2.classList.contains('show')) renderMsgChart(s.by_type);
             }
 
             lastRefresh = new Date();
@@ -1667,8 +2020,8 @@
                     labels: labels,
                     datasets: [
                         { label: '总连接', data: history.map(function(p){return p.count}), borderColor: c.primary, backgroundColor: function(context) { const chart = context.chart, area = chart.chartArea; if (!area) return 'rgba(' + c.primaryRgb + ',.10)'; const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom); g.addColorStop(0, 'rgba(' + c.primaryRgb + ',.18)'); g.addColorStop(1, 'rgba(' + c.primaryRgb + ',0)'); return g; }, fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0 },
-                        { label: 'PC', data: history.map(function(p){return p.pcs||0}), borderColor: c.green, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
-                        { label: '手机', data: history.map(function(p){return p.phones||0}), borderColor: c.red, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
+                        { label: 'PC', data: history.map(function(p){return p.pcs||0}), borderColor: c.orange, borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                        { label: '手机', data: history.map(function(p){return p.phones||0}), borderColor: c.green, borderWidth: 1.5, pointRadius: 0, tension: 0.3 }
                     ]
                 },
                 options: { responsive: true, maintainAspectRatio: false, interaction: { intersect: false, mode: 'index' },
@@ -1714,7 +2067,8 @@
             if (seq !== _loadSeq.phones) return;  // v4.21.2: 慢响应后到不覆盖新数据
             const statusFilter = document.getElementById('phone-status-filter')?.value || '';
             const search = (document.getElementById('phone-search')?.value || '').toLowerCase();
-            let devices = d?.devices || [];
+            _deviceList = (d && d.devices) ? d.devices : [];   // v4.24: 同步给首页状态条 + 别名映射
+            let devices = _deviceList.slice();
 
             if (statusFilter === 'online') devices = devices.filter(function(dev) { return dev.is_online; });
             else if (statusFilter === 'offline') devices = devices.filter(function(dev) { return !dev.is_online; });
@@ -1755,7 +2109,7 @@
                 const dpin = dev.default_pin || '';
                 return '<tr class="expandable" id="' + rowId + '" data-action="toggle-phone-history" data-row="' + escA(rowId) + '" data-detail="' + escA(detailId) + '" data-device="' + escA(dev.device_id||'') + '">' +
                     '<td><span class="expand-arrow" id="' + rowId + '-arrow">' + ic('chevron', 12) + '</span></td>' +
-                    '<td title="' + esc(dev.device_id||'') + '" class="td-ellipsis" style="max-width:120px;"><strong>' + esc((dev.device_id||'').slice(0,20)) + '</strong></td>' +
+                    '<td title="' + esc(dev.device_id||'') + '" class="td-ellipsis" style="max-width:160px;"><strong>' + esc((dev.device_id||'').slice(0,16)) + '</strong>' + copyBtn(dev.device_id) + '</td>' +
                     '<td><input type="text" class="cell-input" value="' + esc(dev.label||'') + '" placeholder="备注" ' +
                         'data-action="set-device-label" data-device="' + escA(dev.device_id||'') + '" ' +
                         'style="width:90px;" ' +
@@ -1773,15 +2127,17 @@
                 '<tr class="expand-detail" id="' + detailId + '"><td colspan="9"><div class="text-muted" style="text-align:center;">点击展开查看历史记录...</div></td></tr>';
             }).join('');
 
-            // 分页脚注直接渲染在表格内，避免改动页面布局结构
-            const pagerHtml = totalPages > 1
-                ? '<tr><td colspan="9" class="td-muted" style="text-align:center;padding:8px;">' +
-                  '第 ' + phonePage + ' / ' + totalPages + ' 页（共 ' + devices.length + ' 台设备）' +
-                  '<button class="btn btn-outline btn-sm" style="margin-left:10px;" onclick="phonePageGo(-1)"' + (phonePage <= 1 ? ' disabled' : '') + '>上一页</button>' +
-                  '<button class="btn btn-outline btn-sm" style="margin-left:6px;" onclick="phonePageGo(1)"' + (phonePage >= totalPages ? ' disabled' : '') + '>下一页</button>' +
-                  '</td></tr>'
-                : '';
-            tbody.innerHTML = rowsHtml + pagerHtml;
+            tbody.innerHTML = rowsHtml;
+
+            // v4.24: 分页从表体里挪出来（原来是塞在 tbody 里的一行），外观与其它列表页统一
+            const pager = document.getElementById('phones-pagination');
+            if (pager) {
+                pager.innerHTML = totalPages > 1
+                    ? '<button class="pager-btn" onclick="phonePageGo(-1)"' + (phonePage <= 1 ? ' disabled' : '') + '><span class="chev-flip">' + ic('chevron', 12) + '</span> 上一页</button>' +
+                      '<span>第 ' + phonePage + ' / ' + totalPages + ' 页 · 共 ' + devices.length + ' 台设备</span>' +
+                      '<button class="pager-btn" onclick="phonePageGo(1)"' + (phonePage >= totalPages ? ' disabled' : '') + '>下一页 ' + ic('chevron', 12) + '</button>'
+                    : (devices.length > 0 ? '<span>共 ' + devices.length + ' 台设备</span>' : '');
+            }
 
             // v4.21.2 (13): 恢复刷新前已展开的设备行（并用缓存重绘历史内容）
             phoneExpanded.forEach(function(did) {
@@ -1871,6 +2227,22 @@
                 loadPhones();
                 return;
             }
+            // v4.24: 这是内联输入框，失焦即写库。清除、或改写一个已经设过的 PIN 之前先确认——
+            // 原来误触会直接生效，对应手机当场登不进来（面板里删记录/删账号都有确认，这里反而没有）
+            let cur = '';
+            for (let i = 0; i < _deviceList.length; i++) {
+                if (_deviceList[i].device_id === deviceId) { cur = _deviceList[i].default_pin || ''; break; }
+            }
+            const willClear = (dp === '-' || dp === '');
+            if (cur && (willClear || dp !== cur)) {
+                const nm = deviceLabelOf(deviceId) || deviceId;
+                const ok = await confirmDialog(
+                    willClear
+                        ? '要清除「' + nm + '」的默认 PIN（当前为 ' + cur + '）吗？\n清除后该手机将无法用默认 PIN 直接登录。'
+                        : '要把「' + nm + '」的默认 PIN 从 ' + cur + ' 改为 ' + dp + ' 吗？\n改完后该手机下次登录需用新 PIN。',
+                    willClear ? '清除默认 PIN' : '修改默认 PIN');
+                if (!ok) { loadPhones(); return; }
+            }
             try {
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/device-set-default-pin?device_id=' +
                     encodeURIComponent(deviceId) + '&default_pin=' + encodeURIComponent(dp)));
@@ -1905,6 +2277,7 @@
             const date_from = document.getElementById('call-date-from')?.value || '';
             const date_to = document.getElementById('call-date-to')?.value || '';
             const number = document.getElementById('call-number')?.value || '';
+            _syncChips('cqd-', 'call-date-from', 'call-date-to');
             let url = '/api/v1/calls?limit=50&offset=' + callsOffset;
             if (device_id) url += '&device_id=' + encodeURIComponent(device_id);
             if (date_from) url += '&date_from=' + date_from;
@@ -1923,8 +2296,9 @@
             tbody.innerHTML = d.calls.map(function(c) {
                 const dt = c.dial_time ? new Date(c.dial_time).toLocaleString('zh-CN') : '-';
                 return '<tr>' +
-                    '<td title="' + esc(c.device_id||'') + '" class="td-ellipsis" style="max-width:120px;">' + esc((c.device_id||'').slice(0,18)) + '</td>' +
-                    '<td><strong>' + esc(c.number||'') + '</strong></td>' +
+                    '<td title="' + esc(c.device_id||'') + '" class="td-ellipsis" style="max-width:140px;"><strong>' + esc(deviceLabelOf(c.device_id)) + '</strong></td>' +
+                    '<td><strong>' + esc(c.number||'') + '</strong>' +
+                        '<button class="icon-btn-inline" title="复制号码" onclick="copyText(\'' + escA(c.number||'') + '\')">' + ic('copy', 13) + '</button></td>' +
                     '<td>' + dt + '</td>' +
                     '<td>' + (c.duration || 0) + '</td>' +
                     '<td>' + (CALL_TYPES[c.call_type] || '未知') + '</td>' +
@@ -1936,8 +2310,38 @@
             const pag = document.getElementById('calls-pagination');
             const totalPages = Math.ceil(d.total / d.limit);
             pag.innerHTML = '<button class="pager-btn" onclick="callsOffset=Math.max(0,callsOffset-50);_loadCallsInternal()" ' + (callsOffset===0?'disabled':'') + '><span class="chev-flip">' + ic('chevron', 12) + '</span> 上一页</button>' +
-                '<span>第 ' + (Math.floor(callsOffset/50)+1) + ' / ' + totalPages + ' 页 (共' + d.total + '条)</span>' +
+                '<span>第 ' + (Math.floor(callsOffset/50)+1) + ' / ' + totalPages + ' 页 · 共 ' + d.total + ' 条</span>' +
                 '<button class="pager-btn" onclick="callsOffset+=50;_loadCallsInternal()" ' + (callsOffset+50>=d.total?'disabled':'') + '>下一页 ' + ic('chevron', 12) + '</button>';
+        }
+
+        // v4.24: 一键复制（云端面板走 http，navigator.clipboard 在非安全上下文不可用，必须有兜底）
+        function copyText(txt) {
+            const t = String(txt || '');
+            if (!t) return;
+            const done = function() { toast('已复制 ' + t, 'success'); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(t).then(done).catch(function() { _copyFallback(t, done); });
+            } else {
+                _copyFallback(t, done);
+            }
+        }
+        function _copyFallback(txt, done) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = txt;
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                done();
+            } catch (e) { toast('复制失败，请手动选择文字', 'error'); }
+        }
+        function copyBtn(txt) {
+            const t = String(txt || '');
+            if (!t) return '';
+            return '<button class="icon-btn-inline" title="复制' + esc(t) + '" onclick="copyText(\'' + escA(t) + '\')">' + ic('copy', 13) + '</button>';
         }
 
         let callSearchTimer = null;
@@ -2083,7 +2487,59 @@
         let visitPage = 1, visitTotal = 0;
         const VISIT_PAGE_SIZE = 50;
 
-        function onVisitFilterChange() { visitPage = 1; loadVisits(); }
+        // v4.24: 快捷日期区间（上门登记 / 通话记录共用）——原来进页面是空状态「请选择筛选条件」
+        let _visitRangeInit = false;
+        function _shiftDay(n) {
+            const x = new Date(Date.now() - n * 86400000);
+            return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+        }
+        function _rangeCalc(kind) {
+            const today = todayISO();
+            if (kind === 'today') return [today, today];
+            if (kind === 'yesterday') return [_shiftDay(1), _shiftDay(1)];
+            if (kind === '7d') return [_shiftDay(6), today];
+            return ['', ''];
+        }
+        function _hitRange(fv, tv) {
+            const today = todayISO();
+            if (!fv && !tv) return 'all';
+            if (fv === today && tv === today) return 'today';
+            if (fv === _shiftDay(1) && tv === _shiftDay(1)) return 'yesterday';
+            if (fv === _shiftDay(6) && tv === today) return '7d';
+            return 'none';
+        }
+        function _syncChips(prefix, fId, tId) {
+            const f = document.getElementById(fId), t = document.getElementById(tId);
+            const hit = _hitRange(f ? f.value : '', t ? t.value : '');
+            ['today', 'yesterday', '7d', 'all'].forEach(function(k) {
+                const el = document.getElementById(prefix + k);
+                if (el) el.classList.toggle('active', k === hit);
+            });
+        }
+        function _applyRange(prefix, fId, tId, kind) {
+            const f = document.getElementById(fId), t = document.getElementById(tId);
+            if (!f || !t) return;
+            const v = _rangeCalc(kind);
+            f.value = v[0]; t.value = v[1];
+            _syncChips(prefix, fId, tId);
+        }
+        function applyVisitRange(kind) { _applyRange('vqd-', 'visit-filter-date-from', 'visit-filter-date-to', kind); }
+        function setVisitRange(kind) { applyVisitRange(kind); onVisitFilterChange(); }
+        function initVisitRangeDefault() {
+            if (_visitRangeInit) return;
+            _visitRangeInit = true;
+            applyVisitRange('today');
+        }
+        function applyCallRange(kind) { _applyRange('cqd-', 'call-date-from', 'call-date-to', kind); }
+        function setCallRange(kind) { applyCallRange(kind); loadCalls(); }
+        function initVisitPagerIcons() {
+            const a = document.getElementById('visit-prev-ico');
+            const b = document.getElementById('visit-next-ico');
+            if (a) a.innerHTML = ic('chevron', 12);
+            if (b) b.innerHTML = ic('chevron', 12);
+        }
+
+        function onVisitFilterChange() { visitPage = 1; _syncChips('vqd-', 'visit-filter-date-from', 'visit-filter-date-to'); loadVisits(); }
         function visitGoPage(delta) { visitPage = Math.max(1, visitPage + delta); loadVisits(); }
 
         function renderVisitRows(rows) {
@@ -2095,7 +2551,10 @@
                     : '<span class="badge badge-plugin">插件</span>';
                 const crmBadge = r.crm_synced ? '<span class="badge badge-sync">已同步</span>' : '<span class="badge badge-unsync">未同步</span>';
                 return '<tr class="' + (r.crm_synced ? '' : 'row-warn') + '">' +
-                '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td><td>' + esc(r.mobile||'') + '</td><td>' + esc(r.kefu_tel||'') + '</td><td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
+                '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td>' +
+                '<td>' + esc(r.mobile||'') + copyBtn(r.mobile) + '</td>' +
+                '<td>' + esc(r.kefu_tel||'') + copyBtn(r.kefu_tel) + '</td>' +
+                '<td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
                 '<td>' + srcBadge + '</td>' +
                 '<td>' + crmBadge + '</td>' +
                 '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
@@ -2181,7 +2640,9 @@
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/pins')); const d = await r.json();
                 if (!d.ok) return;
                 selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
-                d.pins.forEach(function(p) {
+                (d.pins || []).forEach(function(p) {
+                    // v4.26: 名册里「未绑定」的人还没有 PIN，放进筛选框会与「不限（全部）」的 value="" 撞车，跳过
+                    if (!p.pin) return;
                     // S5修复: p.pin 可被未鉴权的 advisor/register 写入任意字符串，必须转义防 XSS
                     selPin.innerHTML += '<option value="' + escA(p.pin) + '">' + esc(p.name||'') + ' (' + esc(p.pin) + ')</option>';
                 });
@@ -2491,20 +2952,41 @@
                 const groups = gr.groups || [];
                 groups.forEach(function(g) { sel.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
                 const groupFilter = sel.value;
-                let pins = pr.pins;
+                const allPins = pr.pins || [];
+                let pins = allPins;
                 if (groupFilter) pins = pins.filter(function(p) { return p.group_id == groupFilter; });
+                // v4.26: 名册 = 全部人员的权威集合（服务端内置），此处只做展示与统计
+                const boundN = allPins.filter(function(p) { return p.bound; }).length;
+                const hint = document.getElementById('pins-roster-hint');
+                if (hint) {
+                    hint.innerHTML = '人员名册共 <b>' + (pr.roster_size || allPins.length) + '</b> 人（固定名单，取自插件端登记用的 CRM 顾问列表）· ' +
+                        '已绑定 <b>' + boundN + '</b> 人 · 未绑定 <b>' + (allPins.length - boundN) + '</b> 人。' +
+                        '未绑定 = 该人员还没用插件登记过，登记后会自动补上 PIN。';
+                }
                 if (pins.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">暂无人员</td></tr>'; return; }
                 tbody.innerHTML = pins.map(function(p) {
-                    const g = groups.find(function(g) { return g.id == p.group_id; });
-                    return '<tr><td>' + esc(p.pin||'') + '</td>' +
-                        '<td><input type="text" class="cell-input" value="' + esc(p.name||'') + '" placeholder="手动填写姓名" ' +
-                        'data-action="set-advisor-name" data-pin="' + escA(p.pin||'') + '" ' +
-                        'style="width:110px;" ' +
-                        'title="手动填写顾问姓名（试岗人员等）"></td>' +
-                        '<td><select class="cell-input" data-action="set-pin-group" data-pin="' + escA(p.pin||'') + '" style="padding:5px 8px;">' +
+                    const pinAttr = escA(p.pin || '');
+                    const cells = [];
+                    // PIN 列：只有登记过的人才有手机号
+                    cells.push(p.bound && p.pin
+                        ? '<td>' + esc(p.pin) + '</td>'
+                        : '<td class="td-muted" title="该人员还没用插件登记过，登记后自动填上手机号">未绑定</td>');
+                    // 姓名列：名册内的姓名是匹配依据，只读；名册外（改名/试岗）才允许手填
+                    if (p.roster) {
+                        cells.push('<td>' + esc(p.name || '') + ' <span class="td-muted" style="font-size:11px;">名册</span></td>');
+                    } else {
+                        cells.push('<td><input type="text" class="cell-input" value="' + esc(p.name||'') + '" placeholder="手动填写姓名" ' +
+                            'data-action="set-advisor-name" data-pin="' + pinAttr + '" style="width:110px;" ' +
+                            'title="名册外人员（试岗/改名）：填成名册中的姓名即可与之绑定"></td>');
+                    }
+                    // 分组列：没绑定就没有 PIN，无法落库到 advisor_names
+                    cells.push(p.bound && p.pin
+                        ? '<td><select class="cell-input" data-action="set-pin-group" data-pin="' + pinAttr + '" style="padding:5px 8px;">' +
                             '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
-                        '</select></td>' +
-                        '<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td></tr>';
+                          '</select></td>'
+                        : '<td class="td-muted" title="该人员登记后即可设置分组">—</td>');
+                    cells.push('<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td>');
+                    return '<tr>' + cells.join('') + '</tr>';
                 }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
         }
@@ -2655,6 +3137,10 @@
         buildThemeMenu();
         applyTheme(getThemeId(), getThemeMode());
         wrapDataTables();
+        // v4.24: 上门登记默认区间（今天）+ 翻页箭头图标
+        initVisitRangeDefault();
+        initVisitPagerIcons();
+        _booting = false;
         // v4.21.2 (13): 按 hash 恢复上次页面（F5 不再回首页）；无 hash 默认首页
         (function() {
             const h = (location.hash || '').replace(/^#\/?/, '');
@@ -2669,7 +3155,13 @@
     <script>
         // 页面加载时检查登录状态：未登录 → 门禁模式，只显示登录页
         (function(){
+          try {
             var overlay = document.getElementById('login-overlay');
+            // v4.25: 存储不可用时提前在登录框里说明，免得用户困惑「为什么刷新后又要登录」
+            if (!AD_STORE.persistent()) {
+                var hint = document.getElementById('login-store-hint');
+                if (hint) hint.style.display = 'block';
+            }
             if (!isLoggedIn()) {
                 document.body.classList.add('locked');
                 overlay.dataset.locked = '1';
@@ -2685,6 +3177,15 @@
                     }
                 }).catch(function() {});
             }
+          } catch (e) {
+            // v4.25: 门禁初始化兜底——万一抛错，也不能让页面停在「无门禁、点登录没反应」的状态
+            console.error('[AutoDial] 登录门禁初始化失败:', e);
+            try {
+                var ov2 = document.getElementById('login-overlay');
+                document.body.classList.add('locked');
+                if (ov2) { ov2.dataset.locked = '1'; ov2.classList.add('show'); }
+            } catch (e2) { /* 无能为力 */ }
+          }
         })();
 
         function showLogin() {
@@ -2698,8 +3199,8 @@
         function submitLogin() {
             var u = document.getElementById('login-user').value.trim();
             var p = document.getElementById('login-pass').value;
-            if (!u) { document.getElementById('login-err').style.display='block'; document.getElementById('login-err').textContent='请输入账号'; return; }
-            if (!p) { document.getElementById('login-err').style.display='block'; document.getElementById('login-err').textContent='请输入密码'; return; }
+            if (!u) { loginErr('请输入账号'); return; }
+            if (!p) { loginErr('请输入密码'); return; }
             doLogin(u, p);
         }
         document.getElementById('login-overlay').addEventListener('click', function(e){ if(e.target===this && !this.dataset.locked) hideLogin(); });

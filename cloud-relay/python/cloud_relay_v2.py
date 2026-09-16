@@ -41,8 +41,29 @@ DEFAULT_PORT = 35430
 PORT = DEFAULT_PORT
 # v4.23 (M-8): 服务版本单一来源——/health、/api/status 与面板"系统信息"统一显示，
 # 此前面板展示"设计系统 6.0"、接口硬编码 '4.10'，排查问题时易误判线上版本
-APP_VERSION = '4.23'
+APP_VERSION = '4.26'
 # Fix D4: Web 管理界面和 WebSocket 共用 PORT, WEB_PORT 已废弃
+
+# v4.26: 固定人员名册（唯一权威源）。
+# 来源 = 插件端「一键登记」弹出框所用的同一份 CRM 顾问列表，接口无需登录即可读取：
+#   curl -s -X POST https://guwen.zhudaicms.com/bserve/search \
+#        -H 'Content-Type: application/x-www-form-urlencoded' -d 'keyword=&brand=1833'
+# 这批人**就是全部人员，不会有其他人**，故直接内置而不再动态拉取（不依赖外网、离线可用）。
+# 「人员管理」以此名册为准逐条展示：姓名匹配上已注册记录 ⇒ 显示其 PIN/分组/更新时间；
+# 匹配不上 ⇒ 显示「未绑定」（该人员尚未用插件登记过）。名册变更时更新本表并同步 CHANGELOG。
+ADVISOR_ROSTER = [
+    {'id': '179408', 'name': '补录上门账号'},
+    {'id': '170745', 'name': '韩俊'},
+    {'id': '181839', 'name': '洪钰梅'},
+    {'id': '161125', 'name': '金晟'},
+    {'id': '176705', 'name': '刘静'},
+    {'id': '180084', 'name': '牛敬龙'},
+    {'id': '160947', 'name': '融鑫汇总账号'},
+    {'id': '172949', 'name': '叶浩'},
+    {'id': '163921', 'name': '虞洳愚'},
+    {'id': '170746', 'name': '张召'},
+    {'id': '161879', 'name': '左廷军'},
+]
 
 # v4.16.1: 设备自动注册（内部部署便捷模式）。
 # 开启时，未在云端注册的设备首次 phone_hello 自动绑定到其当前使用的 PIN，
@@ -2317,7 +2338,47 @@ async def health_check_handler(path, request_headers):
             c.execute('''SELECT a.pin, a.name, a.group_id, a.updated_at
                          FROM advisor_names a ORDER BY a.updated_at DESC''')
             rows = [dict(r) for r in c.fetchall()]
-            return (200, JSON_HDR, json.dumps({'ok': True, 'pins': rows}).encode('utf-8'))
+            # v4.26: 与固定人员名册合并（按姓名匹配）。名册 = 全部人员的权威集合，
+            # 未匹配上的行是「还没用插件登记过」的人，前端显示为「未绑定」。
+            by_name = {}
+            for r in rows:
+                nm = (r.get('name') or '').strip()
+                if nm and nm not in by_name:
+                    by_name[nm] = r   # 同名取 updated_at 最新的一条（已按时间倒序）
+            merged = []
+            used_pins = set()
+            for m in ADVISOR_ROSTER:
+                hit = by_name.get(m['name'])
+                if hit:
+                    used_pins.add(hit.get('pin'))
+                merged.append({
+                    'pin': (hit or {}).get('pin') or '',
+                    'name': m['name'],
+                    'group_id': (hit or {}).get('group_id'),
+                    'updated_at': (hit or {}).get('updated_at'),
+                    'roster_id': m['id'],       # CRM 内部工号
+                    'roster': True,
+                    'bound': bool(hit),
+                })
+            # 名册之外确实注册过的人（如改名、试岗、姓名兜底成手机号）仍保留，避免数据凭空消失
+            for r in rows:
+                if r.get('pin') in used_pins:
+                    continue
+                nm = (r.get('name') or '').strip()
+                merged.append({
+                    'pin': r.get('pin') or '',
+                    'name': nm or (r.get('pin') or ''),
+                    'group_id': r.get('group_id'),
+                    'updated_at': r.get('updated_at'),
+                    'roster_id': None,
+                    'roster': False,
+                    'bound': True,
+                })
+            return (200, JSON_HDR, json.dumps({
+                'ok': True, 'pins': merged,
+                'roster_size': len(ADVISOR_ROSTER),
+                'bound_count': sum(1 for x in merged if x['bound']),
+            }).encode('utf-8'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:

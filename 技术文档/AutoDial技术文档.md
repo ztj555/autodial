@@ -157,7 +157,7 @@ class PinGroup:
 | `/api/v1/advisor/register?pin=&name=` | 注册顾问 |
 | `/api/v1/advisor/name?pin=` | 查询顾问姓名 |
 | `/api/v1/advisor/update?pin=&name=` | 更新顾问姓名（🔐） |
-| `/api/v1/pins` | 所有 PIN 列表（🔐） |
+| `/api/v1/pins` | 人员列表（🔐）——**v4.26 起 = 固定名册逐条展开后与已注册记录按姓名合并**，返回 `roster/roster_id/bound` 与 `roster_size/bound_count`；未匹配到的行 `pin` 为空（前端显示「未绑定」） |
 | `/api/v1/pin/set_group?pin=&group_id=` | 设置 PIN 分组（🔐） |
 | `/api/v1/groups` | 分组列表（🔐） |
 | `/api/v1/group/add?name=` / `/api/v1/group/del?id=` | 添加/删除分组（🔐） |
@@ -319,7 +319,7 @@ else:
 | 手机管理 | 设备清单/别名/默认PIN/在线状态 + 历史 PIN 记录 |
 | 通话记录 | 设备/号码筛选 + 分页 + CSV 导出（call_records_raw） |
 | 上门登记 | 记录管理 + 14 天趋势图 + CRM 批量导入 |
-| 人员管理 | PIN + 姓名 + 分组管理 |
+| 人员管理 | **固定人员名册（11 人，服务端内置 `ADVISOR_ROSTER`）** + PIN + 姓名 + 分组管理 |
 | 管理账号 | 账号增删 + 修改密码 |
 | 系统日志 | 关键词搜索 + 行数选择 + 流量统计 |
 | 设置 | 端口/日志级别 + 系统信息 |
@@ -335,12 +335,32 @@ python cloud_relay_v2.py                           # 单命令启动，WS+REST+�
 
 - **生产环境（101.34.65.254 腾讯云，双实例容灾）**：35430 主实例（supervisor 进程 `autodial`，`/usr/bin/python3` 直跑 `/opt/autodial/cloud_relay_v2.py`，DB `/opt/autodial/visits.db`）+ 35440 备用实例（Docker 容器 `autodial-relay`，DB 落挂载卷 `/opt/autodial/data/visits.db`）。两套数据各自独立是**有意的容灾设计**——主实例故障时切备用实例继续打电话（核心功能）；运维脚本在 `/opt/autodial/scripts/`（status/restart-35430/restart-35440/rebuild-docker）。每次变更前备份旧版（`*.bak.*` 后缀留存于 /opt/autodial/）
 - **部署实况（2026-09-12）**：v4.23 已上线（公网 `/health` 实测 version=4.23、未授权 `/api/status` 401）。服务器上的 1Panel/OpenResty 仅占 80/443 默认站，**与 AutoDial 无关**（配置中无 35430 反代）——面板入口历来是 `:35430` 直连。部署流程：备份 → 上传 → MD5 核对 → `py_compile` 预检 → `supervisorctl restart autodial` → `/health` 验证
+- **部署实况（2026-09-16，云端刷新）**：两实例版本对齐 —— 35430 主实例与新构建的 **35440 Docker 镜像 `autodial-cloud-relay:v4.23`** 均为 v4.23（此前 Docker 侧落后到 v4.10）。面板 `dashboard.html` 同步到 v6.0「色相 × 明暗」主题系统（与扩展端 `themes.js` 同源）。**累积数据已按用户要求彻底清空**（原 `visits` 2639 行 / `phones` 102 行 / `advisor_names` 20 行 → 0，未留备份）。管理员账号不再是"随机密码只打日志"：`/etc/supervisor/conf.d/autodial.conf` 与容器 `-e` 均注入 `AUTODIAL_ADMIN_USER/AUTODIAL_ADMIN_PASS`，清库后 `_seed_default_admin()` 会按注入值重建（**改口令前务必同步改这两处，否则重启即随机化**）。Docker 侧构建入口：`/opt/autodial/docker-build/`（`Dockerfile` + `python/`，配 `scripts/build-docker.sh`），镜像 tag 随版本走、旧 tag（v1/v2）保留可回滚
 - Docker 部署：`AUTODIAL_DB_PATH=/app/data/visits.db`（2026-09-10 修复：Dockerfile 补 `ENV AUTODIAL_DB_PATH` 并以 `-e` 传入容器，数据库落持久卷；此前 DB 落在容器内 `/app/visits.db`，重建即丢）
 - 数据目录（v4.23 Y-11）：日志与 stats.json 路径可由 `AUTODIAL_DATA_DIR` 环境变量指定，docker-compose 已设为挂载卷 `/app/data`——容器重建不再丢日志/统计；未设置时保持原回退链
 - 设备自动注册开关：`AUTODIAL_AUTO_REGISTER=0` 关闭（默认开启，未注册设备首连自动绑定当前 PIN）
 - 管理员默认账号 `18335162275 / 123456`（SHA-256 加盐哈希存储），首次登录后立即修改
 - 版本展示（v4.23 M-8）：`/health`、`/api/status` 与面板"系统信息"统一读代码内 `APP_VERSION` 常量（单一来源），不再有 4.10/6.0 各说各话的历史问题
 - 详细部署见根目录 README「部署」章节与《部署核对单-v4.23.md》
+
+### 2.13 本地开发运行器（dev.bat / devwatch.py，2026-09-16 新增）
+
+```bat
+cloud-relay\dev.bat                :: 端口 35430，监视改动自动重启
+cloud-relay\dev.bat --port 35440   :: 换端口
+cloud-relay\dev.bat --no-watch     :: 只运行不监视
+cloud-relay\dev.bat --no-open      :: 不自动开浏览器
+cloud-relay\dev.bat --db D:\x.db   :: 指定数据库文件
+```
+
+`dev.bat` 只负责准备环境（无 `.venv` 就自动创建并装 `websockets>=12,<14`）→ 转交 `devwatch.py`；核心逻辑全在 `devwatch.py`（纯标准库，330 行，零侵入不碰业务代码）。设计要点与实测踩坑：
+
+- **为什么必须有它**：`dashboard.html` 由 `load_dashboard_html()` 在**模块导入时**读一次（`HTML_CONTENT = load_dashboard_html()`，第 1358 行），改面板不重启进程绝对看不到效果——刷新浏览器无效；
+- **端口预检必须绑 `0.0.0.0`**：Windows 下已有 socket 绑在 `0.0.0.0:35430` 时，另一个 socket 仍能成功绑到 `127.0.0.1:35430`（两个地址不被视为冲突）⇒ 按 `127.0.0.1` 预检会「预检通过 → 子进程一启动就崩」。而 `main()` 自身遇到端口冲突会**弹 Windows 对话框并阻塞**，所以预检一步都不能省；
+- **语法预检只查入口文件** `cloud_relay_v2.py`，用 `compile()` 纯内存校验（不产生 `.pyc`）：失败时**不重启**、打印 `文件:行: 原因`、旧服务保持运行，改好保存自动恢复；测试文件写错不会拖累服务重启；
+- **数据隔离**：`AUTODIAL_DATA_DIR` + `AUTODIAL_DB_PATH` 指向 `cloud-relay/.devdata/`（已加 `.gitignore`），子进程一律带 `-B`（不写 `__pycache__`），实测源码目录零污染。开发态管理员固定 `admin/admin`，避开「未设密码则随机生成且只打在日志里」的分支；
+- **停止方式**：子进程用 `CREATE_NEW_PROCESS_GROUP` 启动，重启时先发 `CTRL_BREAK_EVENT` → 4s → `terminate` → 3s → `kill`；
+- ⚠️ **`dev.bat` 必须保持纯 ASCII**：cmd.exe 解析含中文（多字节）的 bat 时行边界会错乱，实测出现 `set` 被吞掉、`goto deps` 变成执行 `deps`、`%VENV_PY%` 未定义等连锁错误。**中文提示一律放 `devwatch.py` 输出**（`chcp 65001` + `PYTHONUTF8=1` 保证编码）。
 
 ---
 

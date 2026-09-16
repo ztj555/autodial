@@ -88,6 +88,7 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 │   │   ├── test_stress_live.py      # 线上压测（v4.23 起加 --host 隔离：默认拒绝公网目标；用 `preflight --dry-run` 预检，压真实环境须显式 `--host <私网或localhost>`）
 │   │   └── docs/                    # 架构设计文档（Mermaid图）
 │   ├── Dockerfile / docker-compose.yml  # Docker 部署
+│   ├── dev.bat / devwatch.py        # ★ 本地开发运行器（改完保存自动重启，数据隔离在 .devdata/）
 │   ├── start.bat                    # 快速启动脚本
 │   └── AutoDial-Cloud-Relay.exe     # PyInstaller 打包产物
 ├── AutoDial-Extension/              # ★ Chrome 扩展 (MV3)
@@ -176,6 +177,27 @@ AutoDial 是一套跨屏一键拨号+来访登记系统。用户在 CRM 网页�
 ## 快速启动
 
 ### 1. 云中继
+
+**本地开发（推荐）—— 改完保存自动重启：**
+
+```bat
+cloud-relay\dev.bat                :: 双击即可；端口 35430
+cloud-relay\dev.bat --port 35440   :: 换端口
+cloud-relay\dev.bat --no-watch     :: 只运行，不监视文件改动
+cloud-relay\dev.bat --no-open      :: 不自动打开浏览器
+```
+
+首次运行会自动创建 `.venv` 并安装依赖。它解决三个实际踩过的坑：
+
+| 坑 | 表现 | dev.bat 的做法 |
+|---|---|---|
+| `dashboard.html` 在**启动时一次性读入内存**（`HTML_CONTENT = load_dashboard_html()`） | 改面板/改样式后刷新浏览器没反应 | 监视文件变化，改动即重启进程 |
+| `main()` 发现端口被占用会**弹 Windows 对话框并阻塞** | 脚本静默卡死 | 启动前按 `0.0.0.0` 探测端口，被占则直接报错退出 |
+| 数据库落源码目录、日志落 `%APPDATA%` | 本地调试数据与线上混淆 | 统一隔离到 `cloud-relay/.devdata/`，删掉即重置 |
+
+开发态管理员账号固定 `admin` / `admin`；入口文件语法写错时**不会重启**，只打印出错行列、旧服务继续运行（改好保存自动恢复）。
+
+**手动启动（与生产环境一致）：**
 
 ```bash
 cd cloud-relay/python
@@ -369,6 +391,11 @@ cd pc-app-Electron && npm install && npm start
 
 1. **websockets 版本未锁定（弃用 API）**：代码依赖 `websockets.legacy.server`。实测（12.0/16.0/16.1.1）与官方 changelog 确认：legacy 自 14.0 起**弃用但从未移除**（15/16/17 均保留可导入），不会 `ImportError`。但 `requirements.txt` 声明 `websockets>=12.0` 无上界，未来版本一旦移除 legacy 将导致启动失败。**建议：安装时钉死 `pip install "websockets>=12,<14"`**（防御性措施）。
 2. **Dockerfile 版本约束失效**：`RUN pip install --no-cache-dir websockets>=12.0 aiohttp>=3.11` 中 `>` 被 /bin/sh 解析为输出重定向（在 /app 下生成垃圾文件 `=12.0`），版本约束完全失效。修复前请勿直接 `docker build`；建议改为 `pip install --no-cache-dir "websockets>=12,<14" "aiohttp>=3.11"`。
+3. **生产服务器出网受限，直接 `docker build` 会失败**（2026-09-16 实测于腾讯云 101.34.65.254）：
+   - **Docker Hub 直连不可达**，拉基础镜像只能走 `/etc/docker/daemon.json` 里已配的腾讯云源 `mirror.ccs.tencentyun.com`（实测可用）；
+   - **pypi.org 不可达**（`curl https://pypi.org/simple/` 直接挂），容器内 `pip install` 必须加国内源，否则构建卡在 pip 步骤——2026-09-15 那次构建失败根因在此，**不是基础镜像的问题**；
+   - Debian 源同样不可靠，容器内 `apt-get install curl` 有风险。
+   ⇒ 服务器上请用 **`/opt/autodial/docker-build/Dockerfile`**（= 本仓库 Dockerfile + 清华 pypi 源 + 用容器自带 python 写健康检查以替代 curl），配套脚本 `/opt/autodial/scripts/build-docker.sh` 与 `rebuild-docker.sh`。**本仓库这份 Dockerfile 在这台服务器上无法直接构建**，改动时注意两边同步。
 
 ### 一、云中继部署
 
