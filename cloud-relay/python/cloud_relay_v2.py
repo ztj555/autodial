@@ -21,6 +21,8 @@ import contextvars
 from collections import defaultdict
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs, urlencode
+import urllib.request
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 # P0-Fix: 专用线程池，避免 DB 查询占用 websockets process_request 的默认线程池
@@ -41,14 +43,16 @@ DEFAULT_PORT = 35430
 PORT = DEFAULT_PORT
 # v4.23 (M-8): 服务版本单一来源——/health、/api/status 与面板"系统信息"统一显示，
 # 此前面板展示"设计系统 6.0"、接口硬编码 '4.10'，排查问题时易误判线上版本
-APP_VERSION = '4.26'
+APP_VERSION = '4.33'
 # Fix D4: Web 管理界面和 WebSocket 共用 PORT, WEB_PORT 已废弃
 
 # v4.26: 固定人员名册（唯一权威源）。
 # 来源 = 插件端「一键登记」弹出框所用的同一份 CRM 顾问列表，接口无需登录即可读取：
 #   curl -s -X POST https://guwen.zhudaicms.com/bserve/search \
 #        -H 'Content-Type: application/x-www-form-urlencoded' -d 'keyword=&brand=1833'
-# 这批人**就是全部人员，不会有其他人**，故直接内置而不再动态拉取（不依赖外网、离线可用）。
+# 这批人**就是全部人员，不会有其他人**。v4.33 起本表降级为「出厂种子 / 离线兜底」：
+# 权威源优先取 DB 表 advisor_roster（由面板「人员管理 → 刷新名单」从上面的 CRM 接口同步而来），
+# 只有 DB 为空（全新实例、或清库后尚未刷新过）才回退到这批内置数据。
 # 「人员管理」以此名册为准逐条展示：姓名匹配上已注册记录 ⇒ 显示其 PIN/分组/更新时间；
 # 匹配不上 ⇒ 显示「未绑定」（该人员尚未用插件登记过）。名册变更时更新本表并同步 CHANGELOG。
 ADVISOR_ROSTER = [
@@ -64,6 +68,14 @@ ADVISOR_ROSTER = [
     {'id': '170746', 'name': '张召'},
     {'id': '161879', 'name': '左廷军'},
 ]
+
+# v4.33: 名册「从源头刷新」所用的 CRM 接口（面板「人员管理 → 刷新名单」按钮）。
+# 实测行为：无需登录，POST 表单，返回 {code:1, data:[{id, name}]}，数组顺序即 CRM 中的展示顺序。
+# 环境变量可覆盖，便于换域名、或测试时指向桩服务：
+#   AUTODIAL_CRM_ROSTER_URL / AUTODIAL_CRM_BRAND / AUTODIAL_CRM_TIMEOUT
+CRM_ROSTER_URL = os.environ.get('AUTODIAL_CRM_ROSTER_URL') or 'https://guwen.zhudaicms.com/bserve/search'
+CRM_ROSTER_BRAND = os.environ.get('AUTODIAL_CRM_BRAND') or '1833'
+CRM_ROSTER_TIMEOUT = float(os.environ.get('AUTODIAL_CRM_TIMEOUT') or 8)
 
 # v4.16.1: 设备自动注册（内部部署便捷模式）。
 # 开启时，未在云端注册的设备首次 phone_hello 自动绑定到其当前使用的 PIN，
@@ -176,6 +188,14 @@ def init_db():
         name TEXT NOT NULL,
         updated_at TEXT NOT NULL
     )'''
+    # v4.33: 人员名册（面板「刷新名单」从 CRM 同步而来）。DB 有数据即以 DB 为准，
+    # 空表才回退内置 ADVISOR_ROSTER —— 于是「刷新过」与「没刷新过」语义清晰可分。
+    create_roster = '''CREATE TABLE IF NOT EXISTS advisor_roster (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        updated_at TEXT NOT NULL
+    )'''
     create_admin_accounts = '''CREATE TABLE IF NOT EXISTS admin_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -264,6 +284,7 @@ def init_db():
         c.execute(create_phone_daily)
         c.execute(create_pending_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_pending_visits_pin ON pending_visits(pin)')
+        c.execute(create_roster)
         conn.commit()
         # 兼容旧版 DB：添加新列
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
@@ -308,6 +329,7 @@ def init_db():
         c.execute(create_phone_daily)
         c.execute(create_pending_visits)
         c.execute('CREATE INDEX IF NOT EXISTS idx_pending_visits_pin ON pending_visits(pin)')
+        c.execute(create_roster)
         conn.commit()
         try: c.execute('ALTER TABLE visits ADD COLUMN crm_synced INTEGER DEFAULT 0'); conn.commit()
         except: pass  # column already exists
@@ -665,6 +687,17 @@ _REST_AUTH_PATHS = {
     '/api/v1/login', '/api/v1/admin/add', '/api/v1/admin/del',
     '/api/v1/admin/chpwd', '/api/v1/admin/accounts', '/api/v1/auth/respond',
 }
+
+# v4.29: 通话记录「认人」口径 —— 用手机主人 default_pin，不用 last_pin。
+#   业务背景（用户 2026-09-17 确认真实场景）：手机不换人，但**上午用本人 PIN、下午 15-16 点
+#   改用同事 PIN** 打同事的客户。last_pin 是三处上报（events/log、stats/report、
+#   set_default_pin）**覆盖式**写入的"最后一次登录 PIN" ⇒ 下午一换，该机**上午的记录会整体
+#   漂移到同事名下**，「某人今天打了多少通」直接答错。
+#   default_pin 才是这台手机的主人（首次握手自动绑定、后台可手动改、借人授权时明确"不改"），
+#   语义与手机管理页已有的「默认PIN」列一致。
+#   边界：从未握手注册、只走过上报的设备 default_pin 为空 ⇒ 回退 last_pin，避免出现空归属。
+#   ⚠️ 两个 SQL 片段必须同时使用，勿只改一处。
+_OWNER_PIN_SQL = "COALESCE(NULLIF(p.default_pin, ''), p.last_pin)"
 
 _rest_attempts: dict[str, list] = defaultdict(list)
 
@@ -1506,6 +1539,122 @@ async def _run_db(fn):
     loop_ = asyncio.get_running_loop()
     return await loop_.run_in_executor(_db_executor, fn)
 
+# ==================== 人员名册（v4.33） ====================
+# 名册 = 面板「人员管理」的权威人员集合，来源是 CRM 顾问列表（见文件头 ADVISOR_ROSTER 注释）。
+# 刷新入口：GET /api/v1/roster/refresh（管理员鉴权）。
+# 第一原则：**刷新失败必须无损**。拉取/解析/写库任何一步出错，都保持现有名册原样并明确报错；
+# 否则一次网络抖动就会把名册清空，连带「人员管理」整页变空白，且用户看不出为什么。
+
+def _crm_request_origin():
+    """从 CRM URL 推导 Origin/Referer（URL 被环境变量覆盖时提示头也要跟着走）"""
+    parsed = urlparse(CRM_ROSTER_URL)
+    return f'{parsed.scheme}://{parsed.netloc}'
+
+def _fetch_crm_roster_sync():
+    """从 CRM 拉取顾问名单（同步阻塞）。返回 (成员列表, 错误信息)，二者必有其一为 None。
+
+    ⚠️ 只能在 _run_db 的线程池里调用：本函数是阻塞网络请求，直接在事件循环里跑会
+    冻结整个服务（拨号、WS 心跳、其他 REST 请求全部停摆数秒）。
+    """
+    origin = _crm_request_origin()
+    body = urlencode({'keyword': '', 'brand': CRM_ROSTER_BRAND}).encode('utf-8')
+    req = urllib.request.Request(
+        CRM_ROSTER_URL, data=body, method='POST',
+        headers={
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': origin,
+            'Referer': origin + '/bserve/saoma.html?brand=' + CRM_ROSTER_BRAND,
+            'User-Agent': 'AutoDial-Relay/' + APP_VERSION,
+        })
+    try:
+        with urllib.request.urlopen(req, timeout=CRM_ROSTER_TIMEOUT) as resp:
+            raw = resp.read().decode('utf-8', 'replace')
+    except urllib.error.HTTPError as e:
+        return None, f'CRM 返回 HTTP {e.code}（{CRM_ROSTER_URL}）'
+    except Exception as e:
+        return None, f'无法连接 CRM：{e}'
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None, 'CRM 返回的不是合法 JSON（可能被登录页/网关拦截）'
+    if not isinstance(payload, dict) or payload.get('code') != 1:
+        hint = ''
+        if isinstance(payload, dict):
+            hint = str(payload.get('msg') or payload.get('message') or '')[:120]
+        return None, 'CRM 返回业务错误：' + (hint or 'code != 1')
+    data = payload.get('data')
+    if not isinstance(data, list) or not data:
+        return None, 'CRM 返回的名单为空，已保留原有名册'
+    members, seen = [], set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        mid = str(item.get('id') or '').strip()
+        nm = str(item.get('name') or '').strip()
+        if not mid or not nm or mid in seen:
+            continue    # id/姓名缺失或 id 重复的行一律跳过，不让脏数据进名册
+        seen.add(mid)
+        members.append((mid, nm))
+    if not members:
+        return None, 'CRM 返回的名单里没有有效成员，已保留原有名册'
+    return members, None
+
+def _builtin_roster():
+    return [{'id': m['id'], 'name': m['name']} for m in ADVISOR_ROSTER]
+
+def _read_roster_rows(c):
+    """读当前有效名册：DB 有数据即以此为准，空表才回退内置种子表。"""
+    c.execute('SELECT id, name FROM advisor_roster ORDER BY sort_order, id')
+    rows = [{'id': r[0], 'name': r[1]} for r in c.fetchall()]
+    return rows or _builtin_roster()
+
+def _load_roster_sync():
+    """给 /api/v1/pins 用的名册读取（DB 异常也不能让人员管理整页挂掉 → 回退内置）"""
+    conn = None
+    try:
+        conn = _connect_db()
+        return _read_roster_rows(conn.cursor())
+    except Exception as e:
+        log.warning(f'ROSTER load failed, fallback to builtin: {e}')
+        return _builtin_roster()
+    finally:
+        if conn:
+            conn.close()
+
+def _refresh_roster_sync():
+    """拉 CRM → 覆盖写 DB → 返回变化摘要。返回 (结果 dict, HTTP 状态码)。
+
+    拉取失败时**不碰 DB**（先取后写，不先删）。写库若中途失败，事务未 commit、
+    连接关闭即回滚 ⇒ 名册仍是刷新前那份。
+    """
+    members, err = _fetch_crm_roster_sync()
+    if err:
+        return {'ok': False, 'code': 'CRM_FAILED', 'message': err}, 200
+    conn = None
+    try:
+        conn = _connect_db()
+        c = conn.cursor()
+        old_rows = _read_roster_rows(c)
+        old_by_id = {m['id']: m['name'] for m in old_rows}
+        new_by_id = {mid: nm for mid, nm in members}
+        now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        c.execute('DELETE FROM advisor_roster')
+        c.executemany('INSERT INTO advisor_roster (id, name, sort_order, updated_at) VALUES (?,?,?,?)',
+                      [(mid, nm, idx, now_str) for idx, (mid, nm) in enumerate(members)])
+        conn.commit()
+        added = [{'id': i, 'name': n} for i, n in new_by_id.items() if i not in old_by_id]
+        removed = [{'id': i, 'name': n} for i, n in old_by_id.items() if i not in new_by_id]
+        # 同名不同 id（CRM 重建工号）也算一次变化，否则用户会看到"没变化"却对不上人
+        renamed = [{'id': i, 'old': old_by_id[i], 'name': n} for i, n in new_by_id.items()
+                   if i in old_by_id and old_by_id[i] != n]
+        return {'ok': True, 'total': len(members), 'added': added, 'removed': removed,
+                'renamed': renamed, 'synced_at': now_str}, 200
+    except Exception as e:
+        return {'ok': False, 'code': 'DB_ERROR', 'message': '写入名册失败：' + str(e)}, 500
+    finally:
+        if conn:
+            conn.close()
+
 # 会话令牌管理（简单实现，重启全部失效）
 _admin_sessions = {}  # token -> expiry_timestamp
 
@@ -1746,11 +1895,23 @@ async def health_check_handler(path, request_headers):
                 conn = _connect_db()
                 c = conn.cursor()
                 today_str = datetime.now().strftime('%Y-%m-%d')
-                c.execute("SELECT COUNT(*) FROM call_records_raw WHERE date(server_time)=?", (today_str,))
+                # v4.32（口径修复）：改用"拨打时间"区间，与手机管理页「每日对账」/通话列表
+                # 一致（面板通话列显示的也是 dial_time）。此前用 date(server_time)=入库时间
+                # ⇒ 手机离线几天后补传时，那几天的量会全部算进"今天"
+                # （实测：首页 14307 vs 对账 1970，差 7 倍）。
+                # 区间写法还能用上 idx_call_records_dial —— 函数包列用不上索引，
+                # 而本端点是 15 秒轮询的首页接口。
+                c.execute("SELECT COUNT(*) FROM call_records_raw WHERE dial_time>=? AND dial_time<?",
+                          (today_start_ms(), today_end_ms()))
                 row = c.fetchone()
                 if row:
                     today_dials = row[0]
-                c.execute("SELECT COUNT(*) FROM visits WHERE date(created_at)=?", (today_str,))
+                # v4.32：与上门列表的日期筛选口径对齐（列表用 COALESCE(visit_time,created_at)）。
+                # 插件端在线登记不传 visit_time（今天行为完全不变）；但批量导入的 Excel
+                # 带「上门时间」列时会落进 visit_time ⇒ 原先首页按 created_at 统计会与
+                # 列表页对不上，故统一到同一口径。
+                c.execute("SELECT COUNT(*) FROM visits WHERE date(COALESCE(NULLIF(visit_time,''), created_at))=?",
+                          (today_str,))
                 row = c.fetchone()
                 if row:
                     today_visits = row[0]
@@ -2340,6 +2501,12 @@ async def health_check_handler(path, request_headers):
             rows = [dict(r) for r in c.fetchall()]
             # v4.26: 与固定人员名册合并（按姓名匹配）。名册 = 全部人员的权威集合，
             # 未匹配上的行是「还没用插件登记过」的人，前端显示为「未绑定」。
+            # v4.33: 名册改从 DB 读（面板「刷新名单」可从 CRM 同步覆盖），空表才回退内置种子表
+            roster = _read_roster_rows(c)
+            # 上次从 CRM 同步的时间；NULL/空 = 从没同步过，当前显示的是内置种子表
+            c.execute('SELECT MAX(updated_at) FROM advisor_roster')
+            _rrow = c.fetchone()
+            roster_synced_at = _rrow[0] if _rrow and _rrow[0] else None
             by_name = {}
             for r in rows:
                 nm = (r.get('name') or '').strip()
@@ -2347,7 +2514,7 @@ async def health_check_handler(path, request_headers):
                     by_name[nm] = r   # 同名取 updated_at 最新的一条（已按时间倒序）
             merged = []
             used_pins = set()
-            for m in ADVISOR_ROSTER:
+            for m in roster:
                 hit = by_name.get(m['name'])
                 if hit:
                     used_pins.add(hit.get('pin'))
@@ -2376,7 +2543,8 @@ async def health_check_handler(path, request_headers):
                 })
             return (200, JSON_HDR, json.dumps({
                 'ok': True, 'pins': merged,
-                'roster_size': len(ADVISOR_ROSTER),
+                'roster_size': len(roster),
+                'roster_synced_at': roster_synced_at,
                 'bound_count': sum(1 for x in merged if x['bound']),
             }).encode('utf-8'))
         except Exception as e:
@@ -2384,6 +2552,19 @@ async def health_check_handler(path, request_headers):
         finally:
             if conn:
                 conn.close()
+
+    # 刷新人员名册（源头 = CRM 顾问列表）: GET /api/v1/roster/refresh
+    if path == '/api/v1/roster/refresh':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        # 走线程池：CRM 是外网请求，直接 await 会卡住事件循环（拨号/心跳一起停摆）
+        result, status = await _run_db(_refresh_roster_sync)
+        if result.get('ok'):
+            log.info(f"ROSTER_REFRESH total={result['total']} added={len(result['added'])} "
+                     f"removed={len(result['removed'])} renamed={len(result['renamed'])}")
+        else:
+            log.warning(f"ROSTER_REFRESH failed: {result.get('message')}")
+        return (status, JSON_HDR, json.dumps(result, ensure_ascii=False).encode('utf-8'))
 
     # 设置 PIN 分组: GET /api/v1/pin/set_group?pin=xxx&group_id=N
     if path == '/api/v1/pin/set_group':
@@ -2588,6 +2769,17 @@ async def health_check_handler(path, request_headers):
         phone_conn = _safe_int(qs.get('connected', ['0'])[0], 0)
         if not device_id:
             return (200, JSON_HDR, _err_json('MISSING_FIELDS', 'device_id不能为空'))
+        # v4.32（P0 修复）：本端点原先无任何门禁，却会 INSERT INTO phones ⇒
+        # 任何人凭空调一次就能把任意 device_id 变成"已注册设备"，从而绕过
+        # calls/batch、events/log 上 v4.23 加的 _device_registered 校验
+        # （实测：未见过的设备先调本端点变 200，再调 calls/batch 即 inserted=1）。
+        # 补齐同一道门禁：手机端本端点的上报受 isConnected 门控（连上 WS 才跑），
+        # 而 phone_hello 在那之前已把 device_id 写入 phones ⇒ 正常流程不受影响。
+        # 注意不能改成要求管理员 token —— 手机端没有管理凭据。
+        if not _device_registered(device_id):
+            log.warning(f'STATS_REPORT rejected: unregistered device={device_id}')
+            return (403, JSON_HDR, _err_json(
+                'DEVICE_NOT_REGISTERED', '设备未在云端注册，请先在 App 内重新连接后再同步'))
         now_str = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         today_str = datetime.now().strftime('%Y-%m-%d')
         conn = None
@@ -2762,20 +2954,30 @@ async def health_check_handler(path, request_headers):
                         )
                     if c.fetchone():
                         return ('json', 200, json.dumps({'ok': True, 'skipped': True, 'reason': 'duplicate'}).encode('utf-8'))
+                    # v4.29: 归属改为「接待顾问」而非登记人 —— 用户 2026-09-17 确认真实业务：
+                    #   「顾问是谁，上门就是谁的」（代登记场景：A 在自己电脑上帮 B 登记，这条归 B）。
+                    #   kefu_tel 存的是**顾问姓名**（插件端登记弹窗下拉的 value 就是姓名，
+                    #   见 cs-40-dialogs.js），故按姓名反查 advisor_names 拿顾问 PIN 再落库。
+                    #   查不到 ⇒ 该顾问还没用插件登记过（人员管理页显示"未绑定"），
+                    #   此时回退登记人 PIN，保证记录不丢、且仍可按"谁登记的"追溯。
+                    owner_pin = pin
+                    if kefu_tel:
+                        c.execute('SELECT pin FROM advisor_names WHERE name = ? '
+                                  'ORDER BY updated_at DESC LIMIT 1', (kefu_tel,))
+                        _adv = c.fetchone()
+                        if _adv and _adv[0]:
+                            owner_pin = _adv[0]
                     c.execute(
                         'INSERT INTO visits (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id, created_at, updated_at) '
                         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        (pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
+                        (owner_pin, name, mobile, kefu_tel, visit_type, source, visit_time, crm_id or None, now_str, now_str)
                     )
-                    # 自动注册顾问姓名映射（手机端通过此映射获取顾问姓名）
-                    # v4.18: 仅在缺失时补写（DO NOTHING）——此前登记的"接待顾问"会覆写扩展上传的
-                    # "业务员本人"姓名，导致人员管理里姓名在两个值之间来回翻转
-                    if kefu_tel and kefu_tel.strip():
-                        c.execute(
-                            'INSERT INTO advisor_names (pin, name, updated_at) VALUES (?, ?, ?) '
-                            'ON CONFLICT(pin) DO NOTHING',
-                            (pin, kefu_tel.strip(), now_str)
-                        )
+                    # v4.29: 删除此处对 advisor_names 的"兜底写入"。原逻辑写的是
+                    #   advisor_names[登记人 PIN] = 接待顾问姓名 —— 只在"登记人 = 顾问"时才对，
+                    #   代登记场景（A 帮 B 登记）会把 B 的姓名挂到 A 的手机号上，且是 DO NOTHING，
+                    #   一旦写错就永久固化，人员管理页按姓名匹配名册随即错位。
+                    #   权威来源始终是插件端刷新 CRM 时调的 /api/v1/advisor/register
+                    #   （pin/name 都取自同一个 CRM 页面，天然同源），无需这里再猜。
                     conn.commit()
                     return ('rowid', c.lastrowid)
                 except Exception as e:
@@ -2893,15 +3095,22 @@ async def health_check_handler(path, request_headers):
                 else:
                     c.execute('SELECT * FROM visits ORDER BY created_at DESC LIMIT 500')
                 rows = [dict(r) for r in c.fetchall()]
-                # 补全顾问姓名（kefu_tel 可能是手机号或姓名，查 advisor_names 表）
+                # v4.29: kefu_tel 实际存的是**顾问姓名**（插件端登记弹窗下拉的 value 就是姓名），
+                #   原实现按 `WHERE pin IN (姓名…)` 查 ⇒ 永远匹配不上，「顾问姓名」列恒为空。
+                #   改为按 name 查，并把顾问的 PIN 一并回填（kefu_pin），便于核对归属。
                 try:
-                    kefu_tels = list(set(r.get('kefu_tel','') for r in rows if r.get('kefu_tel','')))
-                    if kefu_tels:
-                        ph = ','.join(['?'] * len(kefu_tels))
-                        c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
-                        name_map = {r2['pin']: r2['name'] for r2 in c.fetchall()}
+                    kefu_names = list(set(r.get('kefu_tel','') for r in rows if r.get('kefu_tel','')))
+                    if kefu_names:
+                        ph = ','.join(['?'] * len(kefu_names))
+                        c.execute(f'SELECT pin, name FROM advisor_names WHERE name IN ({ph})', kefu_names)
+                        pin_map = {}
+                        for r2 in c.fetchall():
+                            pin_map.setdefault(r2['name'], r2['pin'])
                         for r in rows:
-                            r['kefu_name'] = name_map.get(r.get('kefu_tel',''), '')
+                            nm = r.get('kefu_tel','')
+                            r['kefu_name'] = nm
+                            if nm and nm in pin_map:
+                                r['kefu_pin'] = pin_map[nm]
                 except Exception: pass
                 if page_no:
                     return ('json', 200, json.dumps(
@@ -2980,17 +3189,11 @@ async def health_check_handler(path, request_headers):
                 wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
                 c.execute(f'SELECT * FROM visits {wsql} ORDER BY created_at DESC LIMIT 200000', args)
                 rows = [dict(r) for r in c.fetchall()]
-                # 补全顾问姓名：visits 表没有 kefu_name 列，直接 r.get('kefu_name')
-                # 恒为空字符串 → 导出的"顾问姓名"整列空白。这里按 kefu_tel（顾问电话/
-                # PIN）关联 advisor_names 补上。
-                kefu_tels = sorted({str(r.get('kefu_tel') or '').strip() for r in rows} - {''})
-                name_map = {}
-                if kefu_tels:
-                    ph = ','.join('?' * len(kefu_tels))
-                    c.execute(f'SELECT pin, name FROM advisor_names WHERE pin IN ({ph})', kefu_tels)
-                    name_map = {p: n for p, n in c.fetchall()}
+                # v4.29: kefu_tel 存的就是**顾问姓名**（插件端登记弹窗下拉的 value 即姓名），
+                #   原实现按 `WHERE pin IN (姓名…)` 关联 advisor_names ⇒ 永远匹配不上，
+                #   导出的「顾问姓名」整列空白。直接回填，无需再查库。
                 for r in rows:
-                    r['kefu_name'] = name_map.get(str(r.get('kefu_tel') or '').strip(), '')
+                    r['kefu_name'] = str(r.get('kefu_tel') or '').strip()
             except Exception as e:
                 return ('err', 500, _err_json('DB_ERROR', str(e)))
             finally:
@@ -3002,12 +3205,15 @@ async def health_check_handler(path, request_headers):
             buf = _io.StringIO()
             buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
             w = _csv.writer(buf)
-            w.writerow(['ID', '客户姓名', '手机号', '顾问电话', '顾问姓名', '事由', '来源', 'CRM同步', '登记时间', '来访时间'])
+            # v4.29: 原「顾问电话」列存的其实是**顾问姓名**（插件端传的是姓名），
+            #   且「顾问姓名」列因按 pin 误查而整列空白。现改为「接待顾问」（= 归属人姓名）
+            #   + 「归属顾问PIN」（= visits.pin，即落库时的归属键）。
+            w.writerow(['ID', '客户姓名', '手机号', '接待顾问', '归属顾问PIN', '事由', '来源', 'CRM同步', '登记时间', '来访时间'])
             for r in rows:
                 cells = [
                     r.get('id', ''),
                     r.get('name', ''), r.get('mobile', ''), r.get('kefu_tel', ''),
-                    r.get('kefu_name', ''), r.get('visit_type', ''),
+                    r.get('pin', ''), r.get('visit_type', ''),
                     {'phone': '手机', 'crm_sync': 'CRM同步'}.get(r.get('source', ''), '插件'),
                     '已同步' if r.get('crm_synced') else '未同步',
                     r.get('created_at', ''), r.get('visit_time', ''),
@@ -3269,7 +3475,8 @@ async def health_check_handler(path, request_headers):
                 if device_id:
                     where.append('cr.device_id = ?'); params.append(device_id)
                 if pin:
-                    where.append('p.last_pin = ?'); params.append(pin)
+                    # v4.29: 按「手机主人」筛，与下面的认人口径一致
+                    where.append(f'{_OWNER_PIN_SQL} = ?'); params.append(pin)
                 if number:
                     where.append('cr.number LIKE ?'); params.append(f'%{number}%')
                 if date_from:
@@ -3283,9 +3490,13 @@ async def health_check_handler(path, request_headers):
                         where.append('cr.dial_time <= ?'); params.append(int(d.timestamp() * 1000))
                     except Exception: pass  # invalid date format, skip filter
                 w = ' AND '.join(where) if where else '1=1'
-                c.execute(f'''SELECT cr.*, p.last_pin as pin, p.device_model, p.app_version
+                # v4.29: pin 列改出「手机主人」（原 p.last_pin 会被下午换 PIN 覆盖，
+                # 导致该机上午的记录被判给同事），并顺带带出顾问姓名供面板显示。
+                c.execute(f'''SELECT cr.*, {_OWNER_PIN_SQL} as pin, p.device_model, p.app_version,
+                                    a.name as advisor_name
                              FROM call_records_raw cr
                              LEFT JOIN phones p ON cr.device_id = p.device_id
+                             LEFT JOIN advisor_names a ON a.pin = {_OWNER_PIN_SQL}
                              WHERE {w} ORDER BY cr.dial_time DESC LIMIT ? OFFSET ?''',
                           params + [limit, offset])
                 rows = [dict(r) for r in c.fetchall()]
@@ -3327,7 +3538,8 @@ async def health_check_handler(path, request_headers):
                 if e_device_id:
                     where.append('cr.device_id = ?'); params.append(e_device_id)
                 if e_pin:
-                    where.append('p.last_pin = ?'); params.append(e_pin)
+                    # v4.29: 与 /api/v1/calls 同口径（手机主人）
+                    where.append(f'{_OWNER_PIN_SQL} = ?'); params.append(e_pin)
                 if e_number:
                     where.append('cr.number LIKE ?'); params.append(f'%{e_number}%')
                 if e_date_from:
@@ -3343,9 +3555,12 @@ async def health_check_handler(path, request_headers):
                     except Exception:
                         pass
                 wsql = ('WHERE ' + ' AND '.join(where)) if where else ''
-                c.execute(f'''SELECT cr.*, p.device_model, p.app_version
+                # v4.29: 导出与列表同口径 —— 归属 = 手机主人，并带出顾问姓名
+                c.execute(f'''SELECT cr.*, {_OWNER_PIN_SQL} as pin, p.device_model, p.app_version,
+                                    a.name as advisor_name
                              FROM call_records_raw cr
                              LEFT JOIN phones p ON cr.device_id = p.device_id
+                             LEFT JOIN advisor_names a ON a.pin = {_OWNER_PIN_SQL}
                              {wsql} ORDER BY cr.dial_time DESC LIMIT 200000''', params)
                 rows = [dict(r) for r in c.fetchall()]
             except Exception as e:
@@ -3360,7 +3575,7 @@ async def health_check_handler(path, request_headers):
             buf = _io.StringIO()
             buf.write('\ufeff')  # BOM：Excel 直接打开中文不乱码
             _cw = _csv.writer(buf)
-            _cw.writerow(['设备ID', '号码', '通话时间', '时长(秒)', '类型', 'SIM卡', '机型', '版本'])
+            _cw.writerow(['设备ID', '顾问', '号码', '通话时间', '时长(秒)', '类型', 'SIM卡', '机型', '版本'])
             for r in rows:
                 ts = r.get('dial_time')
                 try:
@@ -3373,6 +3588,7 @@ async def health_check_handler(path, request_headers):
                     ct = -1
                 cells = [
                     r.get('device_id', ''),
+                    r.get('advisor_name', ''),
                     r.get('number', ''),
                     tstr,
                     r.get('duration', 0),

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="sky-blue">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="zh-CN" data-theme="sky-blue" data-page-node-id="D6nHhhNKYliMXhm4h84DUr">
+<head data-page-node-id="sVhPwGEpmYVWc4w73DICJc">
+    <meta charset="UTF-8" data-page-node-id="cAJuCmPeyCxpiSUCq0TlS0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="7sx0ODEnRuQJThTX6fCEy1">
     <title>AutoDial 云中转 - 管理面板</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -359,6 +359,9 @@
         .row-warn td { background: rgba(240,62,62,.05); }
         .td-muted { font-size: 12px; color: var(--text-2); }
         .td-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* v4.31: 数字列（时长等）右对齐 + 等宽数字。左对齐时「7 / 128 / 0」个位不齐，读不出量级差；
+           与 .stat-value 同一套做法（项目已有 tabular-nums 实践）。表头同步右对齐，否则数字会顶着表头左缘。 */
+        .data-table th.td-num, .data-table td.td-num { text-align: right; font-variant-numeric: tabular-nums; }
         .expand-arrow { display: inline-block; transition: transform .2s; color: var(--text-2); vertical-align: middle; }
         .expand-arrow svg { width: 12px; height: 12px; display: block; }
         .expand-arrow.open { transform: rotate(90deg); color: var(--primary); }
@@ -590,140 +593,140 @@
         }
     </style>
 </head>
-<body>
+<body data-page-node-id="wwRqab2QLO0fcZWRFRzNA0">
     <!-- ==================== 侧边栏 ==================== -->
-    <aside class="sidebar" id="sidebar">
-        <div class="side-logo">
-            <div class="logo-tile">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg>
+    <aside class="sidebar" id="sidebar" data-page-node-id="EFXfbFBK3V31ojM0CG3Ejj">
+        <div class="side-logo" data-page-node-id="QiovFYI0i7Jsf20XOIKCOf">
+            <div class="logo-tile" data-page-node-id="9eGCtcuePtpnWjZ2n7UvIE">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="AMSQV934vkhil5XcgAftIQ"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="oA4jdBmiAIgRf8zFqDdCpV"/></svg>
             </div>
-            <div class="logo-text">
-                <strong>AutoDial 云中转</strong>
-                <span class="ver-pill" id="ver-pill" title="云中继服务版本（原来这里写死面板设计版本 v6.0，容易误判线上版本）">v-</span>
+            <div class="logo-text" data-page-node-id="HHxPtk5MS30xZE5dJpZCyJ">
+                <strong data-page-node-id="nqnvReCHH4XElLGriC6yyJ">AutoDial 云中转</strong>
+                <span class="ver-pill" id="ver-pill" title="云中继服务版本（原来这里写死面板设计版本 v6.0，容易误判线上版本）" data-page-node-id="tVIw18QLzzFQ5iJl1OKjnk">v-</span>
             </div>
         </div>
-        <nav class="side-nav">
-            <button class="side-item active" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg><span>首页总览</span></button>
-            <button class="side-item" onclick="showPage('phones')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg><span>手机管理</span></button>
-            <button class="side-item" onclick="showPage('calls')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg><span>通话记录</span></button>
-            <button class="side-item" onclick="showPage('visits')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg><span>上门登记</span></button>
-            <button class="side-item" onclick="showPage('pins')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4"/></svg><span>人员管理</span></button>
-            <button class="side-item" onclick="showPage('admin-accounts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.2"/><path d="M10.5 12.5L20 3"/><path d="M16.5 6.5l3 3"/></svg><span>管理账号</span></button>
-            <button class="side-item" onclick="showPage('logs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/></svg><span>系统日志</span></button>
-            <button class="side-item" onclick="showPage('settings')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><circle cx="9.5" cy="6.5" r="2.2"/><path d="M4 12.5h16"/><circle cx="14.5" cy="12.5" r="2.2"/><path d="M4 18.5h16"/><circle cx="9.5" cy="18.5" r="2.2"/></svg><span>设置</span></button>
+        <nav class="side-nav" data-page-node-id="7UJt7X3PAFBU4K6gvoxJHQ">
+            <button class="side-item active" onclick="showPage('dashboard')" data-page-node-id="G3GqbZXF6rlBnIbCkYfbum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="pJLqGZriqziU3yvRmxVzqH"><path d="M4 4v16h16" data-page-node-id="mNVl8bSUG3pHoOBSXwbixm"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="oc13ByAU2am6tFmuzDUbfW"/></svg><span data-page-node-id="XrI4SJADBE3MgKhf3hk9ec">首页总览</span></button>
+            <button class="side-item" onclick="showPage('phones')" data-page-node-id="nbyfK2xkMdPn3eCHmEuEws"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="HFFMseECZbMX2WjqTIKQnL"><rect x="7" y="2.5" width="10" height="19" rx="2.5" data-page-node-id="cAvapFdR1y9BMgDzTAXw6i"/><path d="M10.5 18.5h3" data-page-node-id="Gd2eOXbYvgBxnCmxGmx85g"/></svg><span data-page-node-id="XWzGnqJXErAUZFy5j9gRup">手机管理</span></button>
+            <button class="side-item" onclick="showPage('calls')" data-page-node-id="310wbMwWyMHO20cyOzjN0Y"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="nnkjQ1jYvhqcXF75JmYgqW"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="TPk2QwgM0T378U1IQ9DG51"/></svg><span data-page-node-id="DKU6DzxdHg4IvBehjRiXAL">通话记录</span></button>
+            <button class="side-item" onclick="showPage('visits')" data-page-node-id="XAgpMgvuYTVzuiHmqwtyhY"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="k6pEp8h2D2VTfruEaAkipx"><path d="M4 10.5L12 4l8 6.5" data-page-node-id="LOqjrTWJowBkA0CUV1g1E7"/><path d="M6 9.5V20h12V9.5" data-page-node-id="Qg8wiSahUlm18OD0HGco6V"/></svg><span data-page-node-id="udA9lk9MJ1zlc1hAjBE7ga">上门登记</span></button>
+            <button class="side-item" onclick="showPage('pins')" data-page-node-id="TfF3apF4npKeVDEt93ZYEt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="ijcDZaHDjspKYWGMcuLWAu"><circle cx="9" cy="8" r="3.5" data-page-node-id="qLS2N8x4mCK4EEzU7690SF"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5" data-page-node-id="C5uK7dMx2APYKh3Dq8GibD"/><circle cx="16.5" cy="9.5" r="2.5" data-page-node-id="l77I41JV60mAyxK8aImcDE"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4" data-page-node-id="ZbgQ8n98UzNncBeNVToJcL"/></svg><span data-page-node-id="q2zasNnmbQr1vjgCj9yaPJ">人员管理</span></button>
+            <button class="side-item" onclick="showPage('admin-accounts')" data-page-node-id="s27umXpaQrnM9wuXao6kl9"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="u1eBiX9kzYxtSkHgaliEwn"><circle cx="7.5" cy="15.5" r="4.2" data-page-node-id="7FBykbcHLNiKAye79qgC8I"/><path d="M10.5 12.5L20 3" data-page-node-id="RQ49YEBXZFnzuRcHSLOW9Z"/><path d="M16.5 6.5l3 3" data-page-node-id="Xp4k0pEFWZxH5vgUoQIRu0"/></svg><span data-page-node-id="AXQxpwhCqvOHB2FGodGHYm">管理账号</span></button>
+            <button class="side-item" onclick="showPage('logs')" data-page-node-id="QsNTeiDYmeMJ4mzFV8dlHk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="2dhLhLxFOCXmFghx08frhJ"><circle cx="4.5" cy="6" r="1.2" data-page-node-id="Z1BrsyhpHQ5ejABBhWkLNF"/><circle cx="4.5" cy="12" r="1.2" data-page-node-id="ewgSw6mNSMn4ECDJN2pFXV"/><circle cx="4.5" cy="18" r="1.2" data-page-node-id="Gsb7ghXrzCFp2cB6T4InDv"/><path d="M9 6h11" data-page-node-id="COKduykBdB9dKVmAnm4oI1"/><path d="M9 12h11" data-page-node-id="j88T3zAtE2OONI2vgdWiHV"/><path d="M9 18h11" data-page-node-id="XLrg1Ck3vjrHrnNkjsGo1u"/></svg><span data-page-node-id="OqCqCL88bZP3ekgAQM48sp">系统日志</span></button>
+            <button class="side-item" onclick="showPage('settings')" data-page-node-id="F3Zl8yYvhwLJHtmRngrp5M"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="FxG4RoSeBj6AbN6051iU0g"><path d="M4 6.5h16" data-page-node-id="QVUkMAC2BH1SHbuMhi9OLa"/><circle cx="9.5" cy="6.5" r="2.2" data-page-node-id="0vySxgwmi5I76gtGPHoqdN"/><path d="M4 12.5h16" data-page-node-id="ITPyQoDtd11G60fHiv9gQZ"/><circle cx="14.5" cy="12.5" r="2.2" data-page-node-id="ymcnVgWtB6YMcpxN5YKZ9l"/><path d="M4 18.5h16" data-page-node-id="6IgjNypWx2pFf9LEVnSdPX"/><circle cx="9.5" cy="18.5" r="2.2" data-page-node-id="2WHPmk3E7QkW1G8unIf0nz"/></svg><span data-page-node-id="JbJH75BuLiK4wOXSoFrFMd">设置</span></button>
         </nav>
-        <div class="side-status">
-            <div class="status-row"><span class="status-dot"></span><span>运行中 · 端口 <strong id="hdr-port">-</strong></span></div>
-            <div class="status-sub">运行 <span id="hdr-uptime">-</span> · 连接 <span id="hdr-conn">0</span></div>
+        <div class="side-status" data-page-node-id="5rIDtWKkLlfyCRW2ev0GDO">
+            <div class="status-row" data-page-node-id="FNtZbcXjhtiwWo6O18zi0X"><span class="status-dot" data-page-node-id="h1FtdYjYxAgkWDVHGOk6YD"></span><span data-page-node-id="3FGpBiixFRvG3IMbD5m9HP">运行中 · 端口 <strong id="hdr-port" data-page-node-id="S9gZvFseR0Jbnzc7jQqXfH">-</strong></span></div>
+            <div class="status-sub" data-page-node-id="56BAt9B6HtdEef7fNr8WYn">运行 <span id="hdr-uptime" data-page-node-id="H0usB6AjiSf4zDW3CixTeJ">-</span> · 连接 <span id="hdr-conn" data-page-node-id="JBspr4aklorz7fBUAPrpVX">0</span></div>
         </div>
     </aside>
-    <div id="side-backdrop"></div>
+    <div id="side-backdrop" data-page-node-id="PQM9LLQFMG7uNELE59ZMWx"></div>
 
     <!-- ==================== 主区 ==================== -->
-    <div class="main">
-        <header class="topbar">
-            <button class="icon-btn menu-btn" onclick="toggleSidebar()" title="菜单">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+    <div class="main" data-page-node-id="DZvSp8B8MxayJ1MqEbkOvn">
+        <header class="topbar" data-page-node-id="rnkHX3ch6cbAYkxynMzmgA">
+            <button class="icon-btn menu-btn" onclick="toggleSidebar()" title="菜单" data-page-node-id="NKaxtT2pAz6MxSG7QzYl1n">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="bcgS2039WG2v3b2fHdzETK"><path d="M4 7h16" data-page-node-id="DsvMTFFuO2xfnPMOlue3bb"/><path d="M4 12h16" data-page-node-id="isKa4q9lWHuxDO3xXl3KDx"/><path d="M4 17h16" data-page-node-id="CgLwWmuDnxMWIRxka6gbGM"/></svg>
             </button>
-            <h1 class="topbar-title" id="topbar-title">首页总览</h1>
-            <div class="topbar-right">
-                <button class="auto-badge" id="refresh-label" onclick="toggleAutoRefresh()" title="点击暂停 / 恢复自动刷新（填写表格时自动跳过刷新）">自动刷新 · 每15秒</button>
-                <span class="topbar-muted">上次刷新 <span id="last-refresh">-</span></span>
-                <button class="icon-btn" onclick="refreshAll()" title="立即刷新">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
+            <h1 class="topbar-title" id="topbar-title" data-page-node-id="ZIWAyVnhcz1uKLNdRSWyos">首页总览</h1>
+            <div class="topbar-right" data-page-node-id="g5MGkXt8WGB9WEOTW7tjXC">
+                <button class="auto-badge" id="refresh-label" onclick="toggleAutoRefresh()" title="点击暂停 / 恢复自动刷新（填写表格时自动跳过刷新）" data-page-node-id="YajXPqBBTPHrofBa1wJTJf">自动刷新 · 每15秒</button>
+                <span class="topbar-muted" data-page-node-id="LllnYvl7f0z3u0zGD5jgnd">上次刷新 <span id="last-refresh" data-page-node-id="KQqD5VAMLkU50FgrLE4u57">-</span></span>
+                <button class="icon-btn" onclick="refreshAll()" title="立即刷新" data-page-node-id="OLqeWrcuBVqxOix24qnU4R">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="ckhKBInmvLJoDPwf4jmO86"><path d="M4 12a8 8 0 0113.66-5.66L20 8" data-page-node-id="Maaacu2rsp2Kyym9dZ8LUU"/><path d="M20 4v4h-4" data-page-node-id="wpFGkKASD0PqmEE5NH3xrI"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16" data-page-node-id="5V9b2CcsqyqRzhvbx0WKHu"/><path d="M4 20v-4h4" data-page-node-id="gAF4rOOSTtsHVpnvAkXKSb"/></svg>
                 </button>
-                <div class="theme-wrap">
-                    <button class="icon-btn" onclick="toggleThemeMenu(event)" title="主题切换">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18h1.3a1.9 1.9 0 001.8-2.6 1.6 1.6 0 01.4-1.9 2 2 0 011.6-.5H19A2 2 0 0021 14 9 9 0 0012 3z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.2" cy="10.2" r="1"/></svg>
+                <div class="theme-wrap" data-page-node-id="SB0KErHE3fMTvBXxdWVmvU">
+                    <button class="icon-btn" onclick="toggleThemeMenu(event)" title="主题切换" data-page-node-id="A4HBZcMvKryuAwSiItL0y0">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="rqEnXXi8gRvucM78Z5YGlA"><path d="M12 3a9 9 0 100 18h1.3a1.9 1.9 0 001.8-2.6 1.6 1.6 0 01.4-1.9 2 2 0 011.6-.5H19A2 2 0 0021 14 9 9 0 0012 3z" data-page-node-id="BZGMyIsPTYb0RACWe8DYqH"/><circle cx="7.5" cy="10.5" r="1" data-page-node-id="Xi5ayZmfQgkFtjuHUSJnu0"/><circle cx="12" cy="7.5" r="1" data-page-node-id="X6fJEVeo6K6QtpHelrmEep"/><circle cx="16.2" cy="10.2" r="1" data-page-node-id="VXSI4NdYTEyUGWsnyiZ9vU"/></svg>
                     </button>
-                    <div class="theme-menu" id="theme-menu"></div>
+                    <div class="theme-menu" id="theme-menu" data-page-node-id="dhfSfh3LaYxZBUj3AjWkRt"></div>
                 </div>
-                <button class="btn btn-outline btn-sm" id="login-btn" onclick="showLogin()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+                <button class="btn btn-outline btn-sm" id="login-btn" onclick="showLogin()" data-page-node-id="SQqFvmm5dkJieLhvzCo2dY">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5mjRnsPkwQfmQG2qMzPKO7"><rect x="5" y="11" width="14" height="9" rx="2.5" data-page-node-id="L0xOHHCvvV1Q16wjG6icCf"/><path d="M8 11V8a4 4 0 018 0v3" data-page-node-id="awKuGALFUnKpBWv9w1cKQc"/></svg>
                     管理员登录
                 </button>
-                <button class="btn btn-danger btn-sm" id="logout-btn" onclick="doLogout()" style="display:none;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></svg>
+                <button class="btn btn-danger btn-sm" id="logout-btn" onclick="doLogout()" style="display:none;" data-page-node-id="sW0aUAISiQ5QBzTO5hrmDS">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="L5J9Mo9s2cNAdMQ65Wo0r9"><path d="M9 4H6a2 2 0 00-2 2v12a2 2 0 002 2h3" data-page-node-id="Bbt3RQiKp52Ic16VvOrAUO"/><path d="M15 8l4 4-4 4" data-page-node-id="2KaKjfAyYUvH3AHLvl2oNV"/><path d="M19 12H9" data-page-node-id="eSbv0vSu3Gj2uMx6sbeIWv"/></svg>
                     退出登录
                 </button>
             </div>
         </header>
 
-        <main class="content">
-            <div class="api-banner" id="api-banner" style="display:none;"></div>
+        <main class="content" data-page-node-id="UeIa7BpNlotQcDDbABdMCS">
+            <div class="api-banner" id="api-banner" style="display:none;" data-page-node-id="HwMCj60QJHZ8k2zLUTWZZt"></div>
             <!-- ==================== 首页总览 ==================== -->
-            <div id="page-dashboard" class="page active">
+            <div id="page-dashboard" class="page active" data-page-node-id="Oa1gK7icSG1jvGqZ4g33qi">
                 <!-- v4.24: 首屏第一位——现在有谁在线（原 hero 卡只报服务自身健康，已下沉到运维区） -->
-                <div class="conn-bar" id="conn-bar">
-                    <div class="conn-main">
-                        <div class="conn-left">
-                            <div class="conn-tile"><span class="status-dot" id="conn-dot"></span></div>
-                            <div style="min-width:0;">
-                                <div class="conn-title" id="conn-title">正在读取连接状态...</div>
-                                <div class="conn-sub" id="conn-sub">-</div>
-                                <div class="conn-names" id="conn-names"></div>
+                <div class="conn-bar" id="conn-bar" data-page-node-id="pEE3vvwC4Ev3J6ZPREDQVE">
+                    <div class="conn-main" data-page-node-id="KXxsCEB1rv7CLPmjUdAR5m">
+                        <div class="conn-left" data-page-node-id="YMuDUDLtHb9UR7wUcw1OQw">
+                            <div class="conn-tile" data-page-node-id="RIsxLZCSZA2vzTtmNmpiJl"><span class="status-dot" id="conn-dot" data-page-node-id="Zb3N30LcdBAhwk50LiEWpC"></span></div>
+                            <div style="min-width:0;" data-page-node-id="athtssN07TxCNPsXETxwyC">
+                                <div class="conn-title" id="conn-title" data-page-node-id="gAcl6MFa4gb0ZZLm7eztKW">正在读取连接状态...</div>
+                                <div class="conn-sub" id="conn-sub" data-page-node-id="DphaRQ3XLsW8haP2tys9Am">-</div>
+                                <div class="conn-names" id="conn-names" data-page-node-id="By1qucy7geR8CMISosW1ZW"></div>
                             </div>
                         </div>
-                        <button class="btn btn-outline btn-sm" id="conn-offline-toggle" onclick="toggleOfflineList()" style="display:none;">离线 0 台</button>
+                        <button class="btn btn-outline btn-sm" id="conn-offline-toggle" onclick="toggleOfflineList()" style="display:none;" data-page-node-id="nE2CQHk48TsEOkngEkGD2U">离线 0 台</button>
                     </div>
-                    <div class="conn-offline-list" id="conn-offline-list"></div>
+                    <div class="conn-offline-list" id="conn-offline-list" data-page-node-id="FP1pCjGPBgmGaDef9d1ATg"></div>
                 </div>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg></div><div class="stat-label">今日拨号数</div></div>
-                        <div class="stat-value" id="stat-today-dials">0</div>
-                        <div class="stat-sub">来自手机端上报</div>
+                <div class="stats-grid" data-page-node-id="THXRn0P2tDTeNNaw0GOn5V">
+                    <div class="stat-card" data-page-node-id="vPBurI6VvvGFTOw74VJeG7">
+                        <div class="stat-head" data-page-node-id="dkiKBVsil4R0FMCJZzIqYU"><div class="stat-ico" data-page-node-id="GHAangA4nUEkjdnbgHH6vr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kBxNRKClGw1o5lRtPTbjZ7"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="LrP8aFmLWyvcA8icwYZXhX"/></svg></div><div class="stat-label" data-page-node-id="N7FK8hT9DFrqMGazWT0p0D">今日拨号数</div></div>
+                        <div class="stat-value" id="stat-today-dials" data-page-node-id="OjULuH9pSn1ryNdTu1FgWf">0</div>
+                        <div class="stat-sub" data-page-node-id="cWmZA2Hl937SgvEDZEHAfn">来自手机端上报</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico tone-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg></div><div class="stat-label">今日登记数</div></div>
-                        <div class="stat-value" id="stat-today-visits">0</div>
-                        <div class="stat-sub">上门登记记录</div>
+                    <div class="stat-card" data-page-node-id="9x0HCGXFrd2ame9bVpeD4b">
+                        <div class="stat-head" data-page-node-id="mzrvF6KaPoZ0ulngDnb1Wo"><div class="stat-ico tone-purple" data-page-node-id="xUOmxpi5xFUoQSooBDlttm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5fGkZoriYBkaKH87ZZrzdp"><path d="M4 10.5L12 4l8 6.5" data-page-node-id="SB443aermqQo3iyOmJeRXE"/><path d="M6 9.5V20h12V9.5" data-page-node-id="uS5lxC2Nw9t79kh6QZWxHm"/></svg></div><div class="stat-label" data-page-node-id="VzzwfWoSpduQJTIQkniTqU">今日登记数</div></div>
+                        <div class="stat-value" id="stat-today-visits" data-page-node-id="rjDiDQ8ApqdHn9bLAZUsPn">0</div>
+                        <div class="stat-sub" data-page-node-id="PPiQl6WebOLgUe6rNUufLX">上门登记记录</div>
                     </div>
                 </div>
                 <!-- v4.24: 待处理提醒——有内容才出现，点击直达对应页 -->
-                <div class="alert-bar" id="alert-bar" style="display:none;"></div>
+                <div class="alert-bar" id="alert-bar" style="display:none;" data-page-node-id="C3nu6Yp7A0g30VB4uKgaPt"></div>
                 <!-- v4.24: 快捷入口——把每天最高频的三个动作提到首屏 -->
-                <div class="quick-row">
-                    <button class="quick-btn" onclick="quickSearchNumber()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+                <div class="quick-row" data-page-node-id="tvM33NbGtZefoCpIBd5cm3">
+                    <button class="quick-btn" onclick="quickSearchNumber()" data-page-node-id="JiRmBEhgF4QCP3Ly9MdVgl">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="m9p6GGt6SQ9iNhR1t1NZYF"><circle cx="11" cy="11" r="6.5" data-page-node-id="dfXLAHE0ZPlmMHgjnCrMV9"/><path d="M20 20l-4.5-4.5" data-page-node-id="wGa0kx9jIud62w1d8cgoTQ"/></svg>
                         查号码
                     </button>
-                    <button class="quick-btn" onclick="quickImport()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+                    <button class="quick-btn" onclick="quickImport()" data-page-node-id="GhrwNFsjFW7P1EjLsoNu5F">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="M0feBjPe7iT7VOeJvB0Tgh"><path d="M12 16V5" data-page-node-id="5EHawSp9o6OXTeRTtS2rjq"/><path d="M7 9l5-5 5 5" data-page-node-id="ToAvqDBmDX40n9kY3fbyWJ"/><path d="M5 20h14" data-page-node-id="XprdacnUzgq3yvF9dnUiXb"/></svg>
                         批量导入
                     </button>
-                    <button class="quick-btn" onclick="quickExportToday()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
-                        导出今日
+                    <button class="quick-btn" onclick="quickExportToday()" title="导出今天的上门登记记录（CSV）" data-page-node-id="CL9mhuB2QZyEc5FCu9vQ6p">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="mbJzI1zyn1VrvWeCZPYeZj"><path d="M12 4v11" data-page-node-id="tmndKO5FRtBnaUim4Z4gOp"/><path d="M7 11l5 5 5-5" data-page-node-id="S9RSDr36ISFT4RzGKNKOqQ"/><path d="M5 20h14" data-page-node-id="DdSyUVBhoY3q6bBj9LrB5m"/></svg>
+                        导出今日登记
                     </button>
                 </div>
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg></div>最近连接记录<span class="count-pill" id="recent-count">0</span>条</div>
-                    <table class="data-table"><thead><tr><th>设备</th><th>角色</th><th>PIN</th><th>IP</th><th>连接时间</th></tr></thead>
-                    <tbody id="recent-clients"><tr><td colspan="5" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                <div class="card" data-page-node-id="ylFGoc8TLNRhcOJ8ier7jV">
+                    <div class="card-title" data-page-node-id="O5KeYRTx0Sgd7xlau4OPwP"><div class="title-ico" data-page-node-id="8UNU3LFMbbn6AZIsr75G5N"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="sl6VFosHsJBfAvlCr6nUkq"><circle cx="12" cy="12" r="8.5" data-page-node-id="LM3K3bFbFeb3rF5kEjqFtu"/><path d="M12 7v5l3.5 2" data-page-node-id="nkmamLOwnnKGDgBd4FDGnD"/></svg></div>最近连接记录<span class="count-pill" id="recent-count" data-page-node-id="ezmDww90ek4OUFfXkFQpRE">0</span>条</div>
+                    <table class="data-table" data-page-node-id="u9gBaeYVvFJTkYcst8tqbE"><thead data-page-node-id="IG7ROPBC2hHYCcnJWpnHRP"><tr data-page-node-id="VoCiLKmm1oMCPVoyNvQpy1"><th data-page-node-id="UjuYcvNtDBT2OezM9StM3i">设备</th><th data-page-node-id="1W31kyaAtNBxyBhtKULwAh">角色</th><th data-page-node-id="OY3ZVVYCt6XA11jaQnaDcA">PIN</th><th data-page-node-id="zVFZSSY5UMyClLiXbGV0jZ">IP</th><th data-page-node-id="PEt4ohn2AfFU9KBUW8nql2">连接时间</th></tr></thead>
+                    <tbody id="recent-clients" data-page-node-id="oaWuDHBuhhVamdaNIfHjpv"><tr data-page-node-id="9TadV0ryp40cQ74u0NATol"><td colspan="5" class="empty-state" data-page-node-id="g4E0huyj8BDx5fVEbeqeKo"><span class="spin" data-page-node-id="o4tUEgHJZIBqgZ1BFgGVeN"></span>加载中...</td></tr></tbody></table>
                 </div>
                 <!-- v4.24: 运维信息（服务自身健康 + 趋势图）默认折叠，出问题才展开 -->
-                <div class="card">
-                    <button class="ops-head" id="ops-head" onclick="toggleOps()">
-                        <div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>
-                        <span class="card-title" style="margin-bottom:0;">服务详情与趋势</span>
-                        <svg class="ops-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M6 9l6 6 6-6"/></svg>
+                <div class="card" data-page-node-id="ixYKZE5bnYXS6CoVuMWI5D">
+                    <button class="ops-head" id="ops-head" onclick="toggleOps()" data-page-node-id="KNaM4es3Knk1AFTkUtDPIc">
+                        <div class="title-ico" data-page-node-id="3d9yLerzJynQdi85EBywxH"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="UxabMq24GXS4gALSUvMrg4"><path d="M4 4v16h16" data-page-node-id="X5AFvgclEqfTw4DuQTV9SZ"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="yiSOhI7RFKv2hHlLW0DCiR"/></svg></div>
+                        <span class="card-title" style="margin-bottom:0;" data-page-node-id="JMKrzTYA2c4PNgYqgzCEYK">服务详情与趋势</span>
+                        <svg class="ops-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;" data-page-node-id="sOoXFWR6roBgfZDkE2dcCv"><path d="M6 9l6 6 6-6" data-page-node-id="F6C6Cr23KLaQMKF4aH7RwC"/></svg>
                     </button>
-                    <div class="ops-body" id="ops-body">
-                        <div class="ops-info">
-                            <span>端口<b id="hero-port">-</b></span>
-                            <span>已运行<b id="hero-uptime">-</b></span>
-                            <span>当前连接<b id="hero-conn">0</b></span>
-                            <span>服务版本<b id="ops-version">-</b></span>
+                    <div class="ops-body" id="ops-body" data-page-node-id="dbBFse7zsBW5Q9P4c0Q9Vr">
+                        <div class="ops-info" data-page-node-id="v4Wtfg9bLvO8RpYo7LpGx2">
+                            <span data-page-node-id="6C6njNCxrclKZkOiWBHhCT">端口<b id="hero-port" data-page-node-id="P2HKlmyAFWZuRBBNuKlr89">-</b></span>
+                            <span data-page-node-id="scXeIAZ3c4ZBMaIKsAO7fP">已运行<b id="hero-uptime" data-page-node-id="TbuilEiG83JG6SNvubyFr7">-</b></span>
+                            <span data-page-node-id="Zb4rn2VwMflKfdf4gA7H0z">当前连接<b id="hero-conn" data-page-node-id="OxJV8YfjPaMWkEeMiaMdC6">0</b></span>
+                            <span data-page-node-id="bxERdMnuenUPKnWZUWnm3M">服务版本<b id="ops-version" data-page-node-id="zQMlEsgi44NCUgnZCKrKnl">-</b></span>
                         </div>
-                        <div class="card-row">
-                            <div class="card">
-                                <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>连接数趋势（最近4小时）</div>
-                                <div class="chart-wrap"><canvas id="conn-chart"></canvas></div>
+                        <div class="card-row" data-page-node-id="qWOywhto5q1jkQUzcK3UGN">
+                            <div class="card" data-page-node-id="r0xAOIg4klNzGVpfvcrJUo">
+                                <div class="card-title" data-page-node-id="rBAEoTWV7BsSDPuA9K3kfS"><div class="title-ico" data-page-node-id="7teGIwrajLsNj5t2fNJ3EG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="w0mn1MPLijlbvvx0zCJhjs"><path d="M4 4v16h16" data-page-node-id="PN2YkGscvotNHrUhNVTSQL"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="z9QPXa99uy7yU3QLcvnaJb"/></svg></div>连接数趋势（最近4小时）</div>
+                                <div class="chart-wrap" data-page-node-id="2E5lVpdkGIfSHs3MeLjeJW"><canvas id="conn-chart" data-page-node-id="ltEvlsRERCWOhw9gay9VOA"></canvas></div>
                             </div>
-                            <div class="card">
-                                <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z"/></svg></div>消息类型分布</div>
-                                <div class="chart-wrap-sm"><canvas id="msg-chart"></canvas></div>
+                            <div class="card" data-page-node-id="T3BFC1gF4CCxvEe4cl6KzN">
+                                <div class="card-title" data-page-node-id="05g2RIePYmAh5wkbqgyHVm"><div class="title-ico" data-page-node-id="URquAtQ9nbXceKXf9oCewH"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="XZR4vGYDS1o2hnUBwKXPPi"><circle cx="12" cy="12" r="8.5" data-page-node-id="NG99us82F6CiX7XGjFfIRk"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z" data-page-node-id="So0VMeBPvknWIs9N30BBB7"/></svg></div>消息类型分布</div>
+                                <div class="chart-wrap-sm" data-page-node-id="pdaKo23GAOfcxBSBy3LBLL"><canvas id="msg-chart" data-page-node-id="jp3mIavrJ9T9GUV3Dr3yet"></canvas></div>
                             </div>
                         </div>
                     </div>
@@ -731,228 +734,233 @@
             </div>
 
             <!-- ==================== 手机管理 ==================== -->
-            <div id="page-phones" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>手机设备一览<span class="count-pill" id="phone-count">0</span>台</div>
+            <div id="page-phones" class="page" data-page-node-id="lQEaJBMCCjLLQ0lfSgcgBs">
+                <div class="card" data-page-node-id="ThacFCgnBoNUJQfmNVZd1y">
+                    <div class="card-head" data-page-node-id="IQUGmzfnPNYPSSc5UOYcKa">
+                        <div class="card-title" data-page-node-id="Zf86PgOpJqHotza8eCU4YS"><div class="title-ico" data-page-node-id="YoTEMQQTvZmuYwRJqaMNVs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="028dV5Vnn1gez4hFjcTkOy"><rect x="7" y="2.5" width="10" height="19" rx="2.5" data-page-node-id="QEQwYdbiUWP1emI6gs3HLI"/><path d="M10.5 18.5h3" data-page-node-id="V76ebBGjF1MMi0k1WGzFts"/></svg></div>手机设备一览<span class="count-pill" id="phone-count" data-page-node-id="CFPBr8he0WiXm96LUKzCgS">0</span>台</div>
                     </div>
-                    <div class="filters">
-                        <div class="filter-group"><label>状态筛选</label><select class="input" id="phone-status-filter" onchange="loadPhones()"><option value="">全部</option><option value="online">在线</option><option value="offline">离线</option></select></div>
-                        <div class="filter-group"><label>搜索</label><input type="text" class="input" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="phoneSearchDebounce()" style="min-width:220px;"></div>
-                        <button class="icon-btn" onclick="loadPhones()" title="刷新">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
+                    <div class="filters" data-page-node-id="4j9s2TqSO1ujN5kPUJoZJH">
+                        <div class="filter-group" data-page-node-id="FqRmPsX0WdAHtSwvKjba27"><label data-page-node-id="2xouB7Zzpp1MLFWXp2X2hd">状态筛选</label><select class="input" id="phone-status-filter" onchange="loadPhones()" data-page-node-id="gsvqEWp5sM5mDAPljdMSHd"><option value="" data-page-node-id="WwMQN0UJPN9ENlcF7SNOWg">全部</option><option value="online" data-page-node-id="soWQyr9XSYcz3isdycTFgW">在线</option><option value="offline" data-page-node-id="BxJgcuR7WvPbXNhnGZSCjl">离线</option></select></div>
+                        <div class="filter-group" data-page-node-id="L76UYJCQTwPDfBAAahTn72"><label data-page-node-id="7FrbnpZzYH1ZNSVJRZq2c9">搜索</label><input type="text" class="input" id="phone-search" placeholder="设备ID / 型号 / PIN / 姓名..." oninput="phoneSearchDebounce()" style="min-width:220px;" data-page-node-id="9cPpBS6Z1hejkPJrf5oeIh"></div>
+                        <button class="icon-btn" onclick="loadPhones()" title="刷新" data-page-node-id="CwdmcC0RdL2Aqhj7ECDiwj">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Qhl0M6GZb3Ii3QnRihyLWB"><path d="M4 12a8 8 0 0113.66-5.66L20 8" data-page-node-id="HY6Auw7cdcIA5vvvnWTkYZ"/><path d="M20 4v4h-4" data-page-node-id="p8YDO1UfHLf1RtPj50umvk"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16" data-page-node-id="wxbE3p856Zs3Y5vGA5x6FZ"/><path d="M4 20v-4h4" data-page-node-id="Z0AjYCZxXIH6VF90jkLA5R"/></svg>
                         </button>
                     </div>
-                    <table class="data-table"><thead><tr><th style="width:28px;"></th><th>设备ID</th><th>别名</th><th>型号</th><th>默认PIN</th><th>在线</th><th>当前登录人</th><th>当前PIN</th><th>最后活跃</th></tr></thead>
-                    <tbody id="phones-list"><tr><td colspan="9" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <table class="data-table" data-page-node-id="yFjj7TujqkpBSxuRuLNeuG"><thead data-page-node-id="2LZxZdwOLaWdedOFZcwTdy"><tr data-page-node-id="Dqbzwf34rV0nawkLHqIEZH"><th style="width:28px;" data-page-node-id="K07EtZOk3z78CJVY6idjlR"></th><th data-page-node-id="OmmzxIPo1WvUGFD7pxIeQc">设备ID</th><th data-page-node-id="qqsWvMymZYopOzypkmFW7J">别名</th><th data-page-node-id="e5v1jT0k1nG3eDl4KxlunJ">型号</th><th data-page-node-id="EB0ISsFE8pasrHKB276GPC">默认PIN</th><th data-page-node-id="B3zlObBOK36KOQpYO7yKpJ">在线</th><th data-page-node-id="nCtx9MFPGGdSPbSj1GiiyH">当前登录人</th><th data-page-node-id="5cTT8GKyCovsRczjL8Rgan">当前PIN</th><th data-page-node-id="le5X4c3aflPjrgO2mA97fu">最后活跃</th></tr></thead>
+                    <tbody id="phones-list" data-page-node-id="FqH5UCNYCYPqpssLwXpBo0"><tr data-page-node-id="3jAi8Tl4lPmZDtCGqFcGyU"><td colspan="9" class="empty-state" data-page-node-id="ac4C29B9aqtMLoVHnkryoJ"><span class="spin" data-page-node-id="J4W0lvuGIlsjnd2HlO6Rx8"></span>加载中...</td></tr></tbody></table>
                     <!-- v4.24: 分页控件从表体里挪出来，与其它列表页统一 -->
-                    <div class="pagination" id="phones-pagination"></div>
+                    <div class="pagination" id="phones-pagination" data-page-node-id="cxooC6EseFdQy2ykdZPCDW"></div>
                 </div>
             </div>
 
             <!-- ==================== 通话记录 ==================== -->
-            <div id="page-calls" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg></div>通话记录<span class="count-pill" id="calls-total">0</span>条</div>
-                        <div class="tool-row">
-                            <button class="btn btn-success btn-sm" onclick="exportCallsCSV()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+            <div id="page-calls" class="page" data-page-node-id="VA7B97CmaQ70YgrsqoFaV6">
+                <div class="card" data-page-node-id="Roo87VVD84inZ5FLuGWsNk">
+                    <div class="card-head" data-page-node-id="64kMbG1ZcTPGv6bUK65Gqn">
+                        <div class="card-title" data-page-node-id="OvHsOVdi1Uu7upq8z9Jg0n"><div class="title-ico" data-page-node-id="Sy4mmBqhRwsteoJOqlMka0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="8SOwMcipNFUIsTNbCnAFwr"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="ah5H3sn2NMDXty4aui98vv"/></svg></div>通话记录<span class="count-pill" id="calls-total" data-page-node-id="3TBvnIYWaRez1Cxm6rRS0e">0</span>条</div>
+                        <div class="tool-row" data-page-node-id="LbT2cQ0qUy7k0f9DbsOzCs">
+                            <button class="btn btn-success btn-sm" onclick="exportCallsCSV()" data-page-node-id="ShHfNnEMdZ5YQiUcCzzboJ">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Cj4UJoSdb5iNPvyAAcohB5"><path d="M12 4v11" data-page-node-id="13QkBhzHOCyOAiz17QUYRl"/><path d="M7 11l5 5 5-5" data-page-node-id="DrT9NUlnMb6759JRha5ZsB"/><path d="M5 20h14" data-page-node-id="BNHxsk9PgNFK3kjtR2NXU6"/></svg>
                                 导出CSV
                             </button>
                         </div>
                     </div>
                     <!-- v4.24: 常用区间一键到位 -->
-                    <div class="quickdates">
-                        <span class="qd-label">快捷</span>
-                        <button class="qd-chip" id="cqd-today" onclick="setCallRange('today')">今天</button>
-                        <button class="qd-chip" id="cqd-yesterday" onclick="setCallRange('yesterday')">昨天</button>
-                        <button class="qd-chip" id="cqd-7d" onclick="setCallRange('7d')">近 7 天</button>
-                        <button class="qd-chip" id="cqd-all" onclick="setCallRange('all')">全部</button>
+                    <div class="quickdates" data-page-node-id="bewtLTraGaMxpWcaJq9JqW">
+                        <span class="qd-label" data-page-node-id="VMLwkVFxFbYtI4lMXgiFrZ">快捷</span>
+                        <button class="qd-chip" id="cqd-today" onclick="setCallRange('today')" data-page-node-id="PA0AosoPWpZv40kWYJYUKz">今天</button>
+                        <button class="qd-chip" id="cqd-yesterday" onclick="setCallRange('yesterday')" data-page-node-id="Gjswgrqkrl6gedkZIudBb3">昨天</button>
+                        <button class="qd-chip" id="cqd-7d" onclick="setCallRange('7d')" data-page-node-id="sEJmgCBZV1dCgjAhHcNBcp">近 7 天</button>
+                        <button class="qd-chip" id="cqd-all" onclick="setCallRange('all')" data-page-node-id="QLRwsoorjD0qvglRAGqVCC">全部</button>
                     </div>
-                    <div class="filters">
-                        <div class="filter-group"><label>设备筛选</label><select class="input" id="call-device-filter" onchange="loadCalls()"><option value="">全部设备</option></select></div>
-                        <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="call-date-from" onchange="loadCalls()"></div>
-                        <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="call-date-to" onchange="loadCalls()"></div>
-                        <div class="filter-group"><label>号码搜索</label><input type="text" class="input" id="call-number" placeholder="输入号码..." oninput="callSearchDebounce()"></div>
-                        <button class="btn btn-outline btn-sm" onclick="loadCalls()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+                    <div class="filters" data-page-node-id="wA3i1m85Vwnn7MRNG465S4">
+                        <div class="filter-group" data-page-node-id="MM1b25s95vmL5YF83UAq4c"><label data-page-node-id="klDACQGonLu20MBHOdgo1E">设备筛选</label><select class="input" id="call-device-filter" onchange="loadCalls()" data-page-node-id="2sVsekFpLuW2FxjYJdvhG8"><option value="" data-page-node-id="6JtiH0UD5Sln3tzVL08GKB">全部设备</option></select></div>
+                        <div class="filter-group"><label>顾问（手机主人）</label><select class="input" id="call-pin-filter" onchange="loadCalls()" style="min-width:150px;"><option value="">全部顾问</option></select></div>
+                        <div class="filter-group" data-page-node-id="AndtzbWfvDDDU6yTUvvhbR"><label data-page-node-id="vcfqo7ymigijNzlwqzmWsN">开始日期</label><input type="date" class="input" id="call-date-from" onchange="loadCalls()" data-page-node-id="YDMT7RPXmA7mpomaIBtBGU"></div>
+                        <div class="filter-group" data-page-node-id="Yp06uP54nYNgjEQn7uryp8"><label data-page-node-id="naA4ydpykHJlwt11voWEHc">结束日期</label><input type="date" class="input" id="call-date-to" onchange="loadCalls()" data-page-node-id="AHF40ofyYjPNaMbha813Wi"></div>
+                        <div class="filter-group" data-page-node-id="4APzsHtNTrcned6zpLJpzj"><label data-page-node-id="Kr9vsWmBGW2RF65RPvx8HV">号码搜索</label><input type="text" class="input" id="call-number" placeholder="输入号码..." oninput="callSearchDebounce()" data-page-node-id="gRcDcup4Snm5aTCb5vFaX0"></div>
+                        <button class="btn btn-outline btn-sm" onclick="loadCalls()" data-page-node-id="MzWlK5m6EHonhER0WBafiX">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="COy2ZDAlD4vjohjrTp5Uf2"><circle cx="11" cy="11" r="6.5" data-page-node-id="mhCWDKwXsHl68B6eJA8zKL"/><path d="M20 20l-4.5-4.5" data-page-node-id="Wgu3x3pP2E3WJf19K3JNZL"/></svg>
                             查询
                         </button>
                     </div>
-                    <table class="data-table"><thead><tr><th>设备</th><th>号码</th><th>通话时间</th><th>时长(秒)</th><th>类型</th><th>SIM</th><th>模型</th><th>版本</th></tr></thead>
-                    <tbody id="calls-list"><tr><td colspan="8" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
-                    <div class="pagination" id="calls-pagination"></div>
+                    <table class="data-table" data-page-node-id="6CYFZHZWHADSSvRBDjTXnB"><thead data-page-node-id="lN8GRY63a5aOjGWwee2cYP"><tr data-page-node-id="tnja8ymfY9qfNhvs6FnAoC"><th data-page-node-id="cg2ZvxgKjj7KHsMDLay1R4">设备</th><th>顾问</th><th data-page-node-id="MmX9oYVczd3nWF9FkJngY9">号码</th><th data-page-node-id="WUY0gTGSVEPj8GiDTaiPZO">通话时间</th><th class="td-num" data-page-node-id="7uJkhq4ntctagIAyFmZ02N">时长(秒)</th><th data-page-node-id="lmZwO6aVnUFk4vSwsJF2rb">类型</th><th data-page-node-id="4kAdDeeZdknUibK3hYzVjM">SIM</th></tr></thead>
+                    <tbody id="calls-list" data-page-node-id="2Yu57s3pGduMa72YqiZVVP"><tr data-page-node-id="F38c9JZcRATeLttMO5JGlF"><td colspan="7" class="empty-state" data-page-node-id="tnnJdlL0bbPOK64hQ6MydV"><span class="spin" data-page-node-id="QEmyjoHbvBL2g7LSEiVV95"></span>加载中...</td></tr></tbody></table>
+                    <div class="pagination" id="calls-pagination" data-page-node-id="OXzZViRAUzTnDtKcliNVab"></div>
                 </div>
             </div>
 
             <!-- ==================== 上门登记 ==================== -->
-            <div id="page-visits" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 9.5V20h12V9.5"/></svg></div>上门登记管理</div>
-                        <div class="tool-row">
-                            <button class="btn btn-primary btn-sm" onclick="showImportModal()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>
+            <div id="page-visits" class="page" data-page-node-id="ErcK26pyg9kjX2ZLOBeY6D">
+                <div class="card" data-page-node-id="cqGQUuaQTjp9wPAQB9NiSn">
+                    <div class="card-head" data-page-node-id="gnMv70KKhe4wYHjRJvRmlx">
+                        <div class="card-title" data-page-node-id="ukCUQmfGskkk7WdOOKKPGc"><div class="title-ico" data-page-node-id="M0guAg8Tycw3Epe2u3BooZ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="LPuA0CPd3o5mIOwN893tIr"><path d="M4 10.5L12 4l8 6.5" data-page-node-id="6qq3L63YTlzzpr15M7AdyA"/><path d="M6 9.5V20h12V9.5" data-page-node-id="2oZ4yJmuNo2ydqyLEScqys"/></svg></div>上门登记管理</div>
+                        <div class="tool-row" data-page-node-id="vvZhkbqKMirDHMOgNM1Btk">
+                            <button class="btn btn-primary btn-sm" onclick="showImportModal()" data-page-node-id="uAyvnnwmphHSMIINbUaUFm">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="p4r5nyE6HD91BHb7mf8rL9"><path d="M12 16V5" data-page-node-id="w0MhqJBK2JaOMAxunAVcbl"/><path d="M7 9l5-5 5 5" data-page-node-id="P7u39vZO6yuavLBaCOEF4e"/><path d="M5 20h14" data-page-node-id="TuTsriWUQ2IYmbO5P0c078"/></svg>
                                 批量导入
                             </button>
-                            <button class="btn btn-success btn-sm" onclick="exportCSV()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                            <button class="btn btn-success btn-sm" onclick="exportCSV()" data-page-node-id="cUgpu8PIHDOK3FMp2NGXUT">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="yNp2DRheDGa6v4R9ek5579"><path d="M12 4v11" data-page-node-id="EV0sSGrhOAJyCygXpcRgWE"/><path d="M7 11l5 5 5-5" data-page-node-id="SiLGaO6CYwy9ermsmD5yk7"/><path d="M5 20h14" data-page-node-id="7gFfZm7MCrs8rVPqkUIDYl"/></svg>
                                 导出CSV
                             </button>
                         </div>
                     </div>
                     <!-- v4.24: 常用区间一键到位（原来必须手点两个日期框才出数据） -->
-                    <div class="quickdates">
-                        <span class="qd-label">快捷</span>
-                        <button class="qd-chip" id="vqd-today" onclick="setVisitRange('today')">今天</button>
-                        <button class="qd-chip" id="vqd-yesterday" onclick="setVisitRange('yesterday')">昨天</button>
-                        <button class="qd-chip" id="vqd-7d" onclick="setVisitRange('7d')">近 7 天</button>
-                        <button class="qd-chip" id="vqd-all" onclick="setVisitRange('all')">全部</button>
+                    <div class="quickdates" data-page-node-id="YBd4Z9ALrJNej282og9dkA">
+                        <span class="qd-label" data-page-node-id="H7VoWDaJd3AEFHjzMlV73b">快捷</span>
+                        <button class="qd-chip" id="vqd-today" onclick="setVisitRange('today')" data-page-node-id="G078t96IID1N2QyTAqUFPj">今天</button>
+                        <button class="qd-chip" id="vqd-yesterday" onclick="setVisitRange('yesterday')" data-page-node-id="LFGsjpBB2DGLmGXFHsx3ON">昨天</button>
+                        <button class="qd-chip" id="vqd-7d" onclick="setVisitRange('7d')" data-page-node-id="oJv1ZMuAVN8lDFLqWXkoi3">近 7 天</button>
+                        <button class="qd-chip" id="vqd-all" onclick="setVisitRange('all')" data-page-node-id="YyDm1JUXjyfmd9el6n4jKj">全部</button>
                     </div>
-                    <div class="filters">
-                        <div class="filter-group"><label>业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()"><option value="">不限（全部）</option><option value="__group__">按分组筛选...</option></select></div>
-                        <div class="filter-group"><label>分组</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="onVisitFilterChange()"><option value="">不限分组</option></select></div>
-                        <div class="filter-group"><label>开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="onVisitFilterChange()"></div>
-                        <div class="filter-group"><label>结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="onVisitFilterChange()"></div>
-                        <div class="filter-group"><label>来源</label><select class="input" id="visit-filter-source" onchange="onVisitFilterChange()"><option value="">全部</option><option value="plugin">插件</option><option value="crm_sync">CRM同步</option><option value="phone">手机</option><option value="unsynced">未同步</option></select></div>
-                        <button class="btn btn-outline btn-sm" onclick="onVisitFilterChange()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0113.66-5.66L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16"/><path d="M4 20v-4h4"/></svg>
+                    <div class="filters" data-page-node-id="A3nqsEI4RRC9d6LzuFCSo9">
+                        <div class="filter-group" data-page-node-id="okrwX7VfhuAGZUoc7gXnwv"><label data-page-node-id="LHCaIqqPMxikcn5PmwrXkh">业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()" data-page-node-id="lDAWtqDAgOVbTFeAWbJFiZ"><option value="" data-page-node-id="PTtjJAlShIDKOmaPtOH4GT">不限（全部）</option><option value="__group__" data-page-node-id="V5Hcbf9HrPqVlJAwb29u7E">按分组筛选...</option></select></div>
+                        <div class="filter-group" data-page-node-id="qToSI1sC80ucn827ksAtyc"><label data-page-node-id="ikbLA8Asw6Jf7VeJU8eqHj">分组</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="onVisitFilterChange()" data-page-node-id="s2AdEdzOb6Vg9OjUrSEsAe"><option value="" data-page-node-id="fNsJtc6GXYWBScf5axCjxY">不限分组</option></select></div>
+                        <div class="filter-group" data-page-node-id="Y4lgVHGr28aFUC5HrtYFG6"><label data-page-node-id="562UtnADPh9HeZaIYtP9X7">开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="onVisitFilterChange()" data-page-node-id="2DUj5GgCzUgnGKU5TOabMf"></div>
+                        <div class="filter-group" data-page-node-id="Vl05K9aNlgGqKzzTtTd9z0"><label data-page-node-id="2AFWrWJwWDRRdppRrSL5QZ">结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="onVisitFilterChange()" data-page-node-id="MubyFUaTr4Eyj20Yuf5aac"></div>
+                        <div class="filter-group" data-page-node-id="FKXqisZJkjYemn1IC1P4zn"><label data-page-node-id="6nUv3rnssCIFXdZa62z8Tt">来源</label><select class="input" id="visit-filter-source" onchange="onVisitFilterChange()" data-page-node-id="tcJy2auU60L3mXHABc5xbf"><option value="" data-page-node-id="6emeWorQg1055dAWG7wZKA">全部</option><option value="plugin" data-page-node-id="9hDhNy4FEUEdQd55wAVgPk">插件</option><option value="crm_sync" data-page-node-id="HTpY8PtKgzu1udyFUyO4rI">CRM同步</option><option value="phone" data-page-node-id="0mgGifZRA49vkJX4BvLTju">手机</option><option value="unsynced" data-page-node-id="zJHSLhHZi7L2Yu8JRlHPcv">未同步</option></select></div>
+                        <button class="btn btn-outline btn-sm" onclick="onVisitFilterChange()" data-page-node-id="FFQWEwsMU140RnDQ9L1F2Q">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="qoygDTGm8vsJk7anOhPfcV"><path d="M4 12a8 8 0 0113.66-5.66L20 8" data-page-node-id="n39RM49XBVYHU3kiErvZVj"/><path d="M20 4v4h-4" data-page-node-id="nOUCD6FcgLuUC3JjPsm1WP"/><path d="M20 12a8 8 0 01-13.66 5.66L4 16" data-page-node-id="cQQ9jcPELFxdXD0E29Y7jb"/><path d="M4 20v-4h4" data-page-node-id="d9is1mueVQz8vzhkxNL4WS"/></svg>
                             刷新
                         </button>
                     </div>
-                    <table class="data-table"><thead><tr><th>ID</th><th>客户姓名</th><th>手机号</th><th>顾问(电话)</th><th>顾问姓名</th><th>事由</th><th>来源</th><th>CRM</th><th>登记时间</th><th>来访时间</th><th>操作</th></tr></thead>
-                    <tbody id="visits-list"><tr><td colspan="11" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <table class="data-table" data-page-node-id="wkJQBSEyg1PsRGgKNR0uvN"><thead data-page-node-id="br5Mh913qurEzvEHhU8xhr"><tr data-page-node-id="CKLSemqSbcTlzZyrHe8yRJ"><th data-page-node-id="aw6CalSBwdZP6nb4GhGZA1">客户姓名</th><th data-page-node-id="gd8oBaM47IGrjAkcAoACkd">手机号</th><th data-page-node-id="DlMadf9Vk35HAFBuwwFyzW">接待顾问</th><th data-page-node-id="xVmhc07hLeVuMOK9awikNV">归属PIN</th><th data-page-node-id="tcJhxuIDAdujiAmrXEvS0g">事由</th><th data-page-node-id="lp8f7rodxTe6Y7JbLl2Pck">来源</th><th data-page-node-id="ToDB9DQELLDANVrzN9cVL5">CRM</th><th data-page-node-id="agJLRXjUrq2BCFBGNbGjaV">登记时间</th><th data-page-node-id="mEzZQoxNGk2aogykmvSysq">来访时间</th><th data-page-node-id="SIfSez8L4EERuZ1JIdPhvX">操作</th></tr></thead>
+                    <tbody id="visits-list" data-page-node-id="0yQ3LqJHVe8D29BS86Cm5N"><tr data-page-node-id="eqdrJI4ryRjpMOUKz2inrB"><td colspan="10" class="empty-state" data-page-node-id="GumTo5nvPwj6FIw066lCAn"><span class="spin" data-page-node-id="QJxjkERZY6k99zCLJoGhdF"></span>加载中...</td></tr></tbody></table>
                     <!-- v4.24: 翻页按钮原来写成 class="btn btn-sm"（漏修饰类）⇒ .btn 基类无背景/边框，渲染成裸文字 -->
-                    <div class="pagination" id="visit-pager">
-                        <button class="pager-btn" id="visit-prev" onclick="visitGoPage(-1)"><span class="chev-flip" id="visit-prev-ico"></span> 上一页</button>
-                        <span id="visit-page-info">-</span>
-                        <button class="pager-btn" id="visit-next" onclick="visitGoPage(1)">下一页 <span id="visit-next-ico"></span></button>
+                    <div class="pagination" id="visit-pager" data-page-node-id="1czqIpDQu8it7HqZPx0Bmv">
+                        <button class="pager-btn" id="visit-prev" onclick="visitGoPage(-1)" data-page-node-id="J7oli6UGWNL5FanbddDBsr"><span class="chev-flip" id="visit-prev-ico" data-page-node-id="F53fEDwXGsexDD67apqs3O"></span> 上一页</button>
+                        <span id="visit-page-info" data-page-node-id="msYV6SQ90Xf9tSRhTUfHrg">-</span>
+                        <button class="pager-btn" id="visit-next" onclick="visitGoPage(1)" data-page-node-id="JhVFnuTyxv7RlT6GH2ZOh8">下一页 <span id="visit-next-ico" data-page-node-id="9QdsJi0PO6AziuRNe3wC0a"></span></button>
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>上门趋势（14天）</div>
-                    <div class="chart-wrap"><canvas id="visit-chart"></canvas></div>
+                <div class="card" data-page-node-id="QUCiwykYkSCSV9uZc9TsLm">
+                    <div class="card-title" data-page-node-id="Ml1XNbQs0BU67ZFDuckhBW"><div class="title-ico" data-page-node-id="4DQT3968ISSScIpDIiy1IJ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="vXIHq6FnqGSvFV8EJZrI74"><path d="M4 4v16h16" data-page-node-id="OrsZ2FG0OKUWmYWgHU8GTR"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="lgXPPMM973jAhfopr7Dy8S"/></svg></div>上门趋势（14天）</div>
+                    <div class="chart-wrap" data-page-node-id="KAyILX2eXKEEBsjFoypFsU"><canvas id="visit-chart" data-page-node-id="D4DRJm4CGmBKfwGc5hEwia"></canvas></div>
                 </div>
             </div>
 
             <!-- ==================== 人员管理 ==================== -->
-            <div id="page-pins" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4"/></svg></div>人员管理（PIN + 姓名 + 分组）</div>
-                        <div class="tool-row">
-                            <span class="tool-label">分组</span>
-                            <select class="input" id="pin-group-filter" onchange="loadPins()"><option value="">全部</option></select>
-                            <input type="text" class="input" id="new-group-name" placeholder="新建分组" style="width:110px;">
-                            <button class="btn btn-primary btn-sm" onclick="addGroup()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            <div id="page-pins" class="page" data-page-node-id="9SbzXYnBBjx04hp3ihQuk0">
+                <div class="card" data-page-node-id="wFb8ur4rfW2KgCPCk0GMqq">
+                    <div class="card-head" data-page-node-id="7RddObY2EQRAyhTcLVZvp6">
+                        <div class="card-title" data-page-node-id="WdszUMoeQMm1x60iIttCr4"><div class="title-ico" data-page-node-id="cYgtucNCEsWjGcUPOvnNfc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="akIwlqV1o1b1Cp1RGwX3Tx"><circle cx="9" cy="8" r="3.5" data-page-node-id="oi9zLYTqYWNLV1QnzZ0DHL"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5" data-page-node-id="wq7dzoXTD0vgFiTkkvf9NY"/><circle cx="16.5" cy="9.5" r="2.5" data-page-node-id="S8iQCT0KiAEkrwHyvluIUg"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4" data-page-node-id="1VtIxkSxFNOoodx18U5hDL"/></svg></div>人员管理（PIN + 姓名 + 分组）</div>
+                        <div class="tool-row" data-page-node-id="l8smSJEcN96FL3aU92BQlq">
+                            <button class="btn btn-sm" id="btn-refresh-roster" onclick="refreshRoster()" title="从 CRM 顾问列表重新同步人员名册（拉取失败时保留现有名册，不会清空）" data-page-node-id="RstRefreshBtn01">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="RstRefreshIco01"><path d="M20 11.5A8.5 8.5 0 1 1 17.6 5.4" data-page-node-id="RstRefreshP1001"/><path d="M20 4v7.5h-7" data-page-node-id="RstRefreshP2001"/></svg>
+                                刷新名单
+                            </button>
+                            <span class="tool-label" data-page-node-id="yxitjL08sxtr6VzqREF1nV">分组</span>
+                            <select class="input" id="pin-group-filter" onchange="loadPins()" data-page-node-id="6GGuiDdH0BGfjIqmGCL4QF"><option value="" data-page-node-id="9UAsE81TPGFw7tbzpviJjz">全部</option></select>
+                            <input type="text" class="input" id="new-group-name" placeholder="新建分组" style="width:110px;" data-page-node-id="MrxVRRuy3brns9tiI6ciL2">
+                            <button class="btn btn-primary btn-sm" onclick="addGroup()" data-page-node-id="MYlkIw7KQDhgxqN0CqqBGO">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="FoL18i9xdpTzD4XuMvgsIN"><path d="M12 5v14" data-page-node-id="QQ0TMod42AbC8GMZ1S9vnG"/><path d="M5 12h14" data-page-node-id="9u0qmAQqJRUY7aJYdxMOGh"/></svg>
                                 新建
                             </button>
-                            <button class="btn btn-danger btn-sm" onclick="delGroup()">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 4h4a1.5 1.5 0 011.5 1.5V7"/><path d="M6.5 7l1 12a2 2 0 002 1.9h5a2 2 0 002-1.9l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                            <button class="btn btn-danger btn-sm" onclick="delGroup()" data-page-node-id="PF1zICb3GaDAWUJFd36HN5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="p24Sx16BTqULQwD8eoQkT7"><path d="M4 7h16" data-page-node-id="5fzHgYfqhILkECUR9yKHEt"/><path d="M10 4h4a1.5 1.5 0 011.5 1.5V7" data-page-node-id="WXwNKij2W6UUCgRqqX4Sf4"/><path d="M6.5 7l1 12a2 2 0 002 1.9h5a2 2 0 002-1.9l1-12" data-page-node-id="DHH9Q7YANQxBtnVpix2Ep7"/><path d="M10 11v6" data-page-node-id="dFHvyTvSgs4V1GFne2n3vt"/><path d="M14 11v6" data-page-node-id="dRD6XTsCkvifPzB7mv50ae"/></svg>
                                 删分组
                             </button>
                         </div>
                     </div>
-                    <div id="pins-roster-hint" style="font-size:12px;color:var(--text-2);margin:0 0 12px;line-height:1.6;">人员名册加载中…</div>
-                    <table class="data-table"><thead><tr><th>PIN (手机号)</th><th>姓名</th><th>分组</th><th>更新时间</th></tr></thead>
-                    <tbody id="pins-list"><tr><td colspan="4" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <div id="pins-roster-hint" style="font-size:12px;color:var(--text-2);margin:0 0 12px;line-height:1.6;" data-page-node-id="WjFszmqOld24HiT6uDtqgl">人员名册加载中…</div>
+                    <table class="data-table" data-page-node-id="b85tDGPkFy5HWCEvCa1yw6"><thead data-page-node-id="7nTaNZsb0yCYUhstAp97rg"><tr data-page-node-id="7IF0rFQjbjFgI7zzmVVMgm"><th data-page-node-id="joE3fBO1uFfYokWlFaJtRY">PIN (手机号)</th><th data-page-node-id="ybkTXNfC3e0DnKhCrEzhsE">姓名</th><th data-page-node-id="XCNC6c8XdYP4nhfbkgBAKm">分组</th><th data-page-node-id="iKygA7cLdtmf7ck8bLad5u">更新时间</th></tr></thead>
+                    <tbody id="pins-list" data-page-node-id="KMyxdgbJ1kYhAIgY58QlAa"><tr data-page-node-id="ZXDf2rwt4ne6oSGKB0UCQv"><td colspan="4" class="empty-state" data-page-node-id="HVRmp5GtLbIMCgFyOfVver"><span class="spin" data-page-node-id="TX9dygfxjt3Skalylmnu4A"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
 
             <!-- ==================== 管理账号 ==================== -->
-            <div id="page-admin-accounts" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.2"/><path d="M10.5 12.5L20 3"/><path d="M16.5 6.5l3 3"/></svg></div>管理员账号管理</div>
+            <div id="page-admin-accounts" class="page" data-page-node-id="ZTzOdxdK7KZlM8osR4m55L">
+                <div class="card" data-page-node-id="r8q0mlPXlV6Glan0QhPXdm">
+                    <div class="card-head" data-page-node-id="hEE93EXToGqNI67StoESHG">
+                        <div class="card-title" data-page-node-id="GGNl7tLH34MS7Gzq7J4DGR"><div class="title-ico" data-page-node-id="XXXgHqAPbFTbMTTOexbaV0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="01Glofoo5dCPLZl5l3pXZT"><circle cx="7.5" cy="15.5" r="4.2" data-page-node-id="BWCD9CjcMagmm4g947o1Xe"/><path d="M10.5 12.5L20 3" data-page-node-id="L2SRWiFXYGpJf0u2wKl1d8"/><path d="M16.5 6.5l3 3" data-page-node-id="HOktsVV8gibTFHPMp2psOw"/></svg></div>管理员账号管理</div>
                     </div>
-                    <div class="tool-row" style="margin-bottom:16px;">
-                        <div class="filter-group"><label>账号</label><input type="text" class="input" id="new-admin-user" placeholder="输入新账号" style="width:150px;"></div>
-                        <div class="filter-group"><label>密码</label><input type="password" class="input" id="new-admin-pass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:150px;"></div>
-                        <button class="btn btn-primary" onclick="addAdminAccount()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                    <div class="tool-row" style="margin-bottom:16px;" data-page-node-id="u8wmed9A14btZQ1IhhvoSN">
+                        <div class="filter-group" data-page-node-id="9HKDUzwFbIlo0ocnwYB7Bf"><label data-page-node-id="puMJzEw5HERJod5fenziTd">账号</label><input type="text" class="input" id="new-admin-user" placeholder="输入新账号" style="width:150px;" data-page-node-id="KoiraEFcgi6Ar33umSwiti"></div>
+                        <div class="filter-group" data-page-node-id="jzvO31YxhmllvtmK5AOUVC"><label data-page-node-id="udZoTBQbkahByAEBsAZMAD">密码</label><input type="password" class="input" id="new-admin-pass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:150px;" data-page-node-id="hkfcECDGT03oaU3pWsNZZ0"></div>
+                        <button class="btn btn-primary" onclick="addAdminAccount()" data-page-node-id="36jRylKx3wPHJhFW3gHQSW">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="h2BpqnlbJ97FEsOAPIgiyP"><path d="M12 5v14" data-page-node-id="uuA3l8GRn2AcbJwLYCHAxA"/><path d="M5 12h14" data-page-node-id="JI7O9LWL20dFLpY0hKYMJD"/></svg>
                             添加账号
                         </button>
                     </div>
-                    <table class="data-table"><thead><tr><th>ID</th><th>账号</th><th>创建时间</th><th>操作</th></tr></thead>
-                    <tbody id="admin-accounts-list"><tr><td colspan="4" class="empty-state"><span class="spin"></span>加载中...</td></tr></tbody></table>
+                    <table class="data-table" data-page-node-id="bWxo3dTLto3er5a5VrkPne"><thead data-page-node-id="WDq7FqgGdK3Am2RJ3hJDju"><tr data-page-node-id="FJHG8dd9aiyvvUqMyIqKLW"><th data-page-node-id="3OzAjIZdwTaVaNMnhkcVDx">ID</th><th data-page-node-id="MB7c3N43tk1fRobTML0jAH">账号</th><th data-page-node-id="JJT0MwJMU2dTDVosav0G1q">创建时间</th><th data-page-node-id="mE8rees0PnZDNy4ePTZggu">操作</th></tr></thead>
+                    <tbody id="admin-accounts-list" data-page-node-id="A9uhphlJu7qlX7n7tnPt9F"><tr data-page-node-id="9ID1DD61FrHu4JvmXxxw0g"><td colspan="4" class="empty-state" data-page-node-id="w41zo2esnGy48rALHDjf7Y"><span class="spin" data-page-node-id="OhiRMYPkMsHleQnHMdY5kH"></span>加载中...</td></tr></tbody></table>
                 </div>
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg></div>修改密码</div>
-                    <div class="tool-row">
-                        <div class="filter-group"><label>选择账号</label><select class="input" id="chpwd-id" style="width:170px;"><option value="">加载中...</option></select></div>
-                        <div class="filter-group"><label>新密码</label><input type="password" class="input" id="chpwd-newpass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:190px;"></div>
-                        <button class="btn btn-primary" onclick="chpwdAdminAccount()">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
+                <div class="card" data-page-node-id="NwVVUNEWDDpmGiJOnBOOwJ">
+                    <div class="card-title" data-page-node-id="AqcPucMcqkrSoDfUdOCoXc"><div class="title-ico" data-page-node-id="zH6oGujDUcpiubbYASX8re"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="574jL23XQ9D7tcD6oWDMZj"><rect x="5" y="11" width="14" height="9" rx="2.5" data-page-node-id="y1uDay8GaABTsDd4YaGkcm"/><path d="M8 11V8a4 4 0 018 0v3" data-page-node-id="uXdGNp7RvXDTuSZJtv2U24"/></svg></div>修改密码</div>
+                    <div class="tool-row" data-page-node-id="egdtn3WGxiUreuSqr0UvZP">
+                        <div class="filter-group" data-page-node-id="evBnK7yeiLe8yuh5tm4wmg"><label data-page-node-id="jadLGiP5y4tMBHuVFymmtY">选择账号</label><select class="input" id="chpwd-id" style="width:170px;" data-page-node-id="9m9pMlLbE9nUILoHrzO5Hc"><option value="" data-page-node-id="1AsA98lGezExnhzkPnsQO3">加载中...</option></select></div>
+                        <div class="filter-group" data-page-node-id="JC0pES0NLRAXPZwYpe7nHG"><label data-page-node-id="IjfztcABYamddaLEpZp88h">新密码</label><input type="password" class="input" id="chpwd-newpass" placeholder="输入新密码（至少4位）" autocomplete="new-password" style="width:190px;" data-page-node-id="NpraWPDphK9GuSziA7LgDi"></div>
+                        <button class="btn btn-primary" onclick="chpwdAdminAccount()" data-page-node-id="nW5ArUNh7Tt1MzGMNOysSx">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="gZqo2yULivwwz6RYjmbwaG"><path d="M5 13l4 4 10-10" data-page-node-id="ViYV9ppTcOr7oH0KBxgwpf"/></svg>
                             修改密码
                         </button>
                     </div>
-                    <div class="form-msg" id="admin-msg"></div>
+                    <div class="form-msg" id="admin-msg" data-page-node-id="JVzKZknzUW7aiROVr8jhvW"></div>
                 </div>
             </div>
 
             <!-- ==================== 系统日志 ==================== -->
-            <div id="page-logs" class="page">
-                <div class="card">
-                    <div class="card-head">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/></svg></div>系统日志</div>
+            <div id="page-logs" class="page" data-page-node-id="r7R5JWFl15lR8lqkG7bIOk">
+                <div class="card" data-page-node-id="HqRgAIpY9vzU3E6g0uL9lD">
+                    <div class="card-head" data-page-node-id="mJVk1CJwkkpDRdioIuStjy">
+                        <div class="card-title" data-page-node-id="ML7akueCBKcJlx3NEjOf2v"><div class="title-ico" data-page-node-id="I0Ht0u8VRIrw7RXReQeTwr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="GnuBMHHofP7fCLoYr973mr"><circle cx="4.5" cy="6" r="1.2" data-page-node-id="amMAH3BUxZCQwjxjKyxiaV"/><circle cx="4.5" cy="12" r="1.2" data-page-node-id="m3IcCf6U01P2uDi1FBCflm"/><circle cx="4.5" cy="18" r="1.2" data-page-node-id="gAC50YMufYGR79WLXHEqO5"/><path d="M9 6h11" data-page-node-id="jE9lKUGYDKVJvhFUPh0ndw"/><path d="M9 12h11" data-page-node-id="b66xujed00rH05ar9sftBU"/><path d="M9 18h11" data-page-node-id="4R0m1lLXO1C4ugvhrW95LF"/></svg></div>系统日志</div>
                     </div>
-                    <div class="filters">
-                        <div class="filter-group" style="flex:1;min-width:200px;"><label>关键词搜索</label><input type="text" class="input" id="log-search" placeholder="搜索日志关键词..." oninput="logSearchDebounce()" style="width:100%;"></div>
-                        <div class="filter-group"><label>条数</label><select class="input" id="log-lines" onchange="loadLogs()"><option value="100">最近100条</option><option value="200">最近200条</option><option value="500">最近500条</option><option value="1000">最近1000条</option></select></div>
+                    <div class="filters" data-page-node-id="wkRSNYVBAAfLQtgeBSourO">
+                        <div class="filter-group" style="flex:1;min-width:200px;" data-page-node-id="xD7S60VWr5ExR5PUD9i8AA"><label data-page-node-id="bBoP2VohvZ9QDgjmZXgREE">关键词搜索</label><input type="text" class="input" id="log-search" placeholder="搜索日志关键词..." oninput="logSearchDebounce()" style="width:100%;" data-page-node-id="D0YOPPCRIAZ97VSHbQLqHK"></div>
+                        <div class="filter-group" data-page-node-id="gPGOKg3x74ANjU35F4tOE0"><label data-page-node-id="NFUwM3OhEuOfEkzMA1NABD">条数</label><select class="input" id="log-lines" onchange="loadLogs()" data-page-node-id="Gpa0CwYaMV1Fyb7vd6IZ7U"><option value="100" data-page-node-id="X5O5agVjZCIvVD1OMm2RKr">最近100条</option><option value="200" data-page-node-id="00V5qN7D2l73Mn8fymEx6q">最近200条</option><option value="500" data-page-node-id="w32PzKJuqaBgxmjbA1zSL7">最近500条</option><option value="1000" data-page-node-id="4IZsSlLfGhnRcSr8T5nKCq">最近1000条</option></select></div>
                     </div>
-                    <div class="log-container" id="log-container"><div class="empty-state"><span class="spin"></span>加载中...</div></div>
+                    <div class="log-container" id="log-container" data-page-node-id="jQ0wa9iqyeNFZ4EHXSodCV"><div class="empty-state" data-page-node-id="xGotf4SeJC3C4fNlapvBcR"><span class="spin" data-page-node-id="eUIlWIgOFP8ugTPfUOYnD3"></span>加载中...</div></div>
                 </div>
-                <div class="section-divider"></div>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z"/></svg></div><div class="stat-label">总消息数</div></div>
-                        <div class="stat-value" id="stats-total-msg">0</div>
+                <div class="section-divider" data-page-node-id="QSGx41hAqm6ECHwChiK77G"></div>
+                <div class="stats-grid" data-page-node-id="ZUoGc8Uaki5EPOAWeCJAtB">
+                    <div class="stat-card" data-page-node-id="ffRYKazvEaAH5xZV1SCOso">
+                        <div class="stat-head" data-page-node-id="q2EGetHxCRHCxoUuzJkZYI"><div class="stat-ico" data-page-node-id="1PCegOs2vEGeYkawKK9E99"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="U9Yrpfdd9QIs4EFLPkM0Te"><circle cx="12" cy="12" r="8.5" data-page-node-id="uecyHtiKr9YSatjkQb7P2T"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z" data-page-node-id="WAyL9EwTJw6sVK8XLsDKWS"/></svg></div><div class="stat-label" data-page-node-id="9WUUkv83PfN7DDvqB0Cxm0">总消息数</div></div>
+                        <div class="stat-value" id="stats-total-msg" data-page-node-id="HeiBHLJoWH2OtEuesC3fIt">0</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico tone-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></div><div class="stat-label">上行流量</div></div>
-                        <div class="stat-value" id="stats-bytes-sent">0</div>
+                    <div class="stat-card" data-page-node-id="Qnv5Jxyx4KCdbRlh88fo0U">
+                        <div class="stat-head" data-page-node-id="j6FOvB4IIE03BS7PgKXiVO"><div class="stat-ico tone-purple" data-page-node-id="ixbhDG2cJMYnay2RXrTRHU"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="PcHwFHl17dcBaCerbqa6c0"><path d="M12 16V5" data-page-node-id="Tn4okVlr6M9qooUEqJkGTH"/><path d="M7 9l5-5 5 5" data-page-node-id="raAQAAwHXAVhB4pdDjGIBw"/><path d="M5 20h14" data-page-node-id="YoqjU8pOoktTkc5guLKaMs"/></svg></div><div class="stat-label" data-page-node-id="rLkeWWlnUn5uSFL9pHaRrU">上行流量</div></div>
+                        <div class="stat-value" id="stats-bytes-sent" data-page-node-id="80SB0KOnm6KNkIosGOs86h">0</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-head"><div class="stat-ico tone-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg></div><div class="stat-label">下行流量</div></div>
-                        <div class="stat-value" id="stats-bytes-recvd">0</div>
-                    </div>
-                </div>
-                <div class="card-row">
-                    <div class="card">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 2.5 4.5-5.5"/></svg></div>每日流量趋势</div>
-                        <div class="chart-wrap"><canvas id="log-daily-chart"></canvas></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4"/></svg></div>按PIN统计 Top 10</div>
-                        <div class="chart-wrap"><canvas id="log-pin-chart"></canvas></div>
+                    <div class="stat-card" data-page-node-id="G9NIkPrqBoG3fyCuBVJnTD">
+                        <div class="stat-head" data-page-node-id="yIkwGPL9kR7qDxn85qkuma"><div class="stat-ico tone-green" data-page-node-id="KnvhyVzoGWGTThxDgIC7YE"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="lrwIrFfL9TOBy84677RONk"><path d="M12 4v11" data-page-node-id="UdPyB79E1JFeXjmV4s9nZg"/><path d="M7 11l5 5 5-5" data-page-node-id="hmyU8xABBrYDmGeNH52Ntx"/><path d="M5 20h14" data-page-node-id="fioZ8TCwuhgQIPOk7E3A8m"/></svg></div><div class="stat-label" data-page-node-id="EFg9LEH6hLyusmZpq6Wq3j">下行流量</div></div>
+                        <div class="stat-value" id="stats-bytes-recvd" data-page-node-id="20fGdnnudjO8xAYQ3F6mOz">0</div>
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/></svg></div>每日明细</div>
-                    <table class="data-table"><thead><tr><th>日期</th><th>消息数</th><th>流量</th></tr></thead>
-                    <tbody id="daily-stats"><tr><td colspan="3" class="empty-state">暂无数据</td></tr></tbody></table>
+                <div class="card-row" data-page-node-id="4nMqtrx3t79HPbvvEN3X4L">
+                    <div class="card" data-page-node-id="pdD5wDoOo1rvHiFhwL9Y1l">
+                        <div class="card-title" data-page-node-id="ofq55ApkwJRyRwaISjO8HE"><div class="title-ico" data-page-node-id="dw9pX7jSxBrY9QbW3VGxNc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="6pCH7AJgepeSPy600uPHzC"><path d="M4 4v16h16" data-page-node-id="QqF54gromStKNPciGKiI0i"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="rxqzEg6FloWLmgC1uZoEvT"/></svg></div>每日流量趋势</div>
+                        <div class="chart-wrap" data-page-node-id="p49D2lGjixMuSifFh2PFXo"><canvas id="log-daily-chart" data-page-node-id="Tz8AKeyKpDA652agx57zim"></canvas></div>
+                    </div>
+                    <div class="card" data-page-node-id="s1GO3oCSVe1EH3uHOj4NFF">
+                        <div class="card-title" data-page-node-id="lFSrQiJNbHPF4vU7vL3cVL"><div class="title-ico" data-page-node-id="Opsc7t4kIu66GP4BDZ8NtW"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="rbYetIWnSk9r33yVmQvmIb"><circle cx="9" cy="8" r="3.5" data-page-node-id="B7MzXAkDVnN7bReMZ5ouNY"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5" data-page-node-id="P2XTe86CUhNfhcEqqeyKu8"/><circle cx="16.5" cy="9.5" r="2.5" data-page-node-id="4o6xMSDLFkpdBqHRoXJmRE"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4" data-page-node-id="2qeT5h7fEdssHXzRczP0Ci"/></svg></div>按PIN统计 Top 10</div>
+                        <div class="chart-wrap" data-page-node-id="RyF5nCz7CVj5wzOAFOSI5W"><canvas id="log-pin-chart" data-page-node-id="YirULyt1YyRCgIbqBaPzMC"></canvas></div>
+                    </div>
+                </div>
+                <div class="card" data-page-node-id="30nXqLkuZqDEmXZSVwiyq4">
+                    <div class="card-title" data-page-node-id="EbquChNo2VgAC5fRjtOD34"><div class="title-ico" data-page-node-id="zQYDDFQQDD3x567xQKoLHd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="KdCX7kjlNbXdBIfpprZo9r"><circle cx="4.5" cy="6" r="1.2" data-page-node-id="rHNjALXVaHU8bXfcvkFilx"/><circle cx="4.5" cy="12" r="1.2" data-page-node-id="pucSSdKjBkP18JdDtgsQq2"/><circle cx="4.5" cy="18" r="1.2" data-page-node-id="hS5HshU7WJSrecOM9tDQHA"/><path d="M9 6h11" data-page-node-id="FkDb8oECfrqQoYLxuNhHvE"/><path d="M9 12h11" data-page-node-id="Qlv1CK017nSURXToDjvq31"/><path d="M9 18h11" data-page-node-id="0CBcoAn5uCbGqxxNOHPtK1"/></svg></div>每日明细</div>
+                    <table class="data-table" data-page-node-id="oUwU0hXuqqyxeg2bxzTYrf"><thead data-page-node-id="XE0vT2t6BCxfa3Aqq4MPrQ"><tr data-page-node-id="OJB7xmzZAAuxLbjLBOYL43"><th data-page-node-id="TtkbtxrOxIga3C2BqRunwf">日期</th><th data-page-node-id="f3c4dq722GBvsgIt8dAcY6">消息数</th><th data-page-node-id="WrY7QazxiNwt8vrKDTjYCa">流量</th></tr></thead>
+                    <tbody id="daily-stats" data-page-node-id="92WzrZaOpOiJYyNa86xJlA"><tr data-page-node-id="FyH8tMDYcEpAcXLESeX21T"><td colspan="3" class="empty-state" data-page-node-id="5WZVAH3q6aExcQUeD8RUad">暂无数据</td></tr></tbody></table>
                 </div>
             </div>
 
             <!-- ==================== 设置 ==================== -->
-            <div id="page-settings" class="page">
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><circle cx="9.5" cy="6.5" r="2.2"/><path d="M4 12.5h16"/><circle cx="14.5" cy="12.5" r="2.2"/><path d="M4 18.5h16"/><circle cx="9.5" cy="18.5" r="2.2"/></svg></div>服务器设置</div>
-                    <div class="form-group"><label>服务器端口（只读）</label><input type="text" class="input" id="setting-port" value="读取中..." readonly style="max-width:200px;opacity:.75;cursor:not-allowed;"></div>
-                    <div class="form-group"><label>日志级别（只读）</label><input type="text" class="input" id="setting-log-level" value="由服务器启动参数决定" readonly style="max-width:320px;opacity:.75;cursor:not-allowed;"></div>
-                    <div class="form-msg" style="color:var(--text-2);font-size:12px;line-height:1.8;max-width:580px;">
+            <div id="page-settings" class="page" data-page-node-id="4oxD1c7KmYCNqyd8fYNxBQ">
+                <div class="card" data-page-node-id="9AhmyhrHFil1tBCFQYZ9b9">
+                    <div class="card-title" data-page-node-id="c16PqkBAKwWVafOvcDiv5H"><div class="title-ico" data-page-node-id="7UwS9Bwjo6VdPCnWV2cT1j"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="j1k1af03I4IOtDwHIFjf3N"><path d="M4 6.5h16" data-page-node-id="zMwk6DAT3G3MEPZjMWS92N"/><circle cx="9.5" cy="6.5" r="2.2" data-page-node-id="lcLDppHwWx6HcMOj38XoRk"/><path d="M4 12.5h16" data-page-node-id="sd3zZKrW5OmD6BoPxCEcnx"/><circle cx="14.5" cy="12.5" r="2.2" data-page-node-id="dTX2mDwuMpJWCE9g2s4REv"/><path d="M4 18.5h16" data-page-node-id="ooDmHf4yBJWWCGq2ByX6i0"/><circle cx="9.5" cy="18.5" r="2.2" data-page-node-id="XG07cCPyBEBbPSqZvC8may"/></svg></div>服务器设置</div>
+                    <div class="form-group" data-page-node-id="SbYoiOiQB2Z7c1aaHkdXjY"><label data-page-node-id="NfGGm44zGTZwKnscbUQJFH">服务器端口（只读）</label><input type="text" class="input" id="setting-port" value="读取中..." readonly style="max-width:200px;opacity:.75;cursor:not-allowed;" data-page-node-id="idaKoFa6WdsUWmepoTEG8Q"></div>
+                    <div class="form-group" data-page-node-id="Fbk3mpwVOdXCtcrhzsqlvm"><label data-page-node-id="BwVecJca9yhsBDy11k912y">日志级别（只读）</label><input type="text" class="input" id="setting-log-level" value="由服务器启动参数决定" readonly style="max-width:320px;opacity:.75;cursor:not-allowed;" data-page-node-id="F4PG76KQavOX3xgZP8rixw"></div>
+                    <div class="form-msg" style="color:var(--text-2);font-size:12px;line-height:1.8;max-width:580px;" data-page-node-id="wlBR7J2j8sg6FuWxpy1EIW">
                         端口与日志级别需在服务器端修改（Supervisor 启动参数 / 代码配置）后重启服务生效。面板不提供在线修改，以免显示值与进程实际状态不一致。
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-title"><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg></div>系统信息</div>
-                    <dl class="info-list">
-                        <div class="info-row"><dt>服务版本</dt><dd><strong id="svc-version">-</strong></dd></div>
-                        <div class="info-row"><dt>API 端点</dt><dd><code id="api-url">-</code></dd></div>
-                        <div class="info-row"><dt>数据库</dt><dd><code>visits.db (SQLite)</code></dd></div>
-                        <div class="info-row"><dt>WebSocket</dt><dd>同端口 ping_interval=30s ping_timeout=90s</dd></div>
+                <div class="card" data-page-node-id="kPXwZGX9HzPGDbwA9Y29z9">
+                    <div class="card-title" data-page-node-id="fUU8k36ffjJdbU0487dqYC"><div class="title-ico" data-page-node-id="Jv47hZo5uDSyEWHhqh9ZSe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="C4RqVKf7ArtxMRt80DS70g"><circle cx="12" cy="12" r="8.5" data-page-node-id="Ft7Sk1QmpivVxSdCUuETCa"/><path d="M12 11v5" data-page-node-id="jl5M9yCNEOVhrRigKUnQPR"/><path d="M12 7.5h.01" data-page-node-id="QUrfESzVjCfYuubTZe2eqH"/></svg></div>系统信息</div>
+                    <dl class="info-list" data-page-node-id="rwoisXwlfS5o4aNG2SXDgC">
+                        <div class="info-row" data-page-node-id="prcZ2oNaSIZEgvVRab77w1"><dt data-page-node-id="zfylD3ylWDeeAVAfycbRWL">服务版本</dt><dd data-page-node-id="lAnSAaUjF1RRlYwqAgDZYf"><strong id="svc-version" data-page-node-id="taD65v7UJXDc47UNxOqhnP">-</strong></dd></div>
+                        <div class="info-row" data-page-node-id="IPR1EBF6mGogqPbmc5jVCB"><dt data-page-node-id="I0FkliyConyluYf9uuFGpO">API 端点</dt><dd data-page-node-id="4HXUTBlMfR6V50f29gRsvz"><code id="api-url" data-page-node-id="wJ5gjXFOHZXii6v0bYrQNm">-</code></dd></div>
+                        <div class="info-row" data-page-node-id="lU0YHZ3KkghOOSasmcluDf"><dt data-page-node-id="5UizrARC7Ec7fW2uBLx7nY">数据库</dt><dd data-page-node-id="OE7oCS8cpFhaNeVc4wLYqw"><code data-page-node-id="eKaEWeyrXec2cgCTlxwCgQ">visits.db (SQLite)</code></dd></div>
+                        <div class="info-row" data-page-node-id="GTKKOftzEMQbI6POwPT7ON"><dt data-page-node-id="JKMhNmFAVGaxfsRlnvNfvg">WebSocket</dt><dd data-page-node-id="DsDAVyjpCj0o2mmkzjVJWI">同端口 ping_interval=30s ping_timeout=90s</dd></div>
                     </dl>
                 </div>
             </div>
@@ -960,85 +968,85 @@
     </div>
 
     <!-- ==================== 通用确认弹窗（替换原生 confirm，可回显对象名） ==================== -->
-    <div class="modal-overlay z-top" id="confirm-modal">
-        <div class="modal" style="max-width:400px;">
-            <h3><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 16.5v.5"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div><span id="confirm-title">确认操作</span></h3>
-            <div id="confirm-message" style="font-size:13.5px;line-height:1.7;color:var(--text);white-space:pre-line;"></div>
-            <div class="form-actions">
-                <button class="btn btn-outline" id="confirm-cancel">取消</button>
-                <button class="btn btn-danger" id="confirm-ok">确定</button>
+    <div class="modal-overlay z-top" id="confirm-modal" data-page-node-id="hyeon9jqF1odHeDsqCsF1K">
+        <div class="modal" style="max-width:400px;" data-page-node-id="2u7P1qV7BCm54IAds6VYND">
+            <h3 data-page-node-id="vLGhU1JN796AR3eRaH1CGI"><div class="title-ico" data-page-node-id="uiFvID44GDCB7JeJdeUggb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="l8X9lTkF6lgBWKpUrOld9t"><path d="M12 9v4" data-page-node-id="sdltSVbUK3R6SFJeevlTCH"/><path d="M12 16.5v.5" data-page-node-id="qhKJJ14uBP8Xz1yamPZMFk"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" data-page-node-id="uQoby3aB2gP0HoJ6vqfoUn"/></svg></div><span id="confirm-title" data-page-node-id="fOyZ2WC14HMz59QQJBJEMA">确认操作</span></h3>
+            <div id="confirm-message" style="font-size:13.5px;line-height:1.7;color:var(--text);white-space:pre-line;" data-page-node-id="ZNsFglrVIjW5qan3PyDJii"></div>
+            <div class="form-actions" data-page-node-id="M7BAOeLlEll6Xcs5NUn98c">
+                <button class="btn btn-outline" id="confirm-cancel" data-page-node-id="7hxkqAD9tVQUPwAEGJvvnX">取消</button>
+                <button class="btn btn-danger" id="confirm-ok" data-page-node-id="Vbk80cNJAZETABbEOE75vX">确定</button>
             </div>
         </div>
     </div>
 
     <!-- ==================== 编辑上门记录弹窗 ==================== -->
-    <div class="modal-overlay" id="visit-edit-modal">
-        <div class="modal">
-            <h3><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.2-4.2L16.5 4.5a2.1 2.1 0 013 3L8.2 18.8 4 20z"/><path d="M14.5 6.5l3 3"/></svg></div>编辑上门记录</h3>
-            <input type="hidden" id="visit-edit-id">
-            <div class="form-group"><label>客户姓名</label><input type="text" class="input" id="visit-edit-name"></div>
-            <div class="form-group"><label>客户手机号</label><input type="text" class="input" id="visit-edit-mobile"></div>
-            <div class="form-group"><label>接待顾问</label><input type="text" class="input" id="visit-edit-kefu_tel"></div>
-            <div class="form-group"><label>事由</label><input type="text" class="input" id="visit-edit-type"></div>
-            <div class="form-actions"><button class="btn btn-outline" onclick="closeEditModal()">取消</button><button class="btn btn-primary" onclick="saveVisitEdit()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
+    <div class="modal-overlay" id="visit-edit-modal" data-page-node-id="hJtDK44O0r81CfYGM6wA5c">
+        <div class="modal" data-page-node-id="ED3aNEGRDLacAkcYsl38l0">
+            <h3 data-page-node-id="IqdDDBelbEq9663VFZI5g7"><div class="title-ico" data-page-node-id="szEkIVfmRXSzDnEtgnT91F"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Mwkil8EgM3XFQpDkwrfAhy"><path d="M4 20l1.2-4.2L16.5 4.5a2.1 2.1 0 013 3L8.2 18.8 4 20z" data-page-node-id="SHRZUqyIuFwF9LvmfVC8Nj"/><path d="M14.5 6.5l3 3" data-page-node-id="ZIt7iJn30k6r99yBYr2Cit"/></svg></div>编辑上门记录</h3>
+            <input type="hidden" id="visit-edit-id" data-page-node-id="kfvEDNMMOAqyJOV4AXLywS">
+            <div class="form-group" data-page-node-id="oTkZqTViHaosyabwIWaxul"><label data-page-node-id="Nzwx7QFjFu8zxB3RFboHle">客户姓名</label><input type="text" class="input" id="visit-edit-name" data-page-node-id="RygGHIfEzqA3F7fABDUHmC"></div>
+            <div class="form-group" data-page-node-id="lQeOIKKPfUeVsmOKtUHYsw"><label data-page-node-id="MUDF09l7ZsL1lefu0et6no">客户手机号</label><input type="text" class="input" id="visit-edit-mobile" data-page-node-id="FuNTF4jQWNl03y959NsDzX"></div>
+            <div class="form-group" data-page-node-id="J2gDI7RJHfOsFfEt5EplSw"><label data-page-node-id="Khv7gd7zF4eSRtp7lXY3YW">接待顾问</label><input type="text" class="input" id="visit-edit-kefu_tel" data-page-node-id="SZ4KraqB4yIyLmvoriMvI6"></div>
+            <div class="form-group" data-page-node-id="q6Cs0uQ1dcDqheJ5zT7EXO"><label data-page-node-id="cG08NxRLWKTaFfVek2ZH32">事由</label><input type="text" class="input" id="visit-edit-type" data-page-node-id="fOxWpa2VufQzYTrOQ7SSfD"></div>
+            <div class="form-actions" data-page-node-id="anj7aDI1cgFWjzEPObhy7o"><button class="btn btn-outline" onclick="closeEditModal()" data-page-node-id="rLy17h8ci8ivV6utVROHy2">取消</button><button class="btn btn-primary" onclick="saveVisitEdit()" data-page-node-id="j9wrIpvcU8CqThzDvlHzxI">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="RAn9pnAiRCynKhC5DHiXRe"><path d="M5 13l4 4 10-10" data-page-node-id="knItOYCBa0WhO5ewt1rKSn"/></svg>
                 保存</button></div>
         </div>
     </div>
 
     <!-- ==================== 批量导入弹窗 ==================== -->
-    <div class="modal-overlay z-top" id="import-modal">
-        <div class="modal modal-lg">
-            <h3><div class="title-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/></svg></div>批量导入 CRM 上门记录</h3>
-            <div class="form-group">
-                <label>粘贴 CRM 导出数据（支持 Tab / 逗号 / 竖线分隔，第一行为表头）</label>
+    <div class="modal-overlay z-top" id="import-modal" data-page-node-id="rFQaFeZIFmwoutdxjvg03n">
+        <div class="modal modal-lg" data-page-node-id="eyeGaXhefskFPYgSyDsGVR">
+            <h3 data-page-node-id="L90diybBUDVpAH7ivY7pCx"><div class="title-ico" data-page-node-id="LjxNMQkL8RBvX9lRpG0AdG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="aIeO0SSqqqFpKdrAYS6t38"><path d="M12 16V5" data-page-node-id="WKumX0fhKux1aqPva6NTqQ"/><path d="M7 9l5-5 5 5" data-page-node-id="P1XG7ChbdVhs1d4uWFGg4D"/><path d="M5 20h14" data-page-node-id="bxTNtJE90Z6Uhh0NwwiKG6"/></svg></div>批量导入 CRM 上门记录</h3>
+            <div class="form-group" data-page-node-id="v4F4Eu8AXjlRzH1WuxLE6e">
+                <label data-page-node-id="y9zzqmNc5vXsbZhkWlPgQA">粘贴 CRM 导出数据（支持 Tab / 逗号 / 竖线分隔，第一行为表头）</label>
                 <textarea class="input" id="import-raw" rows="8" placeholder="ID	姓名	客户手机号	顾问电话	上门时间	来访事由	城市	一级部门	二级部门
 1001	张三	13800138000	李顾问	2024-01-15	贷款咨询	深圳	销售部	一组
 1002	李四	13900139000	王顾问	2024-01-16	理财咨询	广州	理财部	二组"></textarea>
             </div>
-            <div class="tool-row" style="margin-bottom:10px;">
-                <button class="btn btn-primary btn-sm" onclick="parseImportData()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.5-4.5"/></svg>
+            <div class="tool-row" style="margin-bottom:10px;" data-page-node-id="vbN240CaWZUd9piOTfFTw6">
+                <button class="btn btn-primary btn-sm" onclick="parseImportData()" data-page-node-id="AFqDKNihFjVFnrxpESnnbz">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="dSunIoVLKr7YdHQiwRJ8t9"><circle cx="11" cy="11" r="6.5" data-page-node-id="CxprhA2MaHO7CjjpIC7sWV"/><path d="M20 20l-4.5-4.5" data-page-node-id="lecX7FQLBYnHtIvCqAxd0k"/></svg>
                     解析预览
                 </button>
-                <span class="text-muted" id="import-parse-msg"></span>
+                <span class="text-muted" id="import-parse-msg" data-page-node-id="DocJ650xDsDC5uFa1xJZDZ"></span>
             </div>
-            <div class="import-preview" id="import-preview-area">
-                <div class="empty-state" style="padding:24px;">请粘贴数据并点击「解析预览」</div>
+            <div class="import-preview" id="import-preview-area" data-page-node-id="7JLl4odZdVdGAthtLZjUPm">
+                <div class="empty-state" style="padding:24px;" data-page-node-id="xRtQ7T2FJ0HIipE1DSXOHY">请粘贴数据并点击「解析预览」</div>
             </div>
-            <div class="import-hint">提示：每批最多 200 条，超出自动分批上传。点击单元格可编辑。取消勾选的行不会导入。标红=必填字段缺失。</div>
-            <div class="form-actions">
-                <button class="btn btn-outline" onclick="closeImportModal()">取消</button>
-                <button class="btn btn-success" id="import-submit-btn" onclick="submitImport()" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4 10-10"/></svg>
-                    确认导入 (<span id="import-count-label">0</span> 条)
+            <div class="import-hint" data-page-node-id="mQ2OMectw3WrSMprtDom4Z">提示：每批最多 200 条，超出自动分批上传。点击单元格可编辑。取消勾选的行不会导入。标红=必填字段缺失。</div>
+            <div class="form-actions" data-page-node-id="prEG8EfpEAqpgW4lRB7FiE">
+                <button class="btn btn-outline" onclick="closeImportModal()" data-page-node-id="gOGiOrwQCHBR0DY2sGh5mD">取消</button>
+                <button class="btn btn-success" id="import-submit-btn" onclick="submitImport()" disabled data-page-node-id="I89uZcAHa5hyLv8zrf85nt">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="VtMBIT0FVDSeC3CZ3slTur"><path d="M5 13l4 4 10-10" data-page-node-id="wf7Ed7YXJ5N8a7vJPBT5pt"/></svg>
+                    确认导入 (<span id="import-count-label" data-page-node-id="diolgt3mzHajfIcxyQ7hAJ">0</span> 条)
                 </button>
             </div>
-            <div class="form-msg" id="import-result"></div>
+            <div class="form-msg" id="import-result" data-page-node-id="ydAqqICnQlk57AWlfjnobE"></div>
         </div>
     </div>
 
     <!-- ==================== 管理员登录弹窗 ==================== -->
-    <div class="login-overlay" id="login-overlay">
-        <div class="login-box">
-            <div class="login-brand">
-                <div class="logo-tile">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z"/></svg>
+    <div class="login-overlay" id="login-overlay" data-page-node-id="BbrcwQZ1musvRYs0P5S7vx">
+        <div class="login-box" data-page-node-id="MaSqrFMN5yPW73NTJrGGV0">
+            <div class="login-brand" data-page-node-id="VuLHfRUEJYv2Um7oiztzJz">
+                <div class="logo-tile" data-page-node-id="HyaBEcunZdjXhQ3GIBHIHf">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="N4hGMQpx1e4DDw5Rix2eOw"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="ABCeLxyl019kCssxiDFTc5"/></svg>
                 </div>
-                <strong>AutoDial 云中转</strong>
+                <strong data-page-node-id="gOyNY15Ia16yFpi3LQH6pW">AutoDial 云中转</strong>
             </div>
-            <div class="sub">请输入管理员账号和密码</div>
-            <label>账号</label>
-            <input type="text" class="input" id="login-user" placeholder="请输入账号" oninput="loginErr('')">
-            <label>密码</label>
-            <input type="password" class="input" id="login-pass" placeholder="请输入密码" oninput="loginErr('')" onkeydown="if(event.key==='Enter')submitLogin()">
-            <button class="btn btn-primary" onclick="submitLogin()">登 录</button>
-            <div class="err" id="login-err"></div>
-            <div id="login-store-hint" style="display:none;margin-top:10px;padding:9px 11px;font-size:12px;line-height:1.65;border-radius:8px;background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.30);color:#b45309;">此浏览器环境禁止本地存储（内嵌预览 / 隐私模式），登录后<b>刷新页面需重新登录</b>。建议改用独立浏览器窗口打开。</div>
+            <div class="sub" data-page-node-id="jFz1CXU5ZV7kmsEBkudupl">请输入管理员账号和密码</div>
+            <label data-page-node-id="97vQtObaeC4acbPUNY3P9d">账号</label>
+            <input type="text" class="input" id="login-user" placeholder="请输入账号" oninput="loginErr('')" data-page-node-id="tJ4ilvjwyw88FtYjtBiGPc">
+            <label data-page-node-id="PL6v0zFtOxAAuhHjmwJqLi">密码</label>
+            <input type="password" class="input" id="login-pass" placeholder="请输入密码" oninput="loginErr('')" onkeydown="if(event.key==='Enter')submitLogin()" data-page-node-id="SgB9dn2BD42WsIy4WFSV9e">
+            <button class="btn btn-primary" onclick="submitLogin()" data-page-node-id="d7zn7FiCRqKYPfQfASPdsW">登 录</button>
+            <div class="err" id="login-err" data-page-node-id="ne87416SdpqC6mOuWBGvZE"></div>
+            <div id="login-store-hint" style="display:none;margin-top:10px;padding:9px 11px;font-size:12px;line-height:1.65;border-radius:8px;background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.30);color:#b45309;" data-page-node-id="Rg12RDHWEnODh81WZQ1hwJ">此浏览器环境禁止本地存储（内嵌预览 / 隐私模式），登录后<b data-page-node-id="3HsC35oisSMcqj1GTtl95Y">刷新页面需重新登录</b>。建议改用独立浏览器窗口打开。</div>
         </div>
     </div>
 
-    <div id="toast-container"></div>
+    <div id="toast-container" data-page-node-id="qM5VBMOH2hLyS5JJQrAYok"></div>
 
     <script>
         const API_BASE = '';
@@ -1396,10 +1404,20 @@
             const icn = type === 'success' ? 'check' : type === 'error' ? 'warning' : 'info';
             t.innerHTML = ic(icn, 16) + '<span>' + esc(msg) + '</span><span class="toast-close" onclick="this.parentNode.remove()">' + ic('x', 14) + '</span>';
             document.getElementById('toast-container').appendChild(t);
-            setTimeout(function() {
-                t.classList.add('hide');
-                setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 220);
-            }, 3200);
+            // v4.27: 原样固定 3.2 秒 —— 错误类提示常带服务端 message（较长），来不及读完。
+            // 错误给 6 秒、其余 3.2 秒；鼠标悬停（=正在读）暂停消失，移开后 1.5 秒收尾。
+            const isErr = (type === 'error');
+            let timer = null;
+            function dismiss(delay) {
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    t.classList.add('hide');
+                    timer = setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 220);
+                }, delay);
+            }
+            t.addEventListener('mouseenter', function() { clearTimeout(timer); });
+            t.addEventListener('mouseleave', function() { dismiss(1500); });
+            dismiss(isErr ? 6000 : 3200);
         }
 
         // ==================== 通用确认弹窗（v4.21.2: 替代原生 confirm，回显对象名） ====================
@@ -1464,6 +1482,28 @@
         // ==================== Navigation ====================
         // v4.21.2 (13): hash 路由——F5/收藏/分享保留当前页（#/visits 等），
         // 原先无路由 F5 必回首页，高频页每次都要重新导航。
+        const PAGE_IDS = ['dashboard', 'phones', 'calls', 'visits', 'pins', 'admin-accounts', 'logs', 'settings'];
+
+        // v4.27: 页面数据分派抽成函数 —— showPage 与「会话过期后重新登录恢复现场」共用，
+        // 避免同一条 if-else 链在两处各写一份、以后加页面时只改一处。
+        function loadPageData(id) {
+            if (id === 'dashboard') loadDashboard();
+            else if (id === 'phones') loadPhones();
+            else if (id === 'calls') { loadCallDeviceOptions(); loadCalls(); }
+            else if (id === 'visits') { loadVisits(); if (!_timerRefresh) loadPinDropdown(); setTimeout(renderVisitChart, 300); }
+            else if (id === 'pins') loadPins();
+            else if (id === 'admin-accounts') loadAdminAccounts();
+            else if (id === 'logs') { loadLogs(); loadLogStats(); }
+            else if (id === 'settings') refreshSettingsInfo();
+        }
+
+        // v4.27: 按当前 hash 刷新当前页数据。供「面板内重新登录」用 —— 不整页重载就能恢复数据，
+        // 当前页与筛选条件都留着（原来靠 location.reload()，页码/筛选全丢）。
+        function reloadActivePage() {
+            const h = (location.hash || '').replace(/^#\/?/, '');
+            loadPageData(PAGE_IDS.indexOf(h) >= 0 ? h : 'dashboard');
+        }
+
         function showPage(id) {
             document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
             document.querySelectorAll('.side-item').forEach(function(b) { b.classList.remove('active'); });
@@ -1491,14 +1531,8 @@
             clearTimeout(callSearchTimer); callSearchTimer = null;
             clearTimeout(logSearchTimer); logSearchTimer = null;
 
-            if (id === 'dashboard') loadDashboard();
-            else if (id === 'phones') loadPhones();
-            else if (id === 'calls') { loadCallDeviceOptions(); loadCalls(); }
-            else if (id === 'visits') { loadVisits(); if (!_timerRefresh) loadPinDropdown(); setTimeout(renderVisitChart, 300); }
-            else if (id === 'pins') loadPins();
-            else if (id === 'admin-accounts') loadAdminAccounts();
-            else if (id === 'logs') { loadLogs(); loadLogStats(); }
-            else if (id === 'settings') refreshSettingsInfo();
+            // v4.27: 分派逻辑抽到 loadPageData()（见上方），此处只调用，避免同一条链两处维护
+            loadPageData(id);
             document.getElementById('api-url').textContent = VISIT_API_BASE;
             closeSidebarMobile();
         }
@@ -1526,6 +1560,72 @@
             el.style.display = msg ? 'block' : 'none';
         }
 
+        // ==================== 运行环境自检（v4.28） ====================
+        // 面板是同源相对路径设计（`API_BASE=''`、`VISIT_API_BASE = location.origin`），
+        // 所以「这个页面是谁提供的」直接决定所有接口能不能通。实测会被误判的情形：
+        //   ① 把 dashboard.html 当普通文件预览（拖进浏览器 / 编辑器的文件预览面板）
+        //      ⇒ 页面被静态托管在另一个 origin，POST /api/v1/login 落到那个静态服务器，
+        //        回 403/404 且 body 不是 JSON ⇒ `await r.json()` 抛 SyntaxError
+        //        ⇒ 落进 catch 被归成「网络错误，请确认中继服务正在运行」——
+        //        而中继其实好好跑着，**用户被指去查一个没坏的东西**。
+        //   ② 页面被别的服务器反代 / 镜像，接口全打在那边。
+        // 对策：启动时自检 `/health`（该接口无需登录），认不出中继签名就把真实原因说清楚。
+        let _envOk = null;      // null=还没验完 · true=确实由中继服务提供 · false=不是
+        let _envWhy = '';       // 验不过的细分：nojson/other=页面不是中继提供 · unreachable=连不上
+        let _envNote = '';      // 面向用户的具体说明（含该改用哪个地址打开）
+
+        // 该建议用户改用哪个地址：优先用上次成功连上的中继源，否则退回本机默认端口
+        function relayUrlHint() {
+            const last = AD_STORE.get('__ad_relay_origin');
+            if (last && last !== location.origin) return last;
+            return location.protocol + '//' + location.hostname + ':35430';
+        }
+
+        async function checkEnv() {
+            _envWhy = '';
+            try {
+                const r = await fetch('/health', { cache: 'no-store' });
+                let d = null;
+                try { d = await r.json(); } catch (e2) { d = null; }
+                if (d && d.service === 'AutoDial Cloud Relay') {
+                    _envOk = true;
+                } else {
+                    // 有响应，但不是中继的签名（要么不是 JSON，要么是别的服务）⇒ 页面不是中继提供的
+                    _envOk = false;
+                    _envWhy = d === null ? 'nojson' : 'other';
+                }
+            } catch (e) {
+                // 压根没连上 —— 这是真的「服务没起」，不能和上面那种混为一谈
+                _envOk = false;
+                _envWhy = 'unreachable';
+            }
+            if (_envOk) {
+                AD_STORE.set('__ad_relay_origin', location.origin);
+                _envNote = '';
+            } else if (_envWhy === 'unreachable') {
+                _envNote = '连不上中继服务（' + location.origin + '）。请确认服务已启动，' +
+                    '或改用 ' + relayUrlHint() + ' 打开。';
+            } else {
+                _envNote = '当前页面不是由中继服务提供的（地址 ' + location.origin +
+                    '），接口都打不到中继上。请改用 ' + relayUrlHint() + ' 打开。';
+            }
+            if (!_envOk) console.warn('[AutoDial] 环境自检未通过（' + _envWhy + '）：' + _envNote);
+            return _envOk;
+        }
+
+        // 登录失败时按「真实原因」分别给话（原来一律说成网络问题）
+        function envErrHint(e) {
+            if (e && e.name === 'SecurityError')
+                return '浏览器禁用了本地存储，请换独立窗口打开（勿用内嵌预览）';
+            // 自检已经有结论（如页面被静态托管）就直接用它 —— 比再叠一套措辞更短也更准
+            if (_envOk === false) return _envNote;
+            // 自检没跑/已通过，但响应解析不成 JSON ⇒ 大概率也不是中继给的响应
+            if (e && e.name === 'SyntaxError')
+                return '后端返回的不是中继服务的响应，当前页面可能不是由中继服务提供的（地址 ' +
+                    location.origin + '）。请改用 ' + relayUrlHint() + ' 打开。';
+            return '网络错误，请确认中继服务正在运行';
+        }
+
         async function doLogin(user, pass) {
             loginErr('');
             try {
@@ -1538,17 +1638,33 @@
                 const d = await r.json();
                 if (d.ok) {
                     setSessionToken(d.token);
+                    // v4.27: 分两种情形 ——
+                    // ① 门禁态（打开页面时本就没登录）：整页重载，走完整初始化；
+                    // ② 面板内会话过期后重新登录：就地恢复当前页数据、**不重载**，
+                    //    页码/筛选/搜索词都留着（原来一律 reload，回的是同一个 hash 页但筛选全丢）。
                     // v4.25: 存储不可用时 reload 会把内存里的 token 丢掉、又被弹回登录框，
-                    // 所以降级路径改为就地进入面板（刷新页面后需重新登录）。
-                    if (AD_STORE.persistent()) location.reload();
-                    else { enterPanel(); toast('当前环境禁止本地存储，已直接进入（刷新后需重新登录）', 'info'); }
+                    // 所以降级路径一律就地进入面板（刷新页面后需重新登录）。
+                    if (AD_STORE.persistent() && document.body.classList.contains('locked')) location.reload();
+                    else {
+                        enterPanel();
+                        if (!AD_STORE.persistent()) toast('当前环境禁止本地存储，已直接进入（刷新后需重新登录）', 'info');
+                    }
                 }
                 else loginErr('登录失败：' + (d.message || '账号或密码错误'));
             } catch(e) {
-                loginErr('登录失败：' + (e && e.name === 'SecurityError'
-                    ? '浏览器禁用了本地存储，请换独立窗口打开（勿用内嵌预览）'
-                    : '网络错误，请确认中继服务正在运行'));
+                // v4.28: 按真实原因分别给话 —— 原来一律说成「网络错误，请确认中继服务正在运行」，
+                // 在「页面被静态托管」这类情形下会把用户指去查一个没坏的服务。
+                loginErr('登录失败：' + envErrHint(e));
             }
+        }
+
+        // v4.27: 顶栏「管理员登录 / 退出登录」按钮跟随登录态。
+        // 原来只在页面加载时切换一次 ⇒ 运行中途 401（典型场景：云端服务重启，内存会话丢失）
+        // 只清 token + 弹横幅「请重新登录」，顶栏却仍显示「退出登录」，用户看到提示却找不到入口。
+        function applyAuthUI() {
+            const lb = document.getElementById('login-btn'), ob = document.getElementById('logout-btn');
+            if (lb) lb.style.display = isLoggedIn() ? 'none' : '';
+            if (ob) ob.style.display = isLoggedIn() ? '' : 'none';
         }
 
         // v4.25: 不重载页面、就地进入面板 —— 供「localStorage 不可用」的降级路径使用
@@ -1556,10 +1672,8 @@
             document.body.classList.remove('locked');
             const ov = document.getElementById('login-overlay');
             if (ov) { ov.classList.remove('show'); ov.dataset.locked = ''; }
-            const lb = document.getElementById('login-btn'), ob = document.getElementById('logout-btn');
-            if (lb) lb.style.display = 'none';
-            if (ob) ob.style.display = '';
-            try { loadDashboard(); } catch (e) { console.warn('[AutoDial] 登录后加载首页失败:', e); }
+            applyAuthUI();
+            try { reloadActivePage(); } catch (e) { console.warn('[AutoDial] 登录后加载当前页失败:', e); }
         }
 
         function doLogout() {
@@ -1692,8 +1806,9 @@
                 const r = await fetch(API_BASE + url, { headers: hdrs });
                 if (r.status === 401) {
                     clearSessionToken();
+                    applyAuthUI();   // v4.27: 立刻把顶栏换成「管理员登录」，否则用户看到提示却无处可点
                     // v4.21.2 (13): 未登录/锁定态下不喊"登录已过期"，用中性文案
-                    setApiBanner(isLoggedIn() ? '登录已过期，请重新登录后再查看数据（当前列表内容可能不是最新的）。' : '请先登录后再查看数据。', true);
+                    setApiBanner(isLoggedIn() ? '登录已过期，请点右上角「管理员登录」重新登录（当前列表内容可能不是最新的）。' : '请先登录后再查看数据。', true);
                     return null;
                 }
                 if (r.status === 429) {
@@ -1806,18 +1921,41 @@
             return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
         }
 
-        // 设备别名映射：全站统一显示「别名」，不再显示认不出的 32 位设备ID
+        // 设备别名映射：全站统一显示「别名」，没设别名就显示「设备号」。
+        // v4.30: 删掉原来的 d.current_name 回退 —— 那是「此刻谁在登录这台手机」，
+        // 与通话页「顾问」列（这台手机的主人）语义相反：下午借同事的 PIN 打时，
+        // 同一行会冒出两个不同的人名，纯误导。设备列只讲设备，不讲人。
         function deviceLabelOf(idOrName) {
             if (!idOrName) return '';
             for (let i = 0; i < _deviceList.length; i++) {
                 const d = _deviceList[i];
                 if (d.device_id === idOrName || d.device_name === idOrName) {
-                    if (d.label) return d.label;
-                    if (d.current_name) return d.current_name;
-                    break;
+                    if (d.label) return d.label;                                      // ① 别名（你自己起的名字）
+                    return deviceShortOf(d.device_id || idOrName, d.device_model);    // ② 「型号 · 尾4」
                 }
             }
-            return idOrName.length > 14 ? idOrName.slice(0, 12) + '…' : idOrName;
+            // ③ 手机设备表里查不到（PC 端连接、已删除的历史设备）→ 原样显示，只在过长时截断
+            return idOrName.length > 18 ? idOrName.slice(0, 16) + '…' : idOrName;
+        }
+
+        // v4.31: 无别名时的设备显示名 —— 「型号 · 设备号尾4」。
+        //   旧行为是裸 16 位设备号：既读不出是哪台（UUID 认不出），开多台时也分不清。
+        //   尾 4 位足以区分同型号的多台手机；ID 不像随机串时（含空格/过短，多为旧机型名数据）退化为原值。
+        function deviceShortOf(id, model) {
+            const s = String(id || '');
+            const m = String(model || '').trim();
+            const looksLikeId = s.length >= 8 && s.indexOf(' ') < 0;
+            let tail = '';
+            if (looksLikeId) {
+                // 取末尾「连续字母数字」最多 4 位：直接 slice(-4) 会把连字符带进来，
+                // 如 e2e-device-001 → 「-001」（读着像负数）、UUID …-90ab → 「90ab」。
+                const mt = s.match(/([A-Za-z0-9]+)$/);
+                const raw = mt ? mt[1] : s;
+                tail = raw.length > 4 ? raw.slice(-4) : raw;
+            }
+            if (m && tail) return m + ' · ' + tail;
+            if (m) return m;
+            return tail ? '设备 · ' + tail : (s.length > 18 ? s.slice(0, 16) + '…' : s);
         }
 
         function renderConnBar(clients) {
@@ -2277,9 +2415,12 @@
             const date_from = document.getElementById('call-date-from')?.value || '';
             const date_to = document.getElementById('call-date-to')?.value || '';
             const number = document.getElementById('call-number')?.value || '';
+            // v4.29: 按「顾问（手机主人）」筛选
+            const ownerPin = document.getElementById('call-pin-filter')?.value || '';
             _syncChips('cqd-', 'call-date-from', 'call-date-to');
             let url = '/api/v1/calls?limit=50&offset=' + callsOffset;
             if (device_id) url += '&device_id=' + encodeURIComponent(device_id);
+            if (ownerPin) url += '&pin=' + encodeURIComponent(ownerPin);
             if (date_from) url += '&date_from=' + date_from;
             if (date_to) url += '&date_to=' + date_to;
             if (number) url += '&number=' + encodeURIComponent(number);
@@ -2289,22 +2430,29 @@
             document.getElementById('calls-total').textContent = d?.total || 0;
             const tbody = document.getElementById('calls-list');
             if (!d || !d.calls || d.calls.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无通话记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无通话记录</td></tr>';
                 document.getElementById('calls-pagination').innerHTML = '';
                 return;
             }
             tbody.innerHTML = d.calls.map(function(c) {
                 const dt = c.dial_time ? new Date(c.dial_time).toLocaleString('zh-CN') : '-';
+                // v4.29: 归属 = 这台手机的主人（后端按 default_pin 解析并带出姓名），
+                // 姓名查不到时退回显示 PIN；两者都空（纯上报设备）显示占位符。
+                const ownerTxt = c.advisor_name || c.pin || '';
+                // v4.31: 未接来电时长也是 0，与「真的只通了 0 秒」同形分不开 —— 未接一律显示「—」。
+                const isMissed = c.call_type === 3;
+                // v4.31: 机型信息（型号 + 版本）不再单独占列 —— 设备列无别名时本身就显示「型号 · 尾4」，
+                // 再单列一个「机型」会与设备列写同一个型号（视觉重复）；有别名时收进设备列 tooltip。
+                const devTip = ['设备：' + (c.device_id || ''), c.device_model, c.app_version].filter(Boolean).join(' · ');
                 return '<tr>' +
-                    '<td title="' + esc(c.device_id||'') + '" class="td-ellipsis" style="max-width:140px;"><strong>' + esc(deviceLabelOf(c.device_id)) + '</strong></td>' +
+                    '<td title="' + escA(devTip) + '" class="td-ellipsis" style="max-width:140px;"><strong>' + esc(deviceLabelOf(c.device_id)) + '</strong></td>' +
+                    '<td style="font-weight:600;color:var(--primary);">' + (ownerTxt ? esc(ownerTxt) : '<span class="td-muted">—</span>') + '</td>' +
                     '<td><strong>' + esc(c.number||'') + '</strong>' +
                         '<button class="icon-btn-inline" title="复制号码" onclick="copyText(\'' + escA(c.number||'') + '\')">' + ic('copy', 13) + '</button></td>' +
                     '<td>' + dt + '</td>' +
-                    '<td>' + (c.duration || 0) + '</td>' +
+                    '<td class="td-num' + (isMissed ? ' td-muted' : '') + '">' + (isMissed ? '—' : (c.duration || 0)) + '</td>' +
                     '<td>' + (CALL_TYPES[c.call_type] || '未知') + '</td>' +
                     '<td>SIM' + ((c.sim_slot||0)+1) + '</td>' +
-                    '<td class="td-muted">' + esc(c.device_model||'') + '</td>' +
-                    '<td class="td-muted">' + esc(c.app_version||'') + '</td>' +
                 '</tr>';
             }).join('');
             const pag = document.getElementById('calls-pagination');
@@ -2350,17 +2498,47 @@
         async function loadCallDeviceOptions() {
             const d = await apiGet('/api/v1/devices');
             if (!d || !d.devices) return;
+            _deviceList = d.devices;   // v4.27: 与手机管理/首页共用同一份别名映射源
             const sel = document.getElementById('call-device-filter');
             // v4.23: 每次切到通话记录页都刷新设备选项（新登记的手机立即可筛），
             // 但保留用户已选中的筛选值，不因刷新被重置回"全部设备"
             const prev = sel.value;
             sel.innerHTML = '<option value="">全部设备</option>';
             d.devices.forEach(function(dev) {
-                sel.innerHTML += '<option value="' + escA(dev.device_id||'') + '">' + esc((dev.device_id||'').slice(0,20)) + ' (' + esc(dev.device_model||'未知') + ')</option>';
+                // v4.27: 原来显示截断的 32 位 device_id + 型号，与同页表格列（早已用 deviceLabelOf）
+                // 自相矛盾，设备一多就只能靠猜。改为「别名 · 型号」，表格列口径一致。
+                // v4.31: deviceLabelOf 无别名时已自带型号（「型号 · 尾4」），此时再补一次就成了
+                // 「型号 · 尾4 · 型号」⇒ 只有设了别名的设备才另外补型号。
+                const lab = deviceLabelOf(dev.device_id) || '未命名';
+                const extra = dev.label ? ' · ' + (dev.device_model || '未知') : '';
+                sel.innerHTML += '<option value="' + escA(dev.device_id||'') + '">' + esc(lab) + esc(extra) + '</option>';
             });
             if (prev && Array.prototype.some.call(sel.options, function(o) { return o.value === prev; })) {
                 sel.value = prev;
             }
+            loadCallPinOptions();
+        }
+
+        // v4.29: 通话记录的「顾问」筛选。选项取人员名册（PIN = 手机号 + 姓名），
+        // 与手机管理页「默认PIN」同源 —— 后端已按 default_pin 认人，这里筛的就是归属人。
+        async function loadCallPinOptions() {
+            const sel = document.getElementById('call-pin-filter');
+            if (!sel) return;
+            const prev = sel.value;
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/pins'));
+                if (r.status === 401) return;   // 未登录/已过期：保持原选项，重新登录后重进本页会刷新
+                const d = await r.json();
+                const pins = (d && d.pins) ? d.pins : [];
+                sel.innerHTML = '<option value="">全部顾问</option>';
+                pins.forEach(function(p) {
+                    if (!p.pin) return;   // 名册中还没用插件登记过的人没有 PIN，无从筛选
+                    sel.innerHTML += '<option value="' + escA(p.pin) + '">' + esc(p.name || p.pin) + '</option>';
+                });
+                if (prev && Array.prototype.some.call(sel.options, function(o) { return o.value === prev; })) {
+                    sel.value = prev;
+                }
+            } catch (e) { /* 网络异常时保持原选项 */ }
         }
 
         // v4.21.2 (D-8): 导出改 fetch + Authorization 头 + blob 下载——
@@ -2371,7 +2549,8 @@
                 const r = await fetch(url, token ? { headers: { 'Authorization': 'Bearer ' + token } } : {});
                 if (r.status === 401) {
                     clearSessionToken();
-                    setApiBanner('登录已过期，请重新登录后再导出。', true);
+                    applyAuthUI();   // v4.27
+                    setApiBanner('登录已过期，请点右上角「管理员登录」重新登录后再导出。', true);
                     return false;
                 }
                 if (!r.ok) { toast('导出失败（HTTP ' + r.status + '）', 'error'); return false; }
@@ -2422,6 +2601,12 @@
             const d = await apiGet('/api/logs?n=' + n + '&q=' + encodeURIComponent(q));
             const container = document.getElementById('log-container');
             if (!d || !d.logs || d.logs.length === 0) { container.innerHTML = '<div class="empty-state">暂无日志</div>'; return; }
+            // v4.27: 刷新前先记位置 —— 日志是整块 innerHTML 重绘，不还原就等于把位置清零。
+            // 原先无条件 scrollTop=scrollHeight，15 秒一次的自动刷新会把正在上翻历史日志的
+            // 用户反复拽回底部（排查问题时最恼人的那类打断）。
+            // 规则：本来就贴着底部（≤24px）⇒ 继续跟随最新；已上翻 ⇒ 保持原位不动。
+            const keepTop = container.scrollTop || 0;
+            const nearBottom = (container.scrollHeight - keepTop - (container.clientHeight || 0)) < 24;
             container.innerHTML = d.logs.map(function(line) {
                 let cls = ''; const l = line.toLowerCase();
                 if (l.includes('[error]') || l.includes('fail') || l.includes('error')) cls = 'error';
@@ -2429,7 +2614,8 @@
                 else if (l.includes('[info]')) cls = 'info';
                 return '<div class="log-line ' + cls + '">' + esc(line) + '</div>';
             }).join('');
-            container.scrollTop = container.scrollHeight;
+            if (nearBottom) container.scrollTop = container.scrollHeight;
+            else container.scrollTop = keepTop;
         }
 
         async function loadLogStats() {
@@ -2544,17 +2730,22 @@
 
         function renderVisitRows(rows) {
             const tbody = document.getElementById('visits-list');
-            if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无记录</td></tr>'; return; }
+            if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无记录</td></tr>'; return; }
             tbody.innerHTML = rows.map(function(r) {
                 const srcBadge = r.source==='phone' ? '<span class="badge badge-phone-src">手机</span>'
                     : r.source==='crm_sync' ? '<span class="badge badge-crm">CRM同步</span>'
                     : '<span class="badge badge-plugin">插件</span>';
                 const crmBadge = r.crm_synced ? '<span class="badge badge-sync">已同步</span>' : '<span class="badge badge-unsync">未同步</span>';
-                return '<tr class="' + (r.crm_synced ? '' : 'row-warn') + '">' +
-                '<td>' + r.id + '</td><td>' + esc(r.name||'') + '</td>' +
+                // v4.31: 去掉「ID」列（上门表原来 11 列偏宽，ID 日常不看），改为整行悬停显示 —— 报障要 ID 时 hover 即可。
+                return '<tr class="' + (r.crm_synced ? '' : 'row-warn') + '" title="记录ID：' + escA(r.id) + '">' +
+                '<td>' + esc(r.name||'') + '</td>' +
                 '<td>' + esc(r.mobile||'') + copyBtn(r.mobile) + '</td>' +
-                '<td>' + esc(r.kefu_tel||'') + copyBtn(r.kefu_tel) + '</td>' +
-                '<td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name||'') + '</td><td>' + esc(r.visit_type||'') + '</td>' +
+                // v4.29: 归属键 = visits.pin（落库时按「接待顾问」解析，见后端 /api/v1/visit）。
+                //   「接待顾问」= 顾问姓名（kefu_name 优先，将来 kefu_tel 若改回存电话也能兜住）；
+                //   「归属PIN」= 归属顾问的手机号。一姓名一号码，互补且不再重复同一个值。
+                '<td style="font-weight:600;color:var(--primary);">' + esc(r.kefu_name || r.kefu_tel || '') + '</td>' +
+                '<td class="td-muted">' + (r.pin ? esc(r.pin) + copyBtn(r.pin) : '—') + '</td>' +
+                '<td>' + esc(r.visit_type||'') + '</td>' +
                 '<td>' + srcBadge + '</td>' +
                 '<td>' + crmBadge + '</td>' +
                 '<td>' + (r.created_at?new Date(r.created_at).toLocaleString('zh-CN'):'-') + '</td>' +
@@ -2594,20 +2785,22 @@
             try {
                 const res = await fetch(url);
                 if (res.status === 401) {
-                    setApiBanner('登录已过期，请重新登录后再查看上门登记数据。', true);
-                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">登录已过期，请重新登录</td></tr>';
+                    clearSessionToken();   // v4.27: 原来只弹横幅不清 token ⇒ 后续请求继续 401、定时刷新也不停
+                    applyAuthUI();
+                    setApiBanner('登录已过期，请点右上角「管理员登录」重新登录后再查看上门登记数据。', true);
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">登录已过期，请重新登录</td></tr>';
                     return;
                 }
                 // 补上统一请求层里已有的 429 / 非 2xx 提示：此前本函数自己 fetch，
                 // 被限流或服务端异常时页面只显示"查询失败"，用户不知道是限流还是断网。
                 if (res.status === 429) {
                     setApiBanner('请求过于频繁，已被服务端限流（HTTP 429），稍后会自动重试。', false);
-                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">已被限流，请稍后重试</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">已被限流，请稍后重试</td></tr>';
                     return;
                 }
                 if (!res.ok) {
                     setApiBanner('服务端返回异常（HTTP ' + res.status + '），当前显示的数据可能不是最新的。', false);
-                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">服务端异常（HTTP ' + res.status + '）</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">服务端异常（HTTP ' + res.status + '）</td></tr>';
                     return;
                 }
                 const data = await res.json();
@@ -2622,14 +2815,14 @@
                     return;
                 }
                 if (!data || data.ok !== true || !Array.isArray(data.rows)) {
-                    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">查询失败</td></tr>'; return;
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">查询失败</td></tr>'; return;
                 }
                 visitTotal = data.total || 0;
                 renderVisitRows(data.rows);
                 renderVisitPager();
             } catch(e) {
                 setApiBanner('无法连接到服务器，请检查网络或服务进程；当前显示的数据可能已过期。', false);
-                tbody.innerHTML = '<tr><td colspan="11" class="empty-state" style="color:var(--red);">请求失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state" style="color:var(--red);">请求失败</td></tr>';
             }
         }
 
@@ -2722,7 +2915,11 @@
                 if (!ctx || typeof Chart === 'undefined') return;
                 const c = chartBase();
                 const days = {};
-                for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate()-i); days[d.toISOString().slice(0,10)] = 0; }
+                // v4.27: 横轴按「本地日期」建 key。原先用 toISOString()（世界时）建 key，
+                // 而记录时间戳是服务端本地时间 ⇒ 每天 00:00–08:00 整条横轴日期整体偏一天、
+                // 当天的柱子恒为 0（数据没丢，只是落不到轴上），8 点后自愈。
+                // _shiftDay(n) 返回本地 YYYY-MM-DD，与 r.created_at.slice(0,10) 同一基准。
+                for (let i = 13; i >= 0; i--) { days[_shiftDay(i)] = 0; }
                 data.forEach(function(r) { if (r.created_at) { const k = r.created_at.slice(0,10); if (days[k]!==undefined) days[k]++; } });
                 if (visitChart) visitChart.destroy();
                 visitChart = new Chart(ctx, { type: 'bar', data: { labels: Object.keys(days).map(function(d){return d.slice(5)}), datasets: [{ label:'上门数', data:Object.values(days), backgroundColor: c.primary, borderRadius:6 }] },
@@ -2879,9 +3076,12 @@
             const selected = importParsedRows.filter(function(_, i) { return importChecked[i]; });
             if (selected.length === 0) { toast('没有选中任何记录', 'error'); return; }
 
-            // v4.21: 改为 POST body + 每批 20 条。原 BATCH_SIZE=200 拼 GET URL，
-            // 但 websockets 库对 HTTP 请求行有 8KB 硬上限，约 20 行即超限，整批静默失败。
-            const BATCH_SIZE = 20;
+            // v4.27: 批次从 20 提回 200 —— 「20 条」原本是 GET 时代的遗留值，不是技术约束了。
+            // 8KB 上限（websockets MAX_LINE_LENGTH）只卡「请求行」，即 URL 长度；而 batch 端点
+            // v4.21 起就走 POST body（服务端 readexactly(content_length) 直读，无条数上限，
+            // serve() 也未设 max_size）⇒ 每批 200 条（约几十 KB）完全安全，往返次数少 10 倍。
+            // ⚠️ 仅对 POST 路径成立；服务端保留的 GET 兼容路径（?data=...）仍受 8KB 限制，别一起改。
+            const BATCH_SIZE = 200;
             const totalBatches = Math.ceil(selected.length / BATCH_SIZE);
             let totalInserted = 0, totalSkipped = 0, allErrors = [];
 
@@ -2941,7 +3141,9 @@
                     fetch(withToken(VISIT_API_BASE+'/api/v1/groups'))
                 ]);
                 if (prRes.status === 401 || grRes.status === 401) {
-                    setApiBanner('登录已过期，请重新登录后再查看人员数据。', true);
+                    clearSessionToken();   // v4.27: 与其余 401 处理点口径对齐
+                    applyAuthUI();
+                    setApiBanner('登录已过期，请点右上角「管理员登录」重新登录后再查看人员数据。', true);
                     tbody.innerHTML = '<tr><td colspan="4" class="empty-state">登录已过期，请重新登录</td></tr>';
                     return;
                 }
@@ -2959,7 +3161,11 @@
                 const boundN = allPins.filter(function(p) { return p.bound; }).length;
                 const hint = document.getElementById('pins-roster-hint');
                 if (hint) {
-                    hint.innerHTML = '人员名册共 <b>' + (pr.roster_size || allPins.length) + '</b> 人（固定名单，取自插件端登记用的 CRM 顾问列表）· ' +
+                    // v4.33: 名册可点「刷新名单」从 CRM 源头同步，故这里标出上次同步时间
+                    const syncTxt = pr.roster_synced_at
+                        ? '上次同步：' + new Date(pr.roster_synced_at).toLocaleString('zh-CN')
+                        : '尚未从 CRM 同步过（当前为内置名单）';
+                    hint.innerHTML = '人员名册共 <b>' + (pr.roster_size || allPins.length) + '</b> 人（取自 CRM 顾问列表 · ' + esc(syncTxt) + '）· ' +
                         '已绑定 <b>' + boundN + '</b> 人 · 未绑定 <b>' + (allPins.length - boundN) + '</b> 人。' +
                         '未绑定 = 该人员还没用插件登记过，登记后会自动补上 PIN。';
                 }
@@ -2989,6 +3195,40 @@
                     return '<tr>' + cells.join('') + '</tr>';
                 }).join('');
             } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state" style="color:var(--red);">加载失败</td></tr>'; }
+        }
+
+        // v4.33: 从源头（CRM 顾问列表）刷新人员名册。
+        // 服务端保证「拉取失败不动名册」，所以这里只要如实报错即可，无需本地兜底。
+        async function refreshRoster() {
+            function brief(list) {
+                const names = (list || []).map(function(x) { return x.name; });
+                return names.slice(0, 3).join('、') + (names.length > 3 ? ' 等' : '');
+            }
+            const btn = document.getElementById('btn-refresh-roster');
+            const oldHtml = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>刷新中…'; }
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/roster/refresh'));
+                if (r.status === 401) {
+                    clearSessionToken();
+                    applyAuthUI();
+                    setApiBanner('登录已过期，请点右上角「管理员登录」重新登录后再刷新名单。', true);
+                    toast('登录已过期，请重新登录', 'error');
+                    return;
+                }
+                const d = await r.json();
+                if (!d.ok) { toast('刷新名单失败：' + (d.message || '未知错误') + '（现有名册未改动）', 'error'); return; }
+                const changes = [];
+                if (d.added && d.added.length) changes.push('新增 ' + d.added.length + ' 人（' + brief(d.added) + '）');
+                if (d.removed && d.removed.length) changes.push('移除 ' + d.removed.length + ' 人（' + brief(d.removed) + '）');
+                if (d.renamed && d.renamed.length) changes.push('改名 ' + d.renamed.length + ' 人');
+                toast('名单已同步：共 ' + d.total + ' 人' + (changes.length ? '，' + changes.join('，') : '，与 CRM 一致'), 'success');
+                loadPins();
+            } catch(e) {
+                toast('刷新名单失败：网络错误，请重试', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; }
+            }
         }
 
         async function setPinGroup(pin, gid) {
@@ -3168,12 +3408,16 @@
                 overlay.classList.add('show');
                 var lu = document.getElementById('login-user');
                 if (lu) lu.focus();
+                // v4.28: 环境自检 —— 页面若被静态托管（拖进浏览器 / 用「文件预览」面板打开），
+                // 登录注定失败。提前把原因写在登录框内（#login-err 在遮罩**内部**，门禁态可见），
+                // 别让用户先登一次、才吃一句指错方向的「请确认中继服务正在运行」。
+                checkEnv().then(function(ok) { if (!ok) loginErr(_envNote); });
             } else {
                 fetch(withToken(VISIT_API_BASE + '/api/v1/admin/accounts')).then(function(r) {
                     if (r.status === 401) { clearSessionToken(); location.reload(); }
                     else {
-                        document.getElementById('login-btn').style.display = 'none';
-                        document.getElementById('logout-btn').style.display = '';
+                        // v4.27: 抽成 applyAuthUI()，与运行中途 401 的处理共用同一套按钮切换
+                        applyAuthUI();
                     }
                 }).catch(function() {});
             }

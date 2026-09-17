@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoDial 云端中继 · 本地虚拟数据 + 压测 + 可靠性体检</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --panel:#ffffff; --ink:#1b2b3a; --ink2:#4a7099; --line:#e2e8f0;
+    --blue:#2f6fb5; --blue-bg:#eaf2fb; --red:#c0392b; --red-bg:#fdecea;
+    --amber:#b7791f; --amber-bg:#fdf6e3; --green:#1f7a4d; --green-bg:#e8f6ee;
+    --grey:#64748b; --grey-bg:#f1f5f9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 28px 72px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.3px}
+  .sub{color:var(--ink2);font-size:13.5px;margin-bottom:28px}
+  h2{font-size:19px;margin:38px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:15.5px;margin:24px 0 10px;color:#22384d}
+  p{margin:10px 0}
+  code{background:#eef2f7;border:1px solid #dde5ee;border-radius:4px;padding:1px 5px;
+       font-family:Consolas,Monaco,monospace;font-size:12.5px;color:#25405c}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:var(--panel)}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef3f9;font-weight:600;color:#22405f}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,monospace}
+  .card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--blue);
+        border-radius:8px;padding:16px 20px;margin:16px 0}
+  .card.p0{border-left-color:var(--red)}
+  .card.mid{border-left-color:var(--amber)}
+  .card.ok{border-left-color:var(--green)}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:20px;
+       margin-right:8px;vertical-align:2px}
+  .t-p0{background:var(--red-bg);color:var(--red);border:1px solid #f5c6c0}
+  .t-mid{background:var(--amber-bg);color:var(--amber);border:1px solid #eadfb5}
+  .t-low{background:var(--grey-bg);color:var(--grey);border:1px solid #dbe3ec}
+  .t-ok{background:var(--green-bg);color:var(--green);border:1px solid #c3e6d3}
+  .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0}
+  .kv div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .kv b{display:block;font-size:22px;font-family:Consolas,monospace;color:var(--blue)}
+  .kv span{font-size:12.5px;color:var(--ink2)}
+  ul{margin:8px 0 8px 4px;padding-left:20px}
+  li{margin:5px 0}
+  .verdict{background:var(--blue-bg);border:1px solid #cfe0f3;border-radius:8px;padding:14px 18px;margin:18px 0}
+  .muted{color:var(--ink2);font-size:13px}
+  .hit{color:var(--red);font-weight:600}
+  .pass{color:var(--green);font-weight:600}
+  pre{background:#f3f6fa;border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+      overflow:auto;font-size:12.5px;font-family:Consolas,monospace;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AutoDial 云端中继 · 本地虚拟数据 + 压测 + 可靠性体检</h1>
+<div class="sub">目标：<code>http://127.0.0.1:35430</code>（dev.bat 本地实例）　·　代码版本 <code>APP_VERSION='4.31'</code>　·　2026-09-17</div>
+
+<div class="verdict">
+<b>一句话结论：</b>数据已按真实业务灌好（1.43 万通话 / 1800 上门 / 10 台工作手机），
+<b>服务本身没有崩、没有锁冲突、没有慢查询</b>；但查出
+<b>1 个真能被公网利用的漏洞</b>（设备注册校验可被绕过，已实测复现）、
+<b>1 处统计口径打架</b>（同一「今天」两个页面差 7 倍），
+以及 <b>1 个让本地开发慢 8–16 倍的机器级环境问题</b>（与本项目代码无关，但会误导你对性能的判断）。
+</div>
+
+<div class="kv">
+  <div><b>14,306</b><span>通话记录（45 天）</span></div>
+  <div><b>1,800</b><span>上门登记（含 90 条代登记）</span></div>
+  <div><b>10</b><span>工作手机（含 1 台无主）</span></div>
+  <div><b>11 / 11</b><span>名册绑定</span></div>
+  <div><b>0</b><span>压测非 2xx 错误</span></div>
+  <div><b>0</b><span>database is locked</span></div>
+</div>
+
+<h2>一、虚拟数据：按你的真实业务造的，不是随机数</h2>
+<p>数据模型严格贴合你 9/17 口述的场景，每一步都走 <b>真实 HTTP 接口</b>（不是直接写库），所以面板看到的就是手机/插件上报后的真实形态：</p>
+<table>
+<tr><th>环节</th><th>做法</th><th>对应真实业务</th></tr>
+<tr><td>人员名册</td><td>11 人全部登记，PIN 用 <code>138xxxx</code> 手机号</td><td>插件刷新 CRM 时调 <code>/api/v1/advisor/register</code></td></tr>
+<tr><td>工作手机</td><td>9 位真人各 1 台（随机 32 位 hex 设备号）+ 1 台「待分配备用机」</td><td>App 首次握手上报的设备号；备用机用来验证「未绑定」边界</td></tr>
+<tr><td>通话记录</td><td>45 天 × 每工作日约 35 通，工作日多、周末少，呼出/未接/呼入 = 70/22/8</td><td>App 的 <code>calls/batch</code> 批量上报</td></tr>
+<tr><td class="hit">下午换 PIN</td><td>9 台手机全部再把 <code>last_pin</code> 改成同事的 PIN</td><td><b>15:00–16:00 同一台手机改登同事 PIN</b>（这正是 v4.29 要扛住的场景）</td></tr>
+<tr><td>上门登记</td><td>1,530 条走 CRM 批量导入 + 270 条走手机端单条，其中 <b>90 条故意做成「代登记」</b>（A 帮 B）</td><td>客户到店后自己登记 / 前台代登记</td></tr>
+<tr><td>分组</td><td>销售一/二/三组，各 3 人</td><td>你说过「分组非必需，先做好核心」</td></tr>
+</table>
+
+<h3>归属口径验收（v4.29 的核心）</h3>
+<p>对每台「下午借了同事 PIN」的手机做精确核对 —— 结果<b>全部正确</b>：</p>
+<table>
+<tr><th>设备</th><th class="num">该机总通话</th><th class="num">算在主人名下</th><th class="num">误算到借用人名下</th><th>结论</th></tr>
+<tr><td>韩俊的工作机</td><td class="num">1,261</td><td class="num">1,261</td><td class="num">0</td><td class="pass">✅</td></tr>
+<tr><td>洪钰梅的工作机</td><td class="num">1,277</td><td class="num">1,277</td><td class="num">0</td><td class="pass">✅</td></tr>
+<tr><td>金晟的工作机</td><td class="num">1,268</td><td class="num">1,268</td><td class="num">0</td><td class="pass">✅</td></tr>
+<tr><td>刘静的工作机</td><td class="num">1,276</td><td class="num">1,276</td><td class="num">0</td><td class="pass">✅</td></tr>
+</table>
+<p class="muted">代登记同样核对过：<code>黎建华（登记人 138…007 → 接待 张召）</code>等 5 条抽样全部<b>归接待顾问名下</b>、没有误挂到登记人。</p>
+
+<h3>顺带发现：压测会把「下午换 PIN」覆盖掉（符合预期，已恢复）</h3>
+<p class="muted">压测里的 <code>stats/report</code> 上报用主人 PIN，写回时把 <code>last_pin</code> 又改回主人 —— 真实 App 也是这样。这恰好说明 <code>last_pin</code> 是个「随时被覆盖」的字段，<b>只能看、不能用来认人</b>。收尾时我已重新模拟了一次下午换 PIN，面板现在看到的是「主人 ≠ 当前登录」的状态。</p>
+
+<h2>二、压测结果</h2>
+<p>按<b>真实调用方</b>组织 5 个场景，不是拍脑袋打一个端点：<b>poll</b>（面板 15 秒刷新一轮的 6 个请求）、<b>report</b>（手机批量上报）、<b>visit</b>（登记写入）、<b>export</b>（CSV 全量导出）、<b>mixed</b>（24 并发混合）。</p>
+
+<div class="card ok">
+<b>先说好消息：</b>两种环境下全部 <b>0 个非 2xx、0 条 <code>database is locked</code>、0 个未捕获异常</b>。
+1.43 万条通话、1800 条上门的数据量下，服务端逻辑是稳的。
+</div>
+
+<h3>2.1 关键发现：35430 比「同代码同数据的干净实例」慢 6–8 倍</h3>
+<p>为了分清「是代码慢」还是「是环境慢」，我另起了一个隔离实例（35439，同一份代码、同一份库内容的副本，只把库放在 <code>%TEMP%</code>），用完全相同的负载对照：</p>
+<table>
+<tr><th>端点（p95 延迟）</th><th class="num">35430<br><span class="muted">dev.bat · 库在项目里</span></th><th class="num">35439<br><span class="muted">同代码 · 库在 %TEMP%</span></th><th class="num">倍数</th></tr>
+<tr><td><code>/api/v1/events/log</code> 事件上报</td><td class="num">4,559 ms</td><td class="num">694 ms</td><td class="num">6.6×</td></tr>
+<tr><td><code>/api/v1/stats/report</code> 对账上报</td><td class="num">4,497 ms</td><td class="num">677 ms</td><td class="num">6.6×</td></tr>
+<tr><td><code>/api/v1/calls/batch</code> 通话批量</td><td class="num">2,716 ms</td><td class="num">338 ms</td><td class="num">8.0×</td></tr>
+<tr><td><code>/api/v1/calls</code> 通话列表</td><td class="num">2,401 ms</td><td class="num">296 ms</td><td class="num">8.1×</td></tr>
+<tr><td><code>/api/status</code> 首页</td><td class="num">1,935 ms</td><td class="num">313 ms</td><td class="num">6.2×</td></tr>
+<tr><td><code>/api/v1/pins</code> 名册</td><td class="num">1,425 ms</td><td class="num">203 ms</td><td class="num">7.0×</td></tr>
+<tr><td><code>/api/v1/visit</code> 单条登记</td><td class="num">18 ms</td><td class="num">23 ms</td><td class="num">1.0×</td></tr>
+<tr><td><b>整体吞吐</b></td><td class="num">114 req/s</td><td class="num">180 req/s</td><td class="num">1.6×</td></tr>
+</table>
+<p class="muted">两组都跑同样的 5 个场景 × 15 秒，都是 0 错误。注意最后一行 <code>/api/v1/visit</code> <b>两边一样快</b> —— 这一条正是破案的关键。</p>
+
+<h3>2.2 根因：不是代码，是这台机器的「文件系统慢区」</h3>
+<p>先量到单次请求的固定底噪：凡是碰数据库的端点，<b>每个请求固定多花约 150–190 ms</b>；纯内存的 <code>/api/stats</code> 只要 2 ms。而请求里每调一次 <code>_connect_db()</code> 就多一份这份开销（<code>events/log</code> 要 2 次 → 正好是别人的 2 倍）。</p>
+<p>再做最小实验，锁定在文件系统：</p>
+<table>
+<tr><th>实验</th><th>结果</th></tr>
+<tr><td>只读打开同一个库（<code>mode=ro</code>）</td><td class="pass">8.3 ms —— 快</td></tr>
+<tr><td>读写打开（会创建 <code>-wal</code>/<code>-shm</code>）</td><td class="hit">140–325 ms —— 慢</td></tr>
+<tr><td>同目录 / 同盘的副本（换文件名）</td><td class="hit">138 ms —— 一样慢</td></tr>
+<tr><td>同一份库放到 <code>%TEMP%</code></td><td class="pass">6.5 ms —— 快</td></tr>
+<tr><td><b>创建→写→fsync→删除一个 4 KB 文件</b></td><td class="hit">项目目录/我的文档/下载：<b>约 380 ms</b>　·　<code>%TEMP%</code>：<b>4 ms</b></td></tr>
+</table>
+<div class="card mid">
+<b>结论：</b>你这台机器上，<b>用户目录（Documents / Downloads / Videos / 项目目录）里「新建 + 落盘 + 删除」一个文件要花约 380 ms</b>，
+只有 <code>%TEMP%</code> 是正常的 4 ms。SQLite 在 WAL 模式下<b>每个连接都要创建/删除 <code>-wal</code>、<code>-shm</code></b>，
+而中继是<b>每个请求新建一个数据库连接</b> —— 两者相乘就是你感觉到的「卡」。
+<ul>
+<li>这不是项目代码的问题（同一份代码、同一份数据、放到 <code>%TEMP%</code> 就快 6–8 倍）。</li>
+<li>也不是 OneDrive（OneDrive 在 <code>C:\Users\EDY\OneDrive</code>，目录没有重解析点）、不是磁盘类型（同盘同 NTFS）。</li>
+<li>高度怀疑是<b>杀毒/安全软件的实时文件过滤驱动</b>：症状是「读很快、建/删很慢」、「全用户目录慢、唯独 %TEMP% 快」，这是它的典型指纹。</li>
+<li>这解释了为什么 <code>/api/v1/visit</code> 两边一样快：它是唯一被高频连续调用的写端点，<b>连接不断档，<code>-wal</code> 文件一直活着，就不用反复建删</b>。</li>
+</ul>
+</div>
+
+<div class="card">
+<b>要不要处理？（建议做）</b>把本地开发库挪出用户目录，例如让 devwatch 把 <code>AUTODIAL_DB_PATH</code> 指到
+<code>%LOCALAPPDATA%\autodial-dev\visits.db</code>。改动只在 <code>devwatch.py</code> 一处、不影响打包产物，
+本地实例的接口延迟预计直接从 150 ms 掉回 10 ms 级 —— 好处是你以后在本地判断「面板卡不卡」不会被环境骗。
+<br><span class="muted">生产服务器（腾讯云 Linux）不受影响：那边建 <code>-wal</code> 是毫秒级。所以<b>不要</b>根据本地的数字去改代码逻辑。</span>
+</div>
+
+<h3>2.3 响应体积：两个「重活」端点是它俩</h3>
+<table>
+<tr><th>端点</th><th class="num">体积</th><th class="num">耗时</th><th>说明</th></tr>
+<tr><td><code>/api/v1/calls/export</code></td><td class="num">1.44 MB</td><td class="num">557 ms</td><td>1.43 万行 CSV 一次性生成、一次性塞进内存返回，无流式、无分批</td></tr>
+<tr><td><code>/api/v1/calls?limit=1000</code></td><td class="num">309 KB</td><td class="num">163 ms</td><td>面板实际用 <code>limit=200</code>（62 KB），安全</td></tr>
+<tr><td><code>/api/logs?n=500</code></td><td class="num">43 KB</td><td class="num">7 ms</td><td>纯内存</td></tr>
+</table>
+<p class="muted">1.43 万行 → 1.44 MB；按同样密度，30 万行时单次导出约 30 MB 全进内存。现在没问题，属于「先记账」。</p>
+
+<h2>三、不靠谱清单（按风险排序）</h2>
+
+<div class="card p0">
+<span class="tag t-p0">P0 · 安全</span><span class="tag t-ok">✅ v4.32 已修复</span><b>设备注册校验可被绕过 —— 公网上任何人能凭空造手机、灌假通话记录</b>
+<p class="muted" style="border-left:3px solid var(--green);padding-left:10px"><b>修复状态（v4.32）：</b>已按下方「建议做」补上<b>同一道</b> <code>_device_registered()</code> 门禁（未改成要求管理员 token，避免打断手机端上报）。
+上面 ①–⑦ 的复现脚本原样重跑：③ 由 <b>200 → 403</b>、④⑤ 仍 403、⑥ 伪造设备不再进清单、⑦ 0 条脏记录。
+同时验证<b>真实已注册设备</b>的 <code>stats/report</code> / <code>calls/batch</code> / <code>events/log</code> 仍为 <b>200</b>（非回归，用后即还原、数据零残留）。</p>
+<p>v4.23 的 Y-1 修复给 <code>calls/batch</code> 和 <code>events/log</code> 加了「设备必须已在云端注册」的校验，本意是堵住伪造上报。
+但 <code>/api/v1/stats/report</code> 这个端点<b>既不要管理员身份、也不校验设备是否已注册，却会往 <code>phones</code> 表里插一行设备</b> —— 于是它成了后门。</p>
+<p><b>实测复现（在本地 35430 上跑的，全程无需任何口令）：</b></p>
+<pre>① 未注册设备直接 calls/batch     → HTTP 403 DEVICE_NOT_REGISTERED   ← 防护有效
+② 未注册设备 events/log           → HTTP 403                        ← 防护有效
+③ 无 token 调 stats/report        → HTTP 200 {"ok":true}            ← 后门：设备被写进库
+④ 再调 calls/batch（同一设备）    → HTTP 200 {"inserted":1}          ← 校验被绕过
+⑤ 再调 events/log                 → HTTP 200
+⑥ 该设备出现在面板「手机管理」清单 → 是（机型「伪造机型」、版本「9.99」）
+⑦ 伪造的通话记录已入库</pre>
+<p><b>影响：</b>数据可信度。线上部署在公网 35430，任何知道 IP 的人都能批量伪造手机和通话记录，污染首页统计、手机管理清单、「今日通话」。不能拿它执行代码，但足以让报表全不可信。</p>
+<p><b>建议做（改动很小）：</b>给 <code>stats/report</code> 加上和另外两个端点<b>完全一样</b>的 <code>_device_registered()</code> 校验（3 行）。
+<b>注意：</b>不能简单改成「要求管理员 token」—— 手机端没有管理凭据，那样会打断正常上报。用同一套「已注册设备」判断即可，语义与设计文档一致。</p>
+<p class="muted">顺带：修完要确认首次握手的顺序 —— 设备必须先 <code>phone_hello</code> 写进 <code>phones</code> 再上报，这个前提 <code>calls/batch</code> 已经在依赖了，所以不影响正常机。</p>
+</div>
+
+<div class="card mid">
+<span class="tag t-mid">中 · 数据口径</span><span class="tag t-ok">✅ v4.32 已修复</span><b>同一个「今天」，首页和手机管理页差 7 倍</b>
+<p class="muted" style="border-left:3px solid var(--green);padding-left:10px"><b>修复状态（v4.32）：</b>首页已改用 <code>dial_time</code> 区间（与对账页同口径）。
+实测 <b>14,306 → 2,006</b>，与 <code>dial_time</code> 区间直算<b>完全相等</b>；与对账页合计 1,970 的 36 条差额已逐台核对，
+全部来自一台<b>没有对账快照</b>的备用机（对账页本就不含它），非口径问题。
+<code>EXPLAIN QUERY PLAN</code>：旧写法 <code>SCAN</code> → 新写法 <code>SEARCH … USING COVERING INDEX idx_call_records_dial</code>，
+单次 <b>3.27 ms → 0.10 ms</b>（首页是 15 秒轮询端点）。<br>
+顺带把首页「今日上门」也对齐到列表页口径 <code>COALESCE(NULLIF(visit_time,''),created_at)</code>：
+插件端不传 <code>visit_time</code> ⇒ <b>今天行为完全不变</b>，但批量导入带「上门时间」列时不会再有同类漂移。</p>
+<p>实测：首页 <code>/api/status</code> 的「今日通话」= <b>14,307</b>（修复前）；手机管理页「每日对账」今日合计 = <b>1,970</b>。</p>
+<table>
+<tr><th>页面</th><th>SQL 口径</th><th>含义</th></tr>
+<tr><td>首页「今日通话」</td><td><code>WHERE date(server_time)=今天</code></td><td><b>入库时间</b> —— 补传的历史也算今天</td></tr>
+<tr><td>手机管理页「每日对账」</td><td><code>WHERE dial_time>=今日0点</code></td><td><b>拨打时间</b> —— 真实的今天</td></tr>
+</table>
+<p><b>什么时候会真的出错：</b>手机离线几天后补传（这正是「离线补推队列」存在的理由）。那天一补传，首页「今日通话」会把过去几天的量全算进今天，而对账页仍然显示真实值 —— 两个页面对不上，看的人会以为谁在刷数据。</p>
+<p><b>建议做：</b>把首页改成和 <code>phone_daily_stats</code> 同口径（用 <code>dial_time</code>，3 行）。
+附带好处：<code>date(server_time)</code> 这种写法<b>用不上任何索引</b>，而 <code>/api/status</code> 是面板每 15 秒轮询一次的端点，数据量再涨就是全表扫。
+<br><span class="muted">不改也不影响功能，只是「首页那个数」在补传场景下不准。</span></p>
+</div>
+
+<div class="card mid">
+<span class="tag t-mid">中 · 一致性</span><b>「批量导入」和「手机端登记」算归属的方式不一样</b>
+<p>同一个上门记录，两条路进来归属可能不同：</p>
+<ul>
+<li>手机端/插件端 <code>/api/v1/visit</code>：<b>按「接待顾问姓名」反查 PIN</b> 来决定归属（v4.29 的语义，代登记归被代的人）—— 已验证正确。</li>
+<li>管理员批量导入 <code>/api/v1/visits/batch</code>：<b>直接采信文件里的 <code>pin</code> 字段</b>，完全不看 <code>kefu_tel</code>。</li>
+</ul>
+<p><b>风险：</b>以后从 CRM 导出的表格里，只要 <code>pin</code> 列和 <code>kefu_tel</code>（接待顾问）对不上、或者 <code>pin</code> 为空，就会产生「归属顾问 ≠ 接待顾问」的脏数据，而且面板不会报任何异常 —— 统计立刻错，但没人看得出来。</p>
+<p><b>建议做（做/不做都行）：</b>让批量导入也走同一套「按姓名反查 PIN」的归一化（查不到再回退文件里的 pin）。
+<span class="muted">如果导入文件的 pin 列本来就是 CRM 的权威值，也可以不改 —— 但要明确「批量导入的归属以文件为准」，别让两套规则并存。</span></p>
+</div>
+
+<div class="card mid">
+<span class="tag t-mid">中 · 性能放大</span><b>每个请求都新建 TCP + 新建 SQLite 连接，且响应恒发 <code>Connection: close</code></b>
+<p>两个叠加效应：</p>
+<ul>
+<li>服务端<b>不支持 HTTP keep-alive</b>（每个响应都带 <code>Connection: close</code>）⇒ 面板每次轮询都要重新建 TCP。</li>
+<li>服务端<b>每个请求新建一次数据库连接</b>（全项目 44 处 <code>_connect_db()</code>）⇒ 每次都触发 WAL 的建/删文件。</li>
+</ul>
+<p>在正常磁盘上这两件事都很便宜（对照实例 180 req/s、p95 196 ms <b>完全够用</b>）；
+但在你这台机器的用户目录里被放大成 6–8 倍（见 §2.1–2.2）。</p>
+<p><b>建议：不动。</b>生产在 Linux 上，当前数据量下完全够用，改连接池/keep-alive 属于架构改动、收益与风险不成比例。
+<b>真正该做的是把本地开发库挪出慢区</b>（见 §2.2），一分钱不花、效果最明显。</p>
+</div>
+
+<div class="card">
+<span class="tag t-low">低 · 记账</span><b>两条「数据量再涨才痛」的地方</b>
+<ul>
+<li><code>/api/v1/visits?pin=X</code>（不带分页参数）会<b>返回该顾问的全部历史</b>，无上限。现在一个人几百条没事，攒到几万条时这一条响应会很大。带 <code>page</code> 参数则正常分页。</li>
+<li><code>/api/v1/calls/export</code> 一次性把整个结果集生成成 1.44 MB 字符串再返回，无流式。30 万行时单次约 30 MB 驻留内存。</li>
+</ul>
+<p class="muted">现在都不构成问题，先记着。</p>
+</div>
+
+<div class="card">
+<span class="tag t-low">说明</span><b>本地压测验证不了限流</b>
+<p>中继对 <code>127.0.0.1</code> 完全跳过限流（这是有意的，否则管理界面自己就被拦）。
+所以本次压测<b>没有</b>覆盖到限流逻辑。线上真正的风险点是「同一办公室共用出口 IP」——
+v4.21 已经按端点分级（认证类 60/min、轮询类 240/min、业务类 600/min）缓解过，这个结论本次无法验证，需要真机联网才能测。</p>
+</div>
+
+<h2>四、复现方式</h2>
+<p>三个脚本放在 <code>.workbuddy/tools/adseed/</code>（不进发布包）：</p>
+<table>
+<tr><th>脚本</th><th>作用</th><th>用法</th></tr>
+<tr><td><code>seed.py</code></td><td>灌虚拟数据（含下午换 PIN、代登记、分组）</td><td><code>python seed.py --reset</code></td></tr>
+<tr><td><code>stress.py</code></td><td>5 个场景压测 + 延迟分位 + 扫服务端日志</td><td><code>python stress.py --all --seconds 15 --port 35430</code></td></tr>
+<tr><td><code>audit_probe.py</code></td><td><b>三段式探测</b>（v4.32 起）：A 攻击面 · B 口径一致性 · C 真实设备非回归（快照+还原，零残留）</td><td><code>python audit_probe.py</code></td></tr>
+</table>
+<p class="muted">用受管 Python 跑：<code>C:\Users\EDY\.workbuddy\binaries\python\versions\3.13.12\python.exe</code>。
+<code>seed.py --only switch</code> 可单独重放「下午换 PIN」这一步。</p>
+<p class="muted"><b>⚠️ 探测脚本的坑（v4.32 真踩）：</b><code>stats/report</code> 会 <code>ON CONFLICT DO UPDATE</code> 改写 <code>phones</code> 行的
+<code>device_model</code> / <code>app_version</code> / <code>last_pin</code> / <code>last_seen</code>。
+第一版探测只还原了统计表 ⇒ 设备清单里留下假机型，且 <code>last_pin</code> 被写回主人、破坏「下午换 PIN」演示态。
+现在脚本会连 <code>phones</code> 一起快照还原，并做<b>字段级 md5 前后比对</b>证明零残留。</p>
+
+<h2>五、建议动作汇总</h2>
+<table>
+<tr><th>优先级</th><th>做什么</th><th>影响</th><th>成本</th></tr>
+<tr><td class="hit">✅ 已完成 v4.32</td><td>给 <code>stats/report</code> 补 <code>_device_registered()</code> 校验</td><td>堵住「凭空造设备 + 灌假通话」</td><td>3 行</td></tr>
+<tr><td class="hit">建议做</td><td>本地开发库挪到 <code>%LOCALAPPDATA%</code></td><td>本地接口 150 ms → 10 ms 级，判断性能不再被环境误导</td><td>改 <code>devwatch.py</code> 一处，不影响发布</td></tr>
+<tr><td class="hit">✅ 已完成 v4.32</td><td>首页「今日通话」改用 <code>dial_time</code> 口径</td><td>首页与对账页数字一致；顺带可用索引（3.27→0.10 ms）</td><td>3 行</td></tr>
+<tr><td>可选</td><td>批量导入也按接待顾问姓名归一化归属</td><td>避免「归属≠接待顾问」的静默脏数据</td><td>小</td></tr>
+<tr><td>暂不做</td><td>HTTP keep-alive / 数据库连接池</td><td>只在慢盘上有收益，生产不缺这点</td><td>架构级</td></tr>
+</table>
+
+<p class="muted" style="margin-top:28px">体检阶段（v4.31）为纯只读，未改任何代码；随后的 <b>v4.32</b> 按本报告「建议动作」修了
+<code>cloud_relay_v2.py</code> 的三处（stats/report 门禁 + 首页通话口径 + 首页上门口径对齐）。
+<b>配色与 <code>dashboard.html</code> 一行未动</b>（按你的要求保留原样）。改动尚未推送线上。</p>
+
+</div>
+</body>
+</html>

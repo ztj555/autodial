@@ -427,7 +427,10 @@ class TestDashboardHTML(unittest.TestCase):
     def test_new_stat_cards_exist(self):
         self.assertIn('id="stat-today-dials"', self.html)
         self.assertIn('id="stat-today-visits"', self.html)
-        self.assertIn('id="stat-active-names"', self.html)
+        # v4.27: 「最近活跃」(stat-active-names) 在 v4.24 首页改版时已按设计移除，
+        # 拆成「连接状态条 + 待处理提醒」两块；断言跟着换成当前真实存在的元素。
+        self.assertIn('id="conn-bar"', self.html)
+        self.assertIn('id="alert-bar"', self.html)
 
     # --- Phone management new fields ---
     def test_phone_table_new_columns(self):
