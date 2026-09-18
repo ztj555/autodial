@@ -43,7 +43,7 @@ DEFAULT_PORT = 35430
 PORT = DEFAULT_PORT
 # v4.23 (M-8): 服务版本单一来源——/health、/api/status 与面板"系统信息"统一显示，
 # 此前面板展示"设计系统 6.0"、接口硬编码 '4.10'，排查问题时易误判线上版本
-APP_VERSION = '4.33'
+APP_VERSION = '4.36'
 # Fix D4: Web 管理界面和 WebSocket 共用 PORT, WEB_PORT 已废弃
 
 # v4.26: 固定人员名册（唯一权威源）。
@@ -1949,7 +1949,183 @@ async def health_check_handler(path, request_headers):
             'recent_active': recent_active
         }, ensure_ascii=False).encode('utf-8')
         return (200, JSON_HDR, body)
-    
+
+    # ==================== 首页「时间选择」汇总（v4.35） ====================
+    # GET /api/v1/dashboard/summary?range=today|yesterday|week|month
+    # 首页那两个数字卡片原先只认「今天」（读 /api/status 的 today_dials/today_visits），
+    # 现在改成按区间现算，并把「按业务员」的明细一并返回，供点开卡片后的下钻弹窗使用。
+    # 归属口径与列表页严格一致，不另立一套：
+    #   · 拨号 → 归「手机主人」_OWNER_PIN_SQL（default_pin 优先，不是 last_pin，见 v4.29）
+    #   · 登记 → visits.pin（入库时已按 kefu_tel 反查成「接待顾问」，见 v4.29）
+    # 区间定义：今天/昨天 = 当天；近一周 = 含今天往前 7 天；本月 = 当月 1 号至今。
+    # 趋势粒度：今天/昨天按小时（24 桶），近一周/本月按天。
+    if path == '/api/v1/dashboard/summary':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        _qs = parse_qs(parsed.query)
+        rng = (_qs.get('range', ['today'])[0] or 'today').strip()
+        if rng not in ('today', 'yesterday', 'week', 'month'):
+            rng = 'today'
+
+        def _dash_sync():
+            base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            if rng == 'today':
+                d_from = d_to = base
+                label, by_hour = '今天', True
+            elif rng == 'yesterday':
+                d_from = d_to = base - timedelta(days=1)
+                label, by_hour = '昨天', True
+            elif rng == 'week':
+                d_from, d_to = base - timedelta(days=6), base
+                label, by_hour = '近一周', False
+            else:
+                d_from, d_to = base.replace(day=1), base
+                label, by_hour = '本月', False
+
+            start_ms = int(d_from.timestamp() * 1000)
+            end_ms = int((d_to + timedelta(days=1)).timestamp() * 1000)
+            ds = d_from.strftime('%Y-%m-%d')
+            de = d_to.strftime('%Y-%m-%d')
+            # 与列表页同一套日期表达式（列表用 COALESCE(visit_time, created_at)）
+            vexpr = "date(COALESCE(NULLIF(visit_time, ''), created_at))"
+            hexpr = "substr(COALESCE(NULLIF(visit_time, ''), created_at), 12, 2)"
+
+            out = {
+                'ok': True, 'range': rng, 'label': label,
+                'date_from': ds, 'date_to': de,
+                'granularity': 'hour' if by_hour else 'day',
+                'dials_total': 0, 'dials_connected': 0, 'dials_duration': 0,
+                'visits_total': 0, 'visits_unsynced': 0,
+                'dials_by_advisor': [], 'visits_by_advisor': [],
+                'visit_types': [], 'series': [],
+            }
+            conn = None
+            try:
+                conn = _connect_db()
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+
+                name_of = {}
+                for _r in c.execute('SELECT pin, name FROM advisor_names'):
+                    if _r['pin']:
+                        name_of[_r['pin']] = _r['name'] or ''
+
+                # ① 拨号：按「手机主人」聚合
+                rows = c.execute(
+                    "SELECT " + _OWNER_PIN_SQL + " AS owner_pin, "
+                    "COUNT(*) AS dials, "
+                    "COUNT(CASE WHEN cr.duration > 0 THEN 1 END) AS conn_n, "
+                    "COALESCE(SUM(cr.duration), 0) AS dur "
+                    "FROM call_records_raw cr LEFT JOIN phones p ON p.device_id = cr.device_id "
+                    "WHERE cr.dial_time >= ? AND cr.dial_time < ? "
+                    "GROUP BY owner_pin ORDER BY dials DESC",
+                    (start_ms, end_ms)).fetchall()
+                dial_items = []
+                unbound = None
+                for r in rows:
+                    op = (r['owner_pin'] or '').strip()
+                    nm = name_of.get(op) or ''
+                    if not nm:
+                        nm = op if op else '未绑定机主'
+                    item = {
+                        'pin': op, 'name': nm,
+                        'dials': r['dials'] or 0,
+                        'connected': r['conn_n'] or 0,
+                        'duration': r['dur'] or 0,
+                        'devices': [],
+                    }
+                    if not op:
+                        unbound = item
+                    dial_items.append(item)
+                if unbound is not None:
+                    # 没绑定机主的设备单独列出设备名，别让这部分量凭空消失
+                    for r in c.execute(
+                        "SELECT cr.device_id AS did, p.label AS label, p.device_model AS model, "
+                        "COUNT(*) AS n FROM call_records_raw cr "
+                        "LEFT JOIN phones p ON p.device_id = cr.device_id "
+                        "WHERE cr.dial_time >= ? AND cr.dial_time < ? "
+                        "AND COALESCE(" + _OWNER_PIN_SQL + ", '') = '' "
+                        "GROUP BY cr.device_id ORDER BY n DESC",
+                        (start_ms, end_ms)).fetchall():
+                        unbound['devices'].append({
+                            'device_id': r['did'], 'label': r['label'] or '',
+                            'model': r['model'] or '', 'dials': r['n'] or 0,
+                        })
+                    if unbound['devices']:
+                        unbound['name'] = '未绑定机主（%d 台）' % len(unbound['devices'])
+
+                out['dials_by_advisor'] = dial_items
+                out['dials_total'] = sum(x['dials'] for x in dial_items)
+                out['dials_connected'] = sum(x['connected'] for x in dial_items)
+                out['dials_duration'] = sum(x['duration'] for x in dial_items)
+
+                # ② 上门登记：按「接待顾问」聚合
+                vrows = c.execute(
+                    "SELECT pin, COUNT(*) AS n, "
+                    "COUNT(CASE WHEN crm_synced = 0 THEN 1 END) AS unsynced "
+                    "FROM visits WHERE " + vexpr + " >= ? AND " + vexpr + " <= ? "
+                    "GROUP BY pin ORDER BY n DESC", (ds, de)).fetchall()
+                v_items = []
+                for r in vrows:
+                    p_ = (r['pin'] or '').strip()
+                    v_items.append({
+                        'pin': p_, 'name': name_of.get(p_) or (p_ or '未绑定顾问'),
+                        'visits': r['n'] or 0, 'unsynced': r['unsynced'] or 0,
+                    })
+                out['visits_by_advisor'] = v_items
+                out['visits_total'] = sum(x['visits'] for x in v_items)
+                out['visits_unsynced'] = sum(x['unsynced'] for x in v_items)
+
+                # ③ 上门事由分布
+                out['visit_types'] = [
+                    {'type': r['t'] or '未填', 'count': r['n'] or 0}
+                    for r in c.execute(
+                        "SELECT COALESCE(NULLIF(visit_type, ''), '未填') AS t, COUNT(*) AS n "
+                        "FROM visits WHERE " + vexpr + " >= ? AND " + vexpr + " <= ? "
+                        "GROUP BY t ORDER BY n DESC", (ds, de)).fetchall()
+                ]
+
+                # ④ 趋势序列（今天/昨天按小时，近一周/本月按天）
+                if by_hour:
+                    buckets = [('%02d' % h, '%02d:00' % h) for h in range(24)]
+                    dial_q = ("SELECT strftime('%H', cr.dial_time / 1000, 'unixepoch', 'localtime') AS k, "
+                              "COUNT(*) AS n FROM call_records_raw cr "
+                              "WHERE cr.dial_time >= ? AND cr.dial_time < ? GROUP BY k")
+                    visit_q = ("SELECT " + hexpr + " AS k, COUNT(*) AS n FROM visits "
+                               "WHERE " + vexpr + " >= ? AND " + vexpr + " <= ? GROUP BY k")
+                else:
+                    buckets = [((d_from + timedelta(days=i)).strftime('%Y-%m-%d'),
+                                (d_from + timedelta(days=i)).strftime('%m-%d'))
+                               for i in range((d_to - d_from).days + 1)]
+                    dial_q = ("SELECT date(cr.dial_time / 1000, 'unixepoch', 'localtime') AS k, "
+                              "COUNT(*) AS n FROM call_records_raw cr "
+                              "WHERE cr.dial_time >= ? AND cr.dial_time < ? GROUP BY k")
+                    visit_q = ("SELECT " + vexpr + " AS k, COUNT(*) AS n FROM visits "
+                               "WHERE " + vexpr + " >= ? AND " + vexpr + " <= ? GROUP BY k")
+
+                dial_map, visit_map = {}, {}
+                for r in c.execute(dial_q, (start_ms, end_ms)).fetchall():
+                    dial_map[r['k']] = r['n'] or 0
+                for r in c.execute(visit_q, (ds, de)).fetchall():
+                    visit_map[r['k']] = r['n'] or 0
+
+                out['series'] = [{
+                    'key': k, 'label': lb,
+                    'dials': dial_map.get(k, 0),
+                    'visits': visit_map.get(k, 0),
+                } for k, lb in buckets]
+            except Exception as e:
+                log.error(f'DASHBOARD_SUMMARY error range={rng}: {e}')
+                out['ok'] = False
+                out['message'] = str(e)
+            finally:
+                if conn:
+                    conn.close()
+            return out
+
+        _summary = await _run_db(_dash_sync)
+        return (200, JSON_HDR, json.dumps(_summary, ensure_ascii=False).encode('utf-8'))
+
     # API: 客户端列表
     if path == '/api/clients':
         if not _check_admin(hdrs, parsed.query):

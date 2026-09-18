@@ -295,7 +295,7 @@
         .stat-card {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--r-lg); box-shadow: var(--shadow-card);
-            padding: 18px;
+            padding: 18px; position: relative;
             transition: transform .15s, box-shadow .15s;
         }
         .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
@@ -314,6 +314,74 @@
         .stat-value { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
         .stat-value-sm { font-size: 18px; line-height: 1.6; }
         .stat-sub { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+
+        /* ===== v4.35 首页时间选择 + 数字卡下钻 ===== */
+        .dash-range-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .range-tabs {
+            display: inline-flex; gap: 2px; padding: 3px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-sm); box-shadow: var(--shadow-card);
+        }
+        .range-tab {
+            border: 0; background: transparent; cursor: pointer; font-family: inherit;
+            font-size: 13px; font-weight: 600; color: var(--text-2);
+            padding: 6px 14px; border-radius: 7px; transition: background .15s, color .15s;
+        }
+        .range-tab:hover { color: var(--text); background: var(--icon-tile); }
+        .range-tab.active { background: var(--icon-tile); color: var(--primary); box-shadow: inset 0 0 0 1px var(--hero-border); }
+        .dash-range-hint { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+        .stat-card.is-drill { cursor: pointer; }
+        .stat-card.is-drill:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .stat-drill {
+            position: absolute; top: 16px; right: 16px;
+            font-size: 11px; font-weight: 600; color: var(--text-2);
+            display: inline-flex; align-items: center; gap: 1px;
+            opacity: .7; transition: opacity .15s, color .15s, transform .15s;
+        }
+        .stat-card.is-drill:hover .stat-drill { opacity: 1; color: var(--primary); transform: translateX(2px); }
+        /* 运维区的两张图表也做同款下钻（「其他模块同理」），复用同一套角标与弹窗 */
+        .card.drill-card { position: relative; cursor: pointer; }
+        .card.drill-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .card.drill-card:hover .stat-drill { opacity: 1; color: var(--primary); transform: translateX(2px); }
+        .stat-detail-sub { font-size: 12px; color: var(--text-2); margin: -10px 0 14px; }
+        .stat-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .stat-kpi { background: var(--input-bg); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 12px; }
+        .stat-kpi .k { font-size: 11.5px; color: var(--text-2); }
+        .stat-kpi .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+        .stat-kpi .v small { font-size: 12px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+        .stat-detail-chart { height: 148px; margin-bottom: 14px; }
+        .stat-detail-scroll { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-sm); }
+        .stat-detail-scroll table.data-table { border: 0; }
+        .stat-detail-scroll th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+        tr.drill-row { cursor: pointer; }
+        tr.drill-row:hover td { background: var(--icon-tile); }
+        .drill-bar { height: 6px; border-radius: 999px; background: var(--icon-tile); overflow: hidden; min-width: 56px; }
+        .drill-bar > i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+        .drill-types { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+        .drill-tag { font-size: 12px; color: var(--text-2); background: var(--input-bg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+        .drill-tag b { color: var(--text); font-variant-numeric: tabular-nums; }
+        .hint-line { font-size: 12px; color: var(--text-2); margin-bottom: 12px; }
+
+        /* ===== v4.36 下钻改为二级页（原为弹窗） ===== */
+        /* 顶栏返回按钮：只在二级页出现 */
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 4px;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text);
+            font-family: inherit; font-size: 12.5px; font-weight: 600;
+            padding: 6px 13px 6px 9px; border-radius: var(--r-md);
+            cursor: pointer; white-space: nowrap;
+            transition: background .15s, border-color .15s, color .15s;
+        }
+        .btn-back:hover { background: var(--icon-tile); border-color: var(--primary); color: var(--primary); }
+        .btn-back svg { width: 15px; height: 15px; }
+        .btn-back[hidden] { display: none !important; }
+        /* 二级页把弹窗里挤着的尺寸放开：表格跟页面滚、图表加高 */
+        .page-detail .stat-detail-scroll { max-height: none; overflow: visible; }
+        .page-detail .stat-detail-chart { height: 230px; }
+        .page-detail .stat-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+        .page-detail .stat-detail-sub { margin: 0 0 16px; }
+        .page-detail .stat-detail-scroll th { position: static; }
+        .page-detail .form-actions { margin-top: 18px; }
 
         /* ===== 按钮（手机端 primaryBtn 渐变 + outline/chip） ===== */
         .btn {
@@ -663,6 +731,11 @@
             </button>
             <h1 class="topbar-title" id="topbar-title" data-page-node-id="ZIWAyVnhcz1uKLNdRSWyos">首页总览</h1>
             <div class="topbar-right" data-page-node-id="g5MGkXt8WGB9WEOTW7tjXC">
+                <!-- v4.36: 二级明细页的返回（其他页面 hidden） -->
+                <button class="btn-back" id="detail-back" onclick="backFromDetail()" title="返回首页总览（Esc）" hidden data-page-node-id="bk01GoBackHomePage">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+                    返回
+                </button>
                 <button class="auto-badge" id="refresh-label" onclick="toggleAutoRefresh()" title="点击暂停 / 恢复自动刷新（填写表格时自动跳过刷新）" data-page-node-id="YajXPqBBTPHrofBa1wJTJf">自动刷新 · 每15秒</button>
                 <span class="topbar-muted" data-page-node-id="LllnYvl7f0z3u0zGD5jgnd">上次刷新 <span id="last-refresh" data-page-node-id="KQqD5VAMLkU50FgrLE4u57">-</span></span>
                 <button class="icon-btn" onclick="refreshAll()" title="立即刷新" data-page-node-id="OLqeWrcuBVqxOix24qnU4R">
@@ -704,16 +777,28 @@
                     </div>
                     <div class="conn-offline-list" id="conn-offline-list" data-page-node-id="FP1pCjGPBgmGaDef9d1ATg"></div>
                 </div>
+                <!-- v4.35: 首页时间选择——下方所有「按时间统计」的模块共用这一个区间 -->
+                <div class="dash-range-row">
+                    <div class="range-tabs" id="dash-range-tabs" role="tablist" aria-label="首页统计时间范围">
+                        <button type="button" class="range-tab active" data-range="today" onclick="setDashRange('today')">今天</button>
+                        <button type="button" class="range-tab" data-range="yesterday" onclick="setDashRange('yesterday')">昨天</button>
+                        <button type="button" class="range-tab" data-range="week" onclick="setDashRange('week')">近一周</button>
+                        <button type="button" class="range-tab" data-range="month" onclick="setDashRange('month')">本月</button>
+                    </div>
+                    <span class="dash-range-hint" id="dash-range-hint"></span>
+                </div>
                 <div class="stats-grid" data-page-node-id="THXRn0P2tDTeNNaw0GOn5V">
-                    <div class="stat-card" data-page-node-id="vPBurI6VvvGFTOw74VJeG7">
-                        <div class="stat-head" data-page-node-id="dkiKBVsil4R0FMCJZzIqYU"><div class="stat-ico" data-page-node-id="GHAangA4nUEkjdnbgHH6vr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kBxNRKClGw1o5lRtPTbjZ7"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="LrP8aFmLWyvcA8icwYZXhX"/></svg></div><div class="stat-label" data-page-node-id="N7FK8hT9DFrqMGazWT0p0D">今日拨号数</div></div>
+                    <div class="stat-card is-drill" data-page-node-id="vPBurI6VvvGFTOw74VJeG7" onclick="openStatDetail('dials')" tabindex="0" role="button" onkeydown="statCardKey(event,'dials')" aria-label="按业务员查看拨号数明细">
+                        <span class="stat-drill">查看明细<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 6l6 6-6 6"/></svg></span>
+                        <div class="stat-head" data-page-node-id="dkiKBVsil4R0FMCJZzIqYU"><div class="stat-ico" data-page-node-id="GHAangA4nUEkjdnbgHH6vr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="kBxNRKClGw1o5lRtPTbjZ7"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" data-page-node-id="LrP8aFmLWyvcA8icwYZXhX"/></svg></div><div class="stat-label" id="stat-dials-label" data-page-node-id="N7FK8hT9DFrqMGazWT0p0D">今日拨号数</div></div>
                         <div class="stat-value" id="stat-today-dials" data-page-node-id="OjULuH9pSn1ryNdTu1FgWf">0</div>
                         <div class="stat-sub" data-page-node-id="cWmZA2Hl937SgvEDZEHAfn">来自手机端上报</div>
                     </div>
-                    <div class="stat-card" data-page-node-id="9x0HCGXFrd2ame9bVpeD4b">
-                        <div class="stat-head" data-page-node-id="mzrvF6KaPoZ0ulngDnb1Wo"><div class="stat-ico tone-purple" data-page-node-id="xUOmxpi5xFUoQSooBDlttm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5fGkZoriYBkaKH87ZZrzdp"><path d="M4 10.5L12 4l8 6.5" data-page-node-id="SB443aermqQo3iyOmJeRXE"/><path d="M6 9.5V20h12V9.5" data-page-node-id="uS5lxC2Nw9t79kh6QZWxHm"/></svg></div><div class="stat-label" data-page-node-id="VzzwfWoSpduQJTIQkniTqU">今日登记数</div></div>
+                    <div class="stat-card is-drill" data-page-node-id="9x0HCGXFrd2ame9bVpeD4b" onclick="openStatDetail('visits')" tabindex="0" role="button" onkeydown="statCardKey(event,'visits')" aria-label="按业务员查看登记数明细">
+                        <span class="stat-drill">查看明细<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 6l6 6-6 6"/></svg></span>
+                        <div class="stat-head" data-page-node-id="mzrvF6KaPoZ0ulngDnb1Wo"><div class="stat-ico tone-purple" data-page-node-id="xUOmxpi5xFUoQSooBDlttm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="5fGkZoriYBkaKH87ZZrzdp"><path d="M4 10.5L12 4l8 6.5" data-page-node-id="SB443aermqQo3iyOmJeRXE"/><path d="M6 9.5V20h12V9.5" data-page-node-id="uS5lxC2Nw9t79kh6QZWxHm"/></svg></div><div class="stat-label" id="stat-visits-label" data-page-node-id="VzzwfWoSpduQJTIQkniTqU">今日登记数</div></div>
                         <div class="stat-value" id="stat-today-visits" data-page-node-id="rjDiDQ8ApqdHn9bLAZUsPn">0</div>
-                        <div class="stat-sub" data-page-node-id="PPiQl6WebOLgUe6rNUufLX">上门登记记录</div>
+                        <div class="stat-sub" id="stat-visits-sub" data-page-node-id="PPiQl6WebOLgUe6rNUufLX">上门登记记录</div>
                     </div>
                 </div>
                 <!-- v4.24: 待处理提醒——有内容才出现，点击直达对应页 -->
@@ -728,9 +813,9 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="M0feBjPe7iT7VOeJvB0Tgh"><path d="M12 16V5" data-page-node-id="5EHawSp9o6OXTeRTtS2rjq"/><path d="M7 9l5-5 5 5" data-page-node-id="ToAvqDBmDX40n9kY3fbyWJ"/><path d="M5 20h14" data-page-node-id="XprdacnUzgq3yvF9dnUiXb"/></svg>
                         批量导入
                     </button>
-                    <button class="quick-btn" onclick="quickExportToday()" title="导出今天的上门登记记录（CSV）" data-page-node-id="CL9mhuB2QZyEc5FCu9vQ6p">
+                    <button class="quick-btn" onclick="quickExportToday()" id="quick-export-btn" title="导出当前时间区间内的上门登记记录（CSV）" data-page-node-id="CL9mhuB2QZyEc5FCu9vQ6p">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="mbJzI1zyn1VrvWeCZPYeZj"><path d="M12 4v11" data-page-node-id="tmndKO5FRtBnaUim4Z4gOp"/><path d="M7 11l5 5 5-5" data-page-node-id="S9RSDr36ISFT4RzGKNKOqQ"/><path d="M5 20h14" data-page-node-id="DdSyUVBhoY3q6bBj9LrB5m"/></svg>
-                        导出今日登记
+                        <span id="quick-export-label">导出今日登记</span>
                     </button>
                 </div>
                 <div class="card" data-page-node-id="ylFGoc8TLNRhcOJ8ier7jV">
@@ -753,15 +838,45 @@
                             <span data-page-node-id="bxERdMnuenUPKnWZUWnm3M">服务版本<b id="ops-version" data-page-node-id="zQMlEsgi44NCUgnZCKrKnl">-</b></span>
                         </div>
                         <div class="card-row" data-page-node-id="qWOywhto5q1jkQUzcK3UGN">
-                            <div class="card" data-page-node-id="r0xAOIg4klNzGVpfvcrJUo">
+                            <div class="card drill-card" onclick="openStatDetail('conn')" tabindex="0" role="button" onkeydown="statCardKey(event,'conn')" aria-label="查看连接数趋势明细" data-page-node-id="r0xAOIg4klNzGVpfvcrJUo">
+                                <span class="stat-drill">查看明细<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 6l6 6-6 6"/></svg></span>
                                 <div class="card-title" data-page-node-id="rBAEoTWV7BsSDPuA9K3kfS"><div class="title-ico" data-page-node-id="7teGIwrajLsNj5t2fNJ3EG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="w0mn1MPLijlbvvx0zCJhjs"><path d="M4 4v16h16" data-page-node-id="PN2YkGscvotNHrUhNVTSQL"/><path d="M7 14l3-4 3 2.5 4.5-5.5" data-page-node-id="z9QPXa99uy7yU3QLcvnaJb"/></svg></div>连接数趋势（最近4小时）</div>
                                 <div class="chart-wrap" data-page-node-id="2E5lVpdkGIfSHs3MeLjeJW"><canvas id="conn-chart" data-page-node-id="ltEvlsRERCWOhw9gay9VOA"></canvas></div>
                             </div>
-                            <div class="card" data-page-node-id="T3BFC1gF4CCxvEe4cl6KzN">
+                            <div class="card drill-card" onclick="openStatDetail('msgs')" tabindex="0" role="button" onkeydown="statCardKey(event,'msgs')" aria-label="查看消息类型分布明细" data-page-node-id="T3BFC1gF4CCxvEe4cl6KzN">
+                                <span class="stat-drill">查看明细<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;"><path d="M9 6l6 6-6 6"/></svg></span>
                                 <div class="card-title" data-page-node-id="05g2RIePYmAh5wkbqgyHVm"><div class="title-ico" data-page-node-id="URquAtQ9nbXceKXf9oCewH"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="XZR4vGYDS1o2hnUBwKXPPi"><circle cx="12" cy="12" r="8.5" data-page-node-id="NG99us82F6CiX7XGjFfIRk"/><path d="M12 3.5a8.5 8.5 0 017.36 12.79L12 12z" data-page-node-id="So0VMeBPvknWIs9N30BBB7"/></svg></div>消息类型分布</div>
                                 <div class="chart-wrap-sm" data-page-node-id="pdaKo23GAOfcxBSBy3LBLL"><canvas id="msg-chart" data-page-node-id="jp3mIavrJ9T9GUV3Dr3yet"></canvas></div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== v4.36 首页数字卡下钻：二级明细页 ==================== -->
+            <!-- 原先是弹窗（遮罩 + 320px 内滚动），现改为整页切换，顶栏右上角出现「返回」。
+                 内容 id 全部沿用原来的 stat-detail-*，所以渲染逻辑无需改动 -->
+            <div id="page-dash-detail" class="page page-detail">
+                <!-- 明细页里也能直接切时间区间，不必退回首页再点 -->
+                <div class="dash-range-row">
+                    <div class="range-tabs" id="dash-range-tabs-detail" role="tablist" aria-label="明细统计时间范围">
+                        <button type="button" class="range-tab active" data-range="today" onclick="setDashRange('today')">今天</button>
+                        <button type="button" class="range-tab" data-range="yesterday" onclick="setDashRange('yesterday')">昨天</button>
+                        <button type="button" class="range-tab" data-range="week" onclick="setDashRange('week')">近一周</button>
+                        <button type="button" class="range-tab" data-range="month" onclick="setDashRange('month')">本月</button>
+                    </div>
+                    <span class="dash-range-hint" id="dash-range-hint-detail"></span>
+                </div>
+                <div class="card">
+                    <div class="stat-detail-sub" id="stat-detail-sub"></div>
+                    <div class="stat-kpis" id="stat-detail-kpis"></div>
+                    <div id="stat-detail-types"></div>
+                    <div class="hint-line" id="stat-detail-chart-cap"></div>
+                    <div class="stat-detail-chart" id="stat-detail-chart-wrap"><canvas id="stat-detail-canvas"></canvas></div>
+                    <div class="hint-line" id="stat-detail-hint"></div>
+                    <div id="stat-detail-body"></div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" id="stat-detail-jump" onclick="jumpFromStatDetail('')">查看完整列表</button>
                     </div>
                 </div>
             </div>
@@ -1033,6 +1148,8 @@
                 保存</button></div>
         </div>
     </div>
+
+    <!-- v4.36: 原「首页数字卡下钻弹窗」已迁至二级明细页 —— 见 #page-dash-detail -->
 
     <!-- ==================== 批量导入弹窗 ==================== -->
     <div class="modal-overlay z-top" id="import-modal" data-page-node-id="rFQaFeZIFmwoutdxjvg03n">
@@ -1502,6 +1619,11 @@
                     return;
                 }
             }
+            // v4.36: 没有弹窗要关时，二级明细页按 Esc = 返回首页（跟点右上角「返回」一致）
+            if (currentPageId() === 'dash-detail') {
+                e.preventDefault();
+                backFromDetail();
+            }
         });
 
         // ==================== 侧边栏（移动端） ====================
@@ -1522,12 +1644,16 @@
         // ==================== Navigation ====================
         // v4.21.2 (13): hash 路由——F5/收藏/分享保留当前页（#/visits 等），
         // 原先无路由 F5 必回首页，高频页每次都要重新导航。
-        const PAGE_IDS = ['dashboard', 'phones', 'calls', 'visits', 'pins', 'admin-accounts', 'logs', 'settings'];
+        // v4.36: 增加二级页 dash-detail（下钻明细），hash 形如 #/dash-detail/dials
+        const PAGE_IDS = ['dashboard', 'dash-detail', 'phones', 'calls', 'visits', 'pins', 'admin-accounts', 'logs', 'settings'];
+        const DETAIL_KINDS = ['dials', 'visits', 'conn', 'msgs'];
+        let _navFromPop = false;   // 浏览器后退触发的切页不再 pushState，否则会往回堆历史
 
         // v4.27: 页面数据分派抽成函数 —— showPage 与「会话过期后重新登录恢复现场」共用，
         // 避免同一条 if-else 链在两处各写一份、以后加页面时只改一处。
         function loadPageData(id) {
             if (id === 'dashboard') loadDashboard();
+            else if (id === 'dash-detail') loadDashDetailPage();
             else if (id === 'phones') loadPhones();
             else if (id === 'calls') { loadCallDeviceOptions(); loadCalls(); }
             else if (id === 'visits') { loadVisits(); if (!_timerRefresh) loadPinDropdown(); setTimeout(renderVisitChart, 300); }
@@ -1537,11 +1663,44 @@
             else if (id === 'settings') refreshSettingsInfo();
         }
 
+        // v4.36: 解析 #/dash-detail/dials 这类 hash（第二段是明细类型）
+        function parseHash() {
+            const raw = (location.hash || '').replace(/^#\/?/, '');
+            const parts = raw.split('/').filter(function(s) { return !!s; });
+            return { id: parts[0] || '', kind: parts[1] || '' };
+        }
+        function hashFor(id) {
+            if (id === 'dash-detail') return '#/dash-detail/' + (_statDetailKind || 'dials');
+            return '#/' + id;
+        }
+        function currentPageId() {
+            const p = document.querySelector('.page.active');
+            return p ? String(p.id).replace(/^page-/, '') : '';
+        }
+        // 返回按钮只在二级明细页出现，切到其他页自动隐藏
+        function updateDetailBack(id) {
+            const btn = document.getElementById('detail-back');
+            if (!btn) return;
+            btn.hidden = ((id || currentPageId()) !== 'dash-detail');
+        }
+        function backFromDetail() { showPage('dashboard'); }
+
+        // 浏览器后退/前进：把 hash 解析回页面（二级页带回原本的明细类型）
+        window.addEventListener('popstate', function() {
+            const p = parseHash();
+            if (!p.id || p.id === currentPageId()) return;
+            if (PAGE_IDS.indexOf(p.id) < 0) return;
+            if (p.id === 'dash-detail' && DETAIL_KINDS.indexOf(p.kind) >= 0) _statDetailKind = p.kind;
+            _navFromPop = true;
+            showPage(p.id);
+            _navFromPop = false;
+        });
+
         // v4.27: 按当前 hash 刷新当前页数据。供「面板内重新登录」用 —— 不整页重载就能恢复数据，
         // 当前页与筛选条件都留着（原来靠 location.reload()，页码/筛选全丢）。
         function reloadActivePage() {
-            const h = (location.hash || '').replace(/^#\/?/, '');
-            loadPageData(PAGE_IDS.indexOf(h) >= 0 ? h : 'dashboard');
+            const p = parseHash();
+            loadPageData(PAGE_IDS.indexOf(p.id) >= 0 ? p.id : 'dashboard');
         }
 
         function showPage(id) {
@@ -1549,18 +1708,28 @@
             document.querySelectorAll('.side-item').forEach(function(b) { b.classList.remove('active'); });
             const page = document.getElementById('page-' + id);
             if (page) page.classList.add('active');
+            // 二级页在侧边栏没有入口，让「首页总览」保持高亮，免得整列都没选中
+            const hi = (id === 'dash-detail') ? 'dashboard' : id;
             document.querySelectorAll('.side-item').forEach(function(b) {
-                if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("showPage('" + id + "')")) {
+                if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("showPage('" + hi + "')")) {
                     b.classList.add('active');
                 }
             });
-            const titles = { dashboard: '首页总览', phones: '手机管理', calls: '通话记录', visits: '上门登记', pins: '人员管理', 'admin-accounts': '管理账号', logs: '系统日志', settings: '设置' };
+            const titles = { dashboard: '首页总览', 'dash-detail': '统计明细', phones: '手机管理', calls: '通话记录', visits: '上门登记', pins: '人员管理', 'admin-accounts': '管理账号', logs: '系统日志', settings: '设置' };
             const tt = document.getElementById('topbar-title');
             if (tt) tt.textContent = titles[id] || '首页总览';
 
-            if (('#/' + id) !== location.hash) {
-                try { history.replaceState(null, '', '#/' + id); } catch (e) { location.hash = '/' + id; }
+            // v4.36: 进二级页用 pushState（浏览器后退键 = 返回首页），一级页之间仍用 replaceState
+            const want = hashFor(id);
+            if (want !== location.hash) {
+                try {
+                    if (id === 'dash-detail' && !_navFromPop) history.pushState(null, '', want);
+                    else history.replaceState(null, '', want);
+                } catch (e) { location.hash = want.replace(/^#/, ''); }
             }
+            // 离开明细页销毁图表实例（canvas 是固定那一个，不销毁会残留旧数据）
+            if (id !== 'dash-detail' && _statDetailChart) { _statDetailChart.destroy(); _statDetailChart = null; }
+            updateDetailBack(id);
             // v4.21.2 (13): 切页时重置"上次刷新"提示，避免"已跳过"残留到别的页面
             const lr = document.getElementById('last-refresh');
             if (lr) lr.textContent = '-';
@@ -2109,11 +2278,14 @@
             setTimeout(showImportModal, 150);
         }
         function quickExportToday() {
-            const t = todayISO();
+            // v4.35: 跟随首页时间选择（原来写死今天，切了区间后按钮语义会对不上）
+            const d = _dashSummary || {};
             const f = document.getElementById('visit-filter-date-from');
             const e = document.getElementById('visit-filter-date-to');
-            if (f) f.value = t;
-            if (e) e.value = t;
+            const from = d.date_from || todayISO();
+            const to = d.date_to || from;
+            if (f) f.value = from;
+            if (e) e.value = to;
             showPage('visits');
             exportCSV();
         }
@@ -2122,6 +2294,459 @@
             const s = document.getElementById('visit-filter-source');
             if (s) s.value = 'unsynced';
             setTimeout(onVisitFilterChange, 80);
+        }
+
+        // ==================== v4.35 首页时间选择 + 数字卡下钻 ====================
+        // 首页两个数字卡原先各自只认「今天」（直接读 /api/status 的 today_dials/today_visits），
+        // 现在统一由 /api/v1/dashboard/summary 按区间现算，并把「按业务员」明细一起带回来。
+        // 口径一律不在前端重算 —— 服务端 SQL 表达式与列表页同一套，避免首页/列表页数字打架。
+        const DASH_RANGES = ['today', 'yesterday', 'week', 'month'];
+        const DASH_RANGE_LABEL = { today: '今日', yesterday: '昨日', week: '近一周', month: '本月' };
+        const DASH_RANGE_TEXT = { today: '今天', yesterday: '昨天', week: '近一周', month: '本月' };
+        let _dashRange = 'today';
+        let _dashSummary = null;
+        let _statDetailChart = null;
+        let _statDetailKind = '';
+
+        function initDashRange() {
+            let saved = '';
+            try { saved = localStorage.getItem('autodial_dash_range') || ''; } catch (e) {}
+            if (DASH_RANGES.indexOf(saved) >= 0) _dashRange = saved;
+            syncDashRangeUI();
+        }
+
+        function setDashRange(r) {
+            if (DASH_RANGES.indexOf(r) < 0 || r === _dashRange) return;
+            _dashRange = r;
+            try { localStorage.setItem('autodial_dash_range', r); } catch (e) {}
+            syncDashRangeUI();
+            loadDashSummary();   // 只刷这两个卡片；在线状态/连接记录与时间区间无关，不必整体重载
+        }
+
+        // 只改界面文案。数字由 loadDashSummary 填，避免这里和服务端各算一套
+        function syncDashRangeUI() {
+            // v4.36: 首页与二级明细页各有一排区间 tab，两排都要同步高亮
+            ['dash-range-tabs', 'dash-range-tabs-detail'].forEach(function(tid) {
+                const tabs = document.getElementById(tid);
+                if (!tabs) return;
+                const btns = tabs.querySelectorAll('.range-tab');
+                for (let i = 0; i < btns.length; i++) {
+                    btns[i].classList.toggle('active', btns[i].getAttribute('data-range') === _dashRange);
+                }
+            });
+            const pre = DASH_RANGE_LABEL[_dashRange] || '今日';
+            const dl = document.getElementById('stat-dials-label');
+            const vl = document.getElementById('stat-visits-label');
+            if (dl) dl.textContent = pre + '拨号数';
+            if (vl) vl.textContent = pre + '登记数';
+            const qe = document.getElementById('quick-export-label');
+            if (qe) qe.textContent = '导出' + (DASH_RANGE_TEXT[_dashRange] || '今天') + '登记';
+        }
+
+        function fmtDurShort(sec) {
+            sec = Math.round(Number(sec) || 0);
+            if (sec <= 0) return '0';
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+            if (h > 0) return h + '时' + m + '分';
+            if (m > 0) return m + '分' + s + '秒';
+            return s + '秒';
+        }
+
+        function dashPeriodText(d) {
+            d = d || _dashSummary || {};
+            if (!d.date_from) return '';
+            return d.date_from === d.date_to ? d.date_from : (d.date_from + ' ~ ' + d.date_to);
+        }
+
+        async function loadDashSummary() {
+            const d = await apiGet('/api/v1/dashboard/summary?range=' + encodeURIComponent(_dashRange));
+            const hint = document.getElementById('dash-range-hint');
+            if (!d || !d.ok) {
+                if (hint) hint.textContent = '统计加载失败';
+                return;
+            }
+            _dashSummary = d;
+            const de = document.getElementById('stat-today-dials');
+            const ve = document.getElementById('stat-today-visits');
+            if (de) de.textContent = d.dials_total || 0;
+            if (ve) ve.textContent = d.visits_total || 0;
+            const vs = document.getElementById('stat-visits-sub');
+            if (vs) vs.textContent = (d.visits_unsynced > 0)
+                ? ('上门登记记录 · 待同步 ' + d.visits_unsynced + ' 条')
+                : '上门登记记录';
+            if (hint) hint.textContent = (d.label || '') + ' · ' + dashPeriodText(d);
+            const hintD = document.getElementById('dash-range-hint-detail');
+            if (hintD) hintD.textContent = (d.label || '') + ' · ' + dashPeriodText(d);
+            // v4.36: 人在二级明细页时切区间，明细内容要跟着走（运维类下钻与时间区间无关，不参与）
+            if (currentPageId() === 'dash-detail' && (_statDetailKind === 'dials' || _statDetailKind === 'visits')) {
+                renderStatDetail();
+                renderStatDetailChart();
+            }
+        }
+
+        function statCardKey(ev, kind) {
+            if (ev && (ev.key === 'Enter' || ev.key === ' ')) {
+                ev.preventDefault();
+                openStatDetail(kind);
+            }
+        }
+
+        // v4.36: 明细数据按类型备齐 —— 业务类要区间汇总，运维类要实时的连接/消息缓存
+        async function ensureDetailData(kind) {
+            if (kind === 'dials' || kind === 'visits') {
+                if (!_dashSummary) await loadDashSummary();
+                return !!(_dashSummary && _dashSummary.ok);
+            }
+            if (!_lastHistory || !_lastHistory.length) {
+                const h = await apiGet('/api/history');
+                if (h && h.history) _lastHistory = h.history;
+            }
+            if (!_lastByType) {
+                const s2 = await apiGet('/api/stats');
+                if (s2 && s2.by_type) _lastByType = s2.by_type;
+            }
+            return true;
+        }
+
+        // v4.36: 二级明细页的入口（loadPageData 分派到这里）。数据没备齐先拉，再渲染
+        async function loadDashDetailPage() {
+            if (DETAIL_KINDS.indexOf(_statDetailKind) < 0) _statDetailKind = 'dials';
+            const kind = _statDetailKind;
+            const ok = await ensureDetailData(kind);
+            // 拉数据期间用户可能已经切走（或又点了别的卡片），此时别再往这页写
+            if (currentPageId() !== 'dash-detail' || _statDetailKind !== kind) return;
+            if (!ok) {
+                toast('统计数据还没准备好，稍后再试', 'error');
+                showPage('dashboard');
+                return;
+            }
+            renderStatDetail();
+            // 页面刚切出来时 canvas 可能还没量到尺寸，等一帧再画（否则图表空白）
+            setTimeout(renderStatDetailChart, 30);
+        }
+
+        // 点卡片 → 切到二级明细页（数据由 loadDashDetailPage 负责备齐）
+        function openStatDetail(kind) {
+            if (DETAIL_KINDS.indexOf(kind) < 0) return;
+            _statDetailKind = kind;
+            showPage('dash-detail');
+        }
+
+        // v4.36: 弹窗没了，这个函数保留为「返回首页」的别名（旧缓存页面可能还在调用）
+        function closeStatDetail() {
+            if (currentPageId() === 'dash-detail') backFromDetail();
+        }
+
+        function kpiCard(k, v, unit) {
+            return '<div class="stat-kpi"><div class="k">' + esc(k) + '</div><div class="v">' + esc(String(v)) +
+                (unit ? '<small>' + esc(unit) + '</small>' : '') + '</div></div>';
+        }
+
+        // v4.36: 明细页改版后标题挂在顶栏（原来那个弹窗内的 h3 已随弹窗移除）
+        function setDetailTitle(t) {
+            const a = document.getElementById('stat-detail-title');
+            if (a) a.textContent = t;
+            const b = document.getElementById('topbar-title');
+            if (b) b.textContent = t;
+        }
+
+        function renderStatDetail() {
+            if (_statDetailKind === 'conn' || _statDetailKind === 'msgs') return renderOpsDetail();
+            const d = _dashSummary || {};
+            const isDials = _statDetailKind === 'dials';
+            const pre = DASH_RANGE_LABEL[d.range] || '今日';
+            const setTxt = function(id, t) { const e = document.getElementById(id); if (e) e.textContent = t; };
+            setDetailTitle(pre + (isDials ? '拨号数' : '登记数') + ' · 按业务员');
+            setTxt('stat-detail-sub', '统计区间 ' + dashPeriodText(d) + '（' + (d.label || '') + '，按' +
+                (d.granularity === 'hour' ? '小时' : '天') + '归集）');
+
+            const kpis = document.getElementById('stat-detail-kpis');
+            const body = document.getElementById('stat-detail-body');
+            const types = document.getElementById('stat-detail-types');
+            const hint = document.getElementById('stat-detail-hint');
+            const jump = document.getElementById('stat-detail-jump');
+            const total = isDials ? (d.dials_total || 0) : (d.visits_total || 0);
+            const rows = (isDials ? (d.dials_by_advisor || []) : (d.visits_by_advisor || [])).slice();
+            rows.sort(function(a, b) { return (isDials ? b.dials - a.dials : b.visits - a.visits); });
+
+            if (kpis) {
+                if (isDials) {
+                    const conn = d.dials_connected || 0;
+                    kpis.innerHTML = kpiCard('拨号总数', total, '次') + kpiCard('接通数', conn, '次') +
+                        kpiCard('接通率', total > 0 ? Math.round(conn / total * 100) : 0, '%') +
+                        kpiCard('通话总时长', fmtDurShort(d.dials_duration), '');
+                } else {
+                    const ppl = rows.length;
+                    kpis.innerHTML = kpiCard('登记总数', total, '条') + kpiCard('待同步 CRM', d.visits_unsynced || 0, '条') +
+                        kpiCard('参与业务员', ppl, '人') +
+                        kpiCard('人均登记', ppl > 0 ? (Math.round(total / ppl * 10) / 10) : 0, '条');
+                }
+            }
+            if (types) {
+                const vt = d.visit_types || [];
+                types.innerHTML = (!isDials && vt.length)
+                    ? '<div class="drill-types">' + vt.map(function(t) {
+                        return '<span class="drill-tag">' + esc(t.type) + ' <b>' + t.count + '</b></span>';
+                      }).join('') + '</div>'
+                    : '';
+            }
+
+            if (!body) { if (jump) jump.textContent = '查看完整列表'; return; }
+            if (!rows.length) {
+                body.innerHTML = '<div class="empty-state" style="padding:28px;">这个区间里没有' +
+                    (isDials ? '拨号' : '上门登记') + '记录</div>';
+                if (hint) hint.textContent = '';
+                if (jump) jump.textContent = isDials ? '在通话记录页查看' : '在上门登记页查看';
+                return;
+            }
+
+            const maxN = isDials ? rows[0].dials : rows[0].visits;
+            let html = '<div class="stat-detail-scroll"><table class="data-table"><thead><tr>' +
+                '<th>业务员</th><th style="text-align:right;">' + (isDials ? '拨号数' : '登记数') + '</th>' +
+                (isDials
+                    ? '<th style="text-align:right;">接通</th><th style="text-align:right;">接通率</th><th style="text-align:right;">时长</th>'
+                    : '<th style="text-align:right;">待同步</th>') +
+                '<th style="width:130px;">占比</th></tr></thead><tbody>';
+
+            rows.forEach(function(r) {
+                const n = isDials ? r.dials : r.visits;
+                const pct = total > 0 ? (n / total * 100) : 0;
+                const barW = maxN > 0 ? (n / maxN * 100) : 0;
+                const nameLine = '<strong>' + esc(r.name || r.pin || '未知') + '</strong>' +
+                    (r.pin && r.name && r.name !== r.pin
+                        ? ' <span class="text-muted" style="font-size:11px;">' + esc(r.pin) + '</span>' : '');
+                const devLine = (r.devices && r.devices.length)
+                    ? '<div style="font-size:11px;color:var(--text-2);margin-top:2px;">' +
+                      esc(r.devices.map(function(x) { return (x.label || x.device_id) + ' ' + x.dials + '次'; }).join('、')) +
+                      '</div>'
+                    : '';
+                html += '<tr class="drill-row" data-pin="' + escA(r.pin || '') + '" ' +
+                    'onclick="jumpFromStatDetail(this.getAttribute(\'data-pin\'))" title="点击查看该业务员的完整列表">' +
+                    '<td>' + nameLine + devLine + '</td>' +
+                    '<td style="text-align:right;"><strong>' + n + '</strong></td>' +
+                    (isDials
+                        ? '<td style="text-align:right;">' + (r.connected || 0) + '</td>' +
+                          '<td style="text-align:right;">' + (r.dials > 0 ? Math.round(r.connected / r.dials * 100) : 0) + '%</td>' +
+                          '<td style="text-align:right;">' + fmtDurShort(r.duration) + '</td>'
+                        : '<td style="text-align:right;">' + (r.unsynced
+                            ? '<span style="color:var(--orange);font-weight:600;">' + r.unsynced + '</span>' : '0') + '</td>') +
+                    '<td><div class="drill-bar"><i style="width:' + barW.toFixed(1) + '%;"></i></div>' +
+                    '<span class="text-muted" style="font-size:11px;">' + pct.toFixed(1) + '%</span></td></tr>';
+            });
+
+            html += '<tr style="background:var(--input-bg);font-weight:700;"><td>合计</td>' +
+                '<td style="text-align:right;">' + total + '</td>' +
+                (isDials
+                    ? '<td style="text-align:right;">' + (d.dials_connected || 0) + '</td>' +
+                      '<td style="text-align:right;">' + (total > 0 ? Math.round(d.dials_connected / total * 100) : 0) + '%</td>' +
+                      '<td style="text-align:right;">' + fmtDurShort(d.dials_duration) + '</td>'
+                    : '<td style="text-align:right;">' + (d.visits_unsynced || 0) + '</td>') +
+                '<td style="font-size:11px;color:var(--text-2);">100%</td></tr>';
+            html += '</tbody></table></div>';
+            body.innerHTML = html;
+
+            if (hint) hint.textContent = '点表格里的业务员，可跳到对应列表页并按该顾问筛选。';
+            if (jump) jump.textContent = isDials ? '在通话记录页查看' : '在上门登记页查看';
+        }
+
+        // 运维类下钻：连接数趋势 / 消息类型分布。
+        // 这两块与首页时间区间无关（服务端只保留最近 4 小时 / 本次进程累计），所以不跟着 tab 变。
+        function renderOpsDetail() {
+            const setTxt = function(id, t) { const e = document.getElementById(id); if (e) e.textContent = t; };
+            const kpis = document.getElementById('stat-detail-kpis');
+            const body = document.getElementById('stat-detail-body');
+            const types = document.getElementById('stat-detail-types');
+            const hint = document.getElementById('stat-detail-hint');
+            const jump = document.getElementById('stat-detail-jump');
+            if (types) types.innerHTML = '';
+
+            if (_statDetailKind === 'conn') {
+                const hist = (_lastHistory || []);
+                const peaks = hist.reduce(function(a, p) {
+                    return { count: Math.max(a.count, p.count || 0), pcs: Math.max(a.pcs, p.pcs || 0), phones: Math.max(a.phones, p.phones || 0) };
+                }, { count: 0, pcs: 0, phones: 0 });
+                const cur = hist.length ? (hist[hist.length - 1].count || 0) : 0;
+                const buckets = hist.filter(function(p) { return (p.count || 0) > 0; }).length;
+                setDetailTitle('连接数趋势 · 明细（最近 4 小时）');
+                setTxt('stat-detail-sub', '按 5 分钟一个采样点，服务端只保留最近 4 小时。当前连接数以右下角实时值为准。');
+                if (kpis) {
+                    kpis.innerHTML = kpiCard('最新采样', cur, '条') + kpiCard('峰值连接', peaks.count, '条') +
+                        kpiCard('PC 峰值', peaks.pcs, '台') + kpiCard('手机峰值', peaks.phones, '台');
+                }
+                if (!body) return;
+                if (!hist.length) {
+                    body.innerHTML = '<div class="empty-state" style="padding:28px;">还没有采样数据，服务每 5 分钟记一次</div>';
+                    if (hint) hint.textContent = '';
+                    if (jump) jump.textContent = '查看手机管理';
+                    return;
+                }
+                const maxN = Math.max(1, peaks.count);
+                let html = '<div class="stat-detail-scroll"><table class="data-table"><thead><tr>' +
+                    '<th>采样时间</th><th style="text-align:right;">总连接</th>' +
+                    '<th style="text-align:right;">PC</th><th style="text-align:right;">手机</th>' +
+                    '<th style="width:130px;">占比</th></tr></thead><tbody>';
+                // 倒序：最新的采样放最上面，省得一打开就要往下滚
+                hist.slice().reverse().forEach(function(p) {
+                    const n = p.count || 0;
+                    const barW = n / maxN * 100;
+                    const pct = peaks.count > 0 ? (n / peaks.count * 100) : 0;
+                    html += '<tr><td>' + esc(String(p.time || '')) + '</td>' +
+                        '<td style="text-align:right;"><strong>' + n + '</strong></td>' +
+                        '<td style="text-align:right;">' + (p.pcs || 0) + '</td>' +
+                        '<td style="text-align:right;">' + (p.phones || 0) + '</td>' +
+                        '<td><div class="drill-bar"><i style="width:' + barW.toFixed(1) + '%;"></i></div>' +
+                        '<span class="text-muted" style="font-size:11px;">' + pct.toFixed(1) + '%</span></td></tr>';
+                });
+                html += '</tbody></table></div>';
+                body.innerHTML = html;
+                if (hint) hint.textContent = '峰值 ' + peaks.count + ' 条连接，出现在 ' +
+                    esc(String((hist.find(function(p) { return (p.count || 0) === peaks.count; }) || {}).time || '-')) + '。';
+                if (jump) jump.textContent = '查看手机管理';
+                return;
+            }
+
+            // msgs：消息类型分布
+            const bt = _lastByType || {};
+            const entries = Object.entries(bt).sort(function(a, b) { return b[1] - a[1]; });
+            const totalMsg = entries.reduce(function(a, e) { return a + e[1]; }, 0);
+            setDetailTitle('消息类型分布 · 明细');
+            setTxt('stat-detail-sub', '本次服务进程启动以来的累计收发条数（重启后清零）');
+            if (kpis) {
+                kpis.innerHTML = kpiCard('消息总数', totalMsg, '条') + kpiCard('类型数', entries.length, '种') +
+                    kpiCard('最多类型', entries.length ? entries[0][0] : '-', '') +
+                    kpiCard('最多占比', totalMsg > 0 ? Math.round(entries[0][1] / totalMsg * 100) : 0, '%');
+            }
+            if (!body) return;
+            if (!entries.length) {
+                body.innerHTML = '<div class="empty-state" style="padding:28px;">本次服务启动以来还没有消息往来</div>';
+                if (hint) hint.textContent = '';
+                if (jump) jump.textContent = '查看系统日志';
+                return;
+            }
+            if (types) {
+                types.innerHTML = '<div class="drill-types">' + entries.map(function(e) {
+                    return '<span class="drill-tag">' + esc(e[0]) + ' <b>' + e[1] + '</b></span>';
+                }).join('') + '</div>';
+            }
+            const maxM = entries[0][1];
+            let h2 = '<div class="stat-detail-scroll"><table class="data-table"><thead><tr>' +
+                '<th>消息类型</th><th style="text-align:right;">条数</th><th style="width:130px;">占比</th></tr></thead><tbody>';
+            entries.forEach(function(e) {
+                const pct = totalMsg > 0 ? (e[1] / totalMsg * 100) : 0;
+                h2 += '<tr><td><strong>' + esc(e[0]) + '</strong></td>' +
+                    '<td style="text-align:right;"><strong>' + e[1] + '</strong></td>' +
+                    '<td><div class="drill-bar"><i style="width:' + (e[1] / maxM * 100).toFixed(1) + '%;"></i></div>' +
+                    '<span class="text-muted" style="font-size:11px;">' + pct.toFixed(1) + '%</span></td></tr>';
+            });
+            h2 += '<tr style="background:var(--input-bg);font-weight:700;"><td>合计</td>' +
+                '<td style="text-align:right;">' + totalMsg + '</td><td style="font-size:11px;color:var(--text-2);">100%</td></tr>';
+            h2 += '</tbody></table></div>';
+            body.innerHTML = h2;
+            if (hint) hint.textContent = '类型名取自协议里各消息的 type 字段，用于快速判断当前流量构成。';
+            if (jump) jump.textContent = '查看系统日志';
+        }
+
+        function renderStatDetailChart() {
+            // 运维类下钻用表格就够了，不重复画图
+            if (_statDetailKind === 'conn' || _statDetailKind === 'msgs') {
+                const w = document.getElementById('stat-detail-chart-wrap');
+                const cp = document.getElementById('stat-detail-chart-cap');
+                if (w) w.style.display = 'none';
+                if (cp) cp.style.display = 'none';
+                return;
+            }
+            const cv = document.getElementById('stat-detail-canvas');
+            const wrap = document.getElementById('stat-detail-chart-wrap');
+            const cap = document.getElementById('stat-detail-chart-cap');
+            if (!cv || typeof Chart === 'undefined') return;
+            if (_statDetailChart) { _statDetailChart.destroy(); _statDetailChart = null; }
+            const d = _dashSummary || {};
+            const isDials = _statDetailKind === 'dials';
+            const key = isDials ? 'dials' : 'visits';
+            const series = d.series || [];
+            const sum = series.reduce(function(a, p) { return a + (p[key] || 0); }, 0);
+            if (!series.length || sum <= 0) {
+                if (wrap) wrap.style.display = 'none';
+                if (cap) cap.style.display = 'none';
+                return;
+            }
+            if (wrap) wrap.style.display = '';
+            if (cap) {
+                cap.style.display = '';
+                cap.textContent = (isDials ? '拨号' : '登记') + '分布（按' + (d.granularity === 'hour' ? '小时' : '天') + '）';
+            }
+            const c = chartBase();
+            _statDetailChart = new Chart(cv, {
+                type: 'bar',
+                data: {
+                    labels: series.map(function(p) { return p.label; }),
+                    datasets: [{
+                        label: isDials ? '拨号' : '登记',
+                        data: series.map(function(p) { return p[key] || 0; }),
+                        backgroundColor: 'rgba(' + c.primaryRgb + ',.65)',
+                        hoverBackgroundColor: c.primary,
+                        borderRadius: 4, maxBarThickness: 26
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { autoSkip: true, maxTicksLimit: 12, maxRotation: 0 } },
+                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: c.grid } }
+                    }
+                }
+            });
+        }
+
+        // 下拉/日期框统一赋值：选项还没加载出来时先补一个，别出现「筛了等于没筛」
+        function forceFieldValue(el, val) {
+            if (!el) return;
+            const want = val || '';
+            if (!el.options) { el.value = want; return; }   // 原生 date input
+            if (!want) { el.value = ''; return; }
+            const has = Array.prototype.some.call(el.options, function(o) { return o.value === want; });
+            if (!has) {
+                const o = document.createElement('option');
+                o.value = want;
+                o.textContent = want;
+                el.appendChild(o);
+            }
+            el.value = want;
+        }
+
+        // 从二级明细页跳到列表页：先设筛选再切页（showPage 内部会立刻按当前筛选拉数据）
+        function jumpFromStatDetail(pin) {
+            const kind = _statDetailKind;
+            const d = _dashSummary || {};
+            const from = d.date_from || '', to = d.date_to || '';
+            const wantPin = pin || '';
+            // v4.36: 明细已是独立页面，跳转直接走 showPage 即可（离开页面时图表会自动销毁、
+            // 顶栏返回按钮也会随之隐藏）
+            // 运维类下钻没有「按顾问筛选」的概念，直接去对应的列表页
+            if (kind === 'conn') { showPage('phones'); return; }
+            if (kind === 'msgs') { showPage('logs'); return; }
+            if (kind === 'dials') {
+                forceFieldValue(document.getElementById('call-date-from'), from);
+                forceFieldValue(document.getElementById('call-date-to'), to);
+                forceFieldValue(document.getElementById('call-pin-filter'), wantPin);
+                showPage('calls');
+                // loadCallPinOptions 会重建选项并把选中值冲掉，补回来（列表数据本身已按上面筛选取过）
+                setTimeout(function() {
+                    forceFieldValue(document.getElementById('call-pin-filter'), wantPin);
+                }, 400);
+            } else {
+                forceFieldValue(document.getElementById('visit-filter-date-from'), from);
+                forceFieldValue(document.getElementById('visit-filter-date-to'), to);
+                forceFieldValue(document.getElementById('visit-filter-pin'), wantPin);
+                const g = document.getElementById('visit-filter-group');
+                if (g) g.style.display = 'none';
+                showPage('visits');
+                // loadPinDropdown 会重建选项，同上补回来
+                setTimeout(function() {
+                    forceFieldValue(document.getElementById('visit-filter-pin'), wantPin);
+                }, 400);
+            }
         }
 
         async function loadDashboard() {
@@ -2139,8 +2764,9 @@
             // v4.24: 顶栏徽标显示真实服务版本（原来写死 v6.0，看着像线上版本，实际是面板设计版本）
             const vp = document.getElementById('ver-pill'); if (vp && d.version) vp.textContent = 'v' + d.version;
 
-            document.getElementById('stat-today-dials').textContent = d.today_dials || 0;
-            document.getElementById('stat-today-visits').textContent = d.today_visits || 0;
+            // v4.35: 两个数字卡不再读 /api/status 的 today_dials/today_visits（那只认「今天」），
+            // 改由 loadDashSummary() 按当前时间区间取（见下方，服务端 /api/v1/dashboard/summary）。
+            // /api/status 的同名字段保留未删 —— 老客户端/脚本可能还在读它。
 
             // ① 现在谁在线：手机取设备表（含离线设备），PC 取客户端列表 —— 全部实时
             const dev = await apiGet('/api/v1/devices');
@@ -2181,6 +2807,9 @@
                 const ob2 = document.getElementById('ops-body');
                 if (ob2 && ob2.classList.contains('show')) renderMsgChart(s.by_type);
             }
+
+            // v4.35: 两个数字卡按「今天/昨天/近一周/本月」现算（含按业务员明细，供点开下钻）
+            await loadDashSummary();
 
             lastRefresh = new Date();
             document.getElementById('last-refresh').textContent = lastRefresh.toLocaleTimeString('zh-CN');
@@ -3514,13 +4143,25 @@
         // v4.24: 上门登记默认区间（今天）+ 翻页箭头图标
         initVisitRangeDefault();
         initVisitPagerIcons();
+        // v4.35: 首页时间选择（今天/昨天/近一周/本月），选择记在本地，刷新后保留
+        initDashRange();
         _booting = false;
         // v4.21.2 (13): 按 hash 恢复上次页面（F5 不再回首页）；无 hash 默认首页
+        // v4.36: 二级明细页也能恢复（#/dash-detail/dials），刷新不会掉回首页
         (function() {
-            const h = (location.hash || '').replace(/^#\/?/, '');
-            const valid = ['dashboard', 'phones', 'calls', 'visits', 'pins', 'admin-accounts', 'logs', 'settings'];
-            if (h && valid.includes(h)) showPage(h);
-            else loadDashboard();
+            const p = parseHash();
+            const logged = (typeof isLoggedIn === 'function') && isLoggedIn();
+            if (p.id === 'dash-detail' && logged) {
+                _statDetailKind = (DETAIL_KINDS.indexOf(p.kind) >= 0) ? p.kind : 'dials';
+                showPage('dash-detail');
+            } else if (p.id === 'dash-detail') {
+                // 未登录时明细页必然 401，直接回首页，别留一个会报错的 hash
+                showPage('dashboard');
+            } else if (p.id && PAGE_IDS.indexOf(p.id) >= 0) {
+                showPage(p.id);
+            } else {
+                loadDashboard();
+            }
         })();
         loadCallDeviceOptions();
         startAutoRefresh();
