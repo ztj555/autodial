@@ -2566,7 +2566,8 @@ async def health_check_handler(path, request_headers):
             log.warning(f"ROSTER_REFRESH failed: {result.get('message')}")
         return (status, JSON_HDR, json.dumps(result, ensure_ascii=False).encode('utf-8'))
 
-    # 设置 PIN 分组: GET /api/v1/pin/set_group?pin=xxx&group_id=N
+    # 设置人员所属部门: GET /api/v1/pin/set_group?pin=xxx&group_id=N
+    # （路径沿用 group 命名：表 pin_groups / 列 advisor_names.group_id 是历史内部名，不动，避免迁移风险）
     if path == '/api/v1/pin/set_group':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
@@ -2588,7 +2589,7 @@ async def health_check_handler(path, request_headers):
             if conn:
                 conn.close()
 
-    # 分组列表: GET /api/v1/groups
+    # 部门列表: GET /api/v1/groups
     if path == '/api/v1/groups':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
@@ -2606,14 +2607,14 @@ async def health_check_handler(path, request_headers):
             if conn:
                 conn.close()
 
-    # 添加分组: GET /api/v1/group/add?name=xxx
+    # 新建部门: GET /api/v1/group/add?name=xxx
     if path == '/api/v1/group/add':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR
         qs = parse_qs(parsed.query)
         name = qs.get('name', [''])[0].strip()
         if not name:
-            return (200, JSON_HDR, _err_json('MISSING', '分组名不能为空'))
+            return (200, JSON_HDR, _err_json('MISSING', '部门名不能为空'))
         conn = None
         try:
             conn = _connect_db()
@@ -2623,13 +2624,49 @@ async def health_check_handler(path, request_headers):
             conn.commit()
             rid = c.lastrowid
             return (200, JSON_HDR, json.dumps({'ok': True, 'id': rid, 'name': name}).encode('utf-8'))
+        except sqlite3.IntegrityError:
+            # v4.34: name 列有 UNIQUE 约束。此前重名直接抛到通用 except → 前端只看到
+            # 一坨原始 DB 报错，用户不知道"重名"这件事本身。
+            return (200, JSON_HDR, _err_json('DUPLICATE_DEPT', '该部门名已存在'))
         except Exception as e:
             return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
         finally:
             if conn:
                 conn.close()
 
-    # 删除分组: GET /api/v1/group/del?id=N
+    # 重命名部门: GET /api/v1/group/rename?id=N&name=xxx
+    # v4.34: 新增。此前部门建好就只能删掉重建（还得先把人一个个挪走），改名成本过高。
+    if path == '/api/v1/group/rename':
+        if not _check_admin(hdrs, parsed.query):
+            return _AUTH_ERR
+        qs = parse_qs(parsed.query)
+        gid = qs.get('id', [''])[0].strip()
+        name = qs.get('name', [''])[0].strip()
+        if not gid:
+            return (200, JSON_HDR, _err_json('MISSING', 'id 不能为空'))
+        if not name:
+            return (200, JSON_HDR, _err_json('MISSING', '部门名不能为空'))
+        conn = None
+        try:
+            conn = _connect_db()
+            c = conn.cursor()
+            # 改名只动 pin_groups.name；成员的 group_id 是主键关联，天然跟随，无需迁移
+            c.execute('UPDATE pin_groups SET name=? WHERE id=?', (name, int(gid)))
+            conn.commit()
+            if c.rowcount == 0:
+                return (200, JSON_HDR, _err_json('NOT_FOUND', '该部门不存在（可能已被其他人删除）'))
+            return (200, JSON_HDR, json.dumps({'ok': True}).encode('utf-8'))
+        except sqlite3.IntegrityError:
+            return (200, JSON_HDR, _err_json('DUPLICATE_DEPT', '该部门名已存在'))
+        except Exception as e:
+            return (500, JSON_HDR, _err_json('DB_ERROR', str(e)))
+        finally:
+            if conn:
+                conn.close()
+
+    # 删除部门: GET /api/v1/group/del?id=N
+    # v4.34: 只解除成员归属（advisor_names.group_id 置空）+ 删除部门定义本身。
+    # 人员、PIN、通话记录、上门记录一律不动 —— 删部门不等于删人。
     if path == '/api/v1/group/del':
         if not _check_admin(hdrs, parsed.query):
             return _AUTH_ERR

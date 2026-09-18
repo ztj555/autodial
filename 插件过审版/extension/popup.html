@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDial</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+/* ===== v5 设计 Token（唯一权威值，与手机端 ThemeManager sky-blue/light 对齐） ===== */
+:root {
+  --bg: #EBF4FF;
+  --surface: #FFFFFF;
+  --surface-2: #D8ECFC;
+  --input-bg: #F4F8FC;
+  --icon-tile: #EDF5FD;
+  --border: #DCEAF7;
+  --border-input: #DFEBF6;
+  --divider: #E4EBF1;
+  --hero-border: #BFD9F2;
+  --hero-top: #EDF4FC;
+  --text: #162840;
+  --text-2: #5880A8;
+  --primary: #2B6CC4;
+  --primary-light: #4A90E0;
+  --primary-dark: #1A56A8;
+  --green: #40C057;
+  --red: #F03E3E;
+  --banner-info-bg: #E3EEFB;
+  --banner-info-border: #C4DAF3;
+  --primary-rgb: 43,108,196;
+  /* v5.5: 状态点/危险按钮的 RGB 分量 —— 由 themes.js 的 AD_APPLY_THEME 随主题写入 */
+  --green-rgb: 64,192,87;
+  --red-rgb: 240,62,62;
+  /* 圆角体系（4 档） */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  /* 阴影体系（3 档） */
+  --shadow-card: 0 1px 2px rgba(22,40,64,.04), 0 4px 14px rgba(var(--primary-rgb),.07);
+  --shadow-float: 0 6px 24px rgba(var(--primary-rgb),.18), 0 0 0 1px rgba(var(--primary-rgb),.10);
+  --shadow-btn: 0 3px 10px rgba(var(--primary-rgb),.28);
+  --grad-btn: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-dark) 100%);
+  --grad-hero: linear-gradient(180deg, var(--hero-top) 0%, var(--surface) 100%);
+}
+html { background: var(--bg); }
+body {
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  letter-spacing: .02em;
+  padding: 14px;
+  -webkit-font-smoothing: antialiased;
+  max-height: 600px;
+  overflow-y: auto;
+}
+body::-webkit-scrollbar { width: 6px; }
+body::-webkit-scrollbar-thumb { background: var(--surface-2); border-radius: 999px; }
+body::-webkit-scrollbar-track { background: transparent; }
+::selection { background: rgba(var(--primary-rgb), .16); }
+
+/* ===== Topbar（轻量：图标底座 + 标题，无卡片） ===== */
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 2px 2px 12px;
+}
+.app-icon {
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.app-icon svg { width: 19px; height: 19px; }
+.title-group { display: flex; align-items: baseline; gap: 6px; }
+.title-group h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
+.ver { font-size: 11px; color: var(--text-2); background: var(--surface-2); padding: 2px 8px; border-radius: var(--r-pill); }
+/* 顶栏刷新按钮：margin-left:auto 把它推到最右 */
+.icon-btn {
+  margin-left: auto; flex-shrink: 0;
+  width: 30px; height: 30px; padding: 0;
+  border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2);
+  display: grid; place-items: center; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn[disabled] { cursor: default; opacity: .55; }
+.icon-btn.spin svg { animation: adSpin .8s linear infinite; }
+@keyframes adSpin { to { transform: rotate(360deg); } }
+
+/* ===== 面板切换动画（display:none→block 时触发） ===== */
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#statusPanel, #setupPanel { animation: panelIn .22s ease-out; }
+
+/* ===== Hero 大盘（手机端 heroCard：渐变 + 蓝描边 + 主操作内置） ===== */
+.hero-card {
+  background: var(--grad-hero);
+  border: 1px solid var(--hero-border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.hero-row { display: flex; align-items: center; gap: 12px; }
+.status-indicator {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--icon-tile); display: grid; place-items: center; flex-shrink: 0;
+}
+.status-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(var(--green-rgb),.16), 0 0 8px rgba(var(--green-rgb),.45);
+  animation: pulse 2s ease-in-out infinite;
+}
+.status-dot.offline {
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(var(--red-rgb),.14), 0 0 8px rgba(var(--red-rgb),.4);
+  animation: none;
+}
+/* v5.6.1: 探测未出结果前的「未知」态 —— 中性灰，不动画，避免误报成故障 */
+.status-dot.unknown {
+  background: var(--text-2); opacity: .45;
+  box-shadow: none; animation: none;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--green-rgb),.16), 0 0 8px rgba(var(--green-rgb),.45); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--green-rgb),.08), 0 0 12px rgba(var(--green-rgb),.35); }
+}
+.hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hero-title { font-size: 15px; font-weight: 700; }
+/* v5.6.1: 大圆点/大标题只反映「云端连通性」，不再由「有没有设备在线」决定 */
+.hero-title.ok { color: var(--green); }
+.hero-title.err { color: var(--red); }
+.hero-sub { font-size: 12px; color: var(--text-2); }
+/* v5.5: 状态副标题配色改由主题变量驱动（原为 popup.js 内联硬编码 #40C057/#5880A8/#F03E3E） */
+.hero-sub.ok { color: var(--green); }
+.hero-sub.err { color: var(--red); }
+/* 副标题为空时不留空行（云端已连接时无需副标题，三行清单已说明一切） */
+.hero-sub:empty { display: none; }
+
+/* ===== v5.6.1 三行独立连接状态（云端 / PC / 手机 各自着色，互不干扰） =====
+   颜色语义：绿 = 正常 · 灰 = 中性（设备离线、云端不通时未查询）· 红 = 仅云端故障 */
+.conn-list { margin-top: 10px; border-top: 1px solid var(--divider); }
+.conn-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+.conn-row + .conn-row { border-top: 1px solid var(--divider); }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--text-2); opacity: .4;
+}
+.conn-label { flex: 1; color: var(--text); }
+.conn-val { color: var(--text-2); }
+.conn-row.ok .conn-dot { background: var(--green); opacity: 1; }
+.conn-row.ok .conn-val { color: var(--green); }
+.conn-row.err .conn-dot { background: var(--red); opacity: 1; }
+.conn-row.err .conn-val { color: var(--red); }
+
+/* ===== 按钮（手机端 primaryBtn 渐变 + ghost/danger pill） ===== */
+.btn {
+  border: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 600; letter-spacing: .02em;
+  transition: filter .15s, transform .08s, box-shadow .15s;
+}
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn-primary {
+  width: 100%;
+  background: var(--grad-btn);
+  color: #FFFFFF;
+  border-radius: var(--r-lg);
+  padding: 11px 12px;
+  margin-top: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  box-shadow: var(--shadow-btn);
+}
+.btn-primary svg { width: 15px; height: 15px; }
+.btn-primary:hover { filter: brightness(1.06); box-shadow: 0 4px 14px rgba(var(--primary-rgb),.34); }
+.btn-ghost {
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-ghost:hover { background: var(--input-bg); color: var(--primary); border-color: var(--primary); }
+.btn-danger {
+  background: var(--surface); color: var(--red);
+  border: 1px solid rgba(var(--red-rgb),.3); border-radius: var(--r-pill);
+  padding: 10px 12px;
+}
+.btn-danger:hover { background: rgba(var(--red-rgb),.06); }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; }
+.btn-row .btn { flex: 1; }
+.btn-sm {
+  width: auto; height: 38px; padding: 0 16px;
+  font-size: 12px; border-radius: var(--r-sm); flex-shrink: 0;
+}
+.input-row .btn { margin-top: 0; }
+
+/* ===== 信息分组卡（手机端 bg2 卡片 + 图标底座行） ===== */
+.info-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 6px 8px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.info-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 6px; border-bottom: 1px solid var(--divider);
+  border-radius: var(--r-sm);
+  transition: background .15s;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row:hover { background: var(--input-bg); }
+.row-ico {
+  width: 22px; height: 22px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--primary);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.row-ico svg { width: 14px; height: 14px; }
+.info-row .label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+.info-row .value {
+  font-size: 13px; font-weight: 500; text-align: right; margin-left: auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;
+}
+.info-row .value.link { color: var(--primary); cursor: pointer; }
+.info-row .value.link:hover { color: var(--primary-dark); text-decoration: underline; }
+.chev {
+  width: 13px; height: 13px; color: var(--text-2); flex-shrink: 0;
+  transition: color .15s, transform .15s;
+}
+.info-row:hover .chev { color: var(--primary); transform: translateX(1px); }
+
+/* ===== Hint 横幅（手机端 infoBanner） ===== */
+.hint-card {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: var(--banner-info-bg); border: 1px solid var(--banner-info-border);
+  border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 12px;
+}
+.hint-card svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px; color: var(--primary); }
+.hint-card span { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+/* ===== 分组设置卡（一张卡 + 组间分割线，对齐手机端 settingGroup/settingRow） ===== */
+.section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 6px 14px; margin-bottom: 12px;
+  box-shadow: var(--shadow-card);
+}
+.group { padding: 10px 0; }
+.group-divider { height: 1px; background: var(--divider); }
+.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.section-ico {
+  width: 24px; height: 24px; border-radius: var(--r-sm);
+  background: var(--icon-tile); color: var(--text-2);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.section-ico svg { width: 14px; height: 14px; }
+.section-title { font-size: 13px; font-weight: 600; }
+.section-sub { margin-left: auto; font-size: 11px; color: var(--text-2); }
+.input-row { display: flex; gap: 8px; }
+input {
+  flex: 1; min-width: 0; height: 38px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-input); border-radius: var(--r-sm);
+  padding: 0 12px; color: var(--text); font-size: 13px;
+  font-family: inherit; outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+input::placeholder { color: var(--text-2); opacity: .7; }
+input:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), .14);
+}
+.field-status, .server-status { display: block; font-size: 11px; margin-top: 6px; min-height: 14px; color: var(--text-2); }
+.field-status.ok, .server-status.ok { color: var(--green); }
+.field-status.err, .server-status.err { color: var(--red); }
+.section-sub.badge {
+  background: var(--input-bg); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 2px 8px;
+}
+
+/* ===== v5.6.0 候选服务器：输入框内嵌下拉浮层（绝对定位覆盖，不撑高面板） ===== */
+.addr-row { position: relative; }
+.addr-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.addr-wrap input { padding-right: 30px; }
+.addr-caret {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  background: none; border: none; border-radius: var(--r-sm);
+  color: var(--text-2); cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.addr-caret:hover:not(:disabled) { color: var(--primary); background: var(--input-bg); }
+.addr-caret:disabled { opacity: .35; cursor: default; }
+.addr-caret svg { width: 12px; height: 12px; transition: transform .18s; }
+.addr-caret.open svg { transform: rotate(180deg); }
+
+.addr-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: 0 8px 22px rgba(0,0,0,.15);
+  overflow: hidden;
+}
+.addr-menu[hidden] { display: none; }
+.addr-menu-list { max-height: 164px; overflow-y: auto; padding: 4px; }
+.addr-item {
+  display: block; width: 100%; text-align: left;
+  font-family: inherit; font-size: 12px; line-height: 1.5;
+  background: none; color: var(--text);
+  border: none; border-radius: var(--r-sm);
+  padding: 7px 9px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .12s, color .12s;
+}
+.addr-item:hover { background: var(--input-bg); color: var(--primary); }
+.addr-item.active { color: var(--primary); background: rgba(var(--primary-rgb), .07); }
+.addr-item.active::after { content: '当前'; float: right; font-size: 11px; color: var(--text-2); }
+.addr-empty { padding: 10px 9px; font-size: 11px; color: var(--text-2); text-align: center; }
+.addr-menu-foot {
+  display: block; width: 100%; text-align: left;
+  font-family: inherit; font-size: 11px; line-height: 1.5; color: var(--text-2);
+  background: var(--input-bg); border: none; border-top: 1px solid var(--divider);
+  padding: 8px 12px; cursor: pointer;
+  transition: color .12s;
+}
+.addr-menu-foot:hover:not(:disabled) { color: var(--primary); }
+.addr-menu-foot:disabled { opacity: .6; cursor: default; }
+
+/* ===== 外观（色相 × 明暗）常驻卡片 ===== */
+.theme-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 10px 12px;
+  box-shadow: var(--shadow-card);
+}
+.theme-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.theme-head .section-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
+
+/* v6.0：亮 / 暗 分段开关。
+   原先 9 套主题各自钉死一个明暗（亮暗暗暗暗暗亮暗暗），
+   色相和亮度混在同一个列表里，切换毫无规律；现拆成两个独立维度 */
+.mode-toggle {
+  margin-left: auto; display: flex; gap: 2px; padding: 2px;
+  background: var(--input-bg); border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+}
+.mode-btn {
+  font-family: inherit; font-size: 11px; line-height: 1; color: var(--text-2);
+  background: none; border: none; padding: 5px 11px; border-radius: var(--r-pill);
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.mode-btn:hover { color: var(--primary); }
+.mode-btn.active { background: var(--primary); color: #fff; }
+
+/* 16 套色相 = 8 列 × 2 行（弹窗内容宽 306px，每列 32px 放得下 27px 色块） */
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px 0; justify-items: center; }
+.swatch-btn {
+  width: 27px; height: 27px;
+  border-radius: 50%; border: none; padding: 0; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.16);
+  transition: transform .12s, box-shadow .15s;
+}
+/* 当前生效的「色相 · 明暗」组合，避免只靠色块高亮猜 */
+.theme-cur {
+  display: block; margin-top: 9px; text-align: center;
+  font-size: 11px; color: var(--text-2);
+}
+.swatch-btn:hover { transform: scale(1.12); }
+/* 选中态：外圈主题强调色光环 + 内圈卡片底描边，任何主题下都能看清 */
+.swatch-btn.active {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary), 0 1px 3px rgba(0,0,0,.16);
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Topbar ===== -->
+<header class="topbar">
+  <div class="app-icon">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" fill="currentColor"/></svg>
+  </div>
+  <div class="title-group">
+    <h1>AutoDial</h1>
+    <span class="ver">v6</span>
+  </div>
+  <button type="button" class="icon-btn" id="refreshBtn" title="刷新状态（主题 + 连接）" aria-label="刷新状态">
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 4v4h-4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 20v-4h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</header>
+
+<!-- ===== 状态页（PIN 已设置） ===== -->
+<div id="statusPanel" style="display:none">
+  <div class="hero-card">
+    <div class="hero-row">
+      <div class="status-indicator">
+        <span id="statusDot" class="status-dot unknown"></span>
+      </div>
+      <div class="hero-text">
+        <div id="statusText" class="hero-title">检查中…</div>
+        <div id="cloudStatus" class="hero-sub">正在探测云端…</div>
+      </div>
+    </div>
+    <!-- v5.6.1: 云端 / PC / 手机 三行独立状态，各自着色 ——
+         原先三者被压进「一个圆点 + 一行字」，圆点只看有没有设备在线，
+         云端明明连通也照样显示红色，第一眼无法判断。 -->
+    <div class="conn-list">
+      <div id="connCloud" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">云端中继</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPc" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">PC 客户端</span><span class="conn-val">—</span>
+      </div>
+      <div id="connPhone" class="conn-row">
+        <span class="conn-dot"></span><span class="conn-label">手机</span><span class="conn-val">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-card">
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.4 21 3 13.6 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.3 1l-2.1 2.2z" stroke="currentColor" stroke-width="1.8"/></svg></span>
+      <span class="label">坐席手机号</span>
+      <span id="myPhone" class="value link">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+      <span class="label">接待顾问</span>
+      <span id="myMgrName" class="value link">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="info-row">
+      <span class="row-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+      <span class="label">云端地址</span>
+      <span id="cloudAddr" class="value link">--</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button id="editServerBtn" class="btn btn-ghost">修改服务器</button>
+    <button id="editPinBtn" class="btn btn-ghost">修改 PIN</button>
+  </div>
+</div>
+
+<!-- ===== 设置页（PIN + 服务器） ===== -->
+<div id="setupPanel" style="display:none">
+  <!-- v5.5.2：返回按钮置于设置面板顶部（原先在面板最底部，不符合返回习惯） -->
+  <button id="backToStatusBtn" class="btn btn-ghost" style="display:none;margin-bottom:10px">
+    <svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    返回
+  </button>
+
+  <div class="hint-card">
+    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor"/></svg>
+    <span id="setupHint">打开 CRM 页面，插件会自动检测坐席手机号作为 PIN</span>
+  </div>
+
+  <div class="section">
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16 9.5 3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <span class="section-title">云中继地址</span>
+        <span id="serverSource" class="section-sub badge">默认</span>
+      </div>
+      <div class="addr-row" id="addrRow">
+        <div class="input-row">
+          <div class="addr-wrap">
+            <input id="serverInput" placeholder="101.34.65.254:35430" />
+            <button id="addrCaretBtn" class="addr-caret" type="button" title="选择候选服务器" aria-label="选择候选服务器" aria-expanded="false">
+              <svg viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <button id="testServerBtn" class="btn btn-ghost btn-sm">测试</button>
+          <button id="saveServerBtn" class="btn btn-primary btn-sm">保存</button>
+        </div>
+        <!-- v5.6.0 候选浮层：绝对定位覆盖下方内容，展开时不撑高面板 -->
+        <div id="addrMenu" class="addr-menu" hidden>
+          <div id="addrMenuList" class="addr-menu-list"></div>
+          <button id="fetchPoolBtn" class="addr-menu-foot" type="button">从网络获取</button>
+        </div>
+      </div>
+      <span id="serverStatus" class="field-status"></span>
+    </div>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">配对码</span>
+        <span class="section-sub">4位或11位数字</span>
+      </div>
+      <div class="input-row">
+        <input id="pinInput" placeholder="输入配对码" maxlength="11" />
+        <button id="savePinBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
+      <span id="pinStatus" class="field-status"></span>
+    </div>
+
+    <div class="group-divider"></div>
+
+    <div class="group">
+      <div class="section-head">
+        <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.6" stroke="currentColor" stroke-width="1.8"/><path d="M5 19.5c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+        <span class="section-title">接待顾问姓名</span>
+      </div>
+      <div class="input-row">
+        <input id="mgrNameInput" placeholder="请填写您的姓名" />
+        <button id="saveMgrNameBtn" class="btn btn-primary btn-sm">保存</button>
+      </div>
+      <span id="mgrNameStatus" class="field-status"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 外观（色相 × 明暗）——常驻，两个面板下都可见 ===== -->
+<div class="theme-card" id="themeCard">
+  <div class="theme-head">
+    <span class="section-ico"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a9 9 0 1 0 0 18c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.2-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-3.9-4-7.7-9-7.7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15" cy="8" r="1.2" fill="currentColor"/></svg></span>
+    <span class="section-title">外观</span>
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="明暗模式">
+      <button type="button" class="mode-btn" data-mode="light">亮白</button>
+      <button type="button" class="mode-btn" data-mode="dark">暗夜</button>
+    </div>
+  </div>
+  <div class="swatches" id="swatches"></div>
+  <span id="themeName" class="theme-cur"></span>
+</div>
+
+<script src="themes.js"></script>
+<!-- v5.6：云中继地址的唯一权威实现（与 content-script / background 共用同一份） -->
+<script src="addr.js"></script>
+<!-- 主题初始化必须放在外部文件：MV3 默认 CSP（script-src 'self'）会拒绝执行
+     内联脚本，写在这里会被静默忽略，导致非默认主题在弹窗中不生效 -->
+<script src="theme-init.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

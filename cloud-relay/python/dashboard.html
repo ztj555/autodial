@@ -425,6 +425,39 @@
         .filter-group .input { min-width: 130px; }
         .tool-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
         .tool-label { font-size: 12px; color: var(--text-2); padding-bottom: 8px; }
+
+        /* ===== 部门管理（v4.34） =====
+           原「分组」只有 一个下拉 + 新建 + 删分组，删除目标取自下拉的当前选中值，
+           而该下拉在每次 loadPins() 里被清空重建又不恢复选中 ⇒ 值恒为空、永远删不掉。
+           现改为独立区块：每个部门是一个 chip，自带「重命名 / 删除」，目标明确不需要先选中。 */
+        .dept-panel {
+            border: 1px solid var(--border); border-radius: var(--r-lg);
+            background: var(--input-bg); padding: 12px 14px; margin-bottom: 14px;
+        }
+        .dept-panel-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .dept-panel-title { font-size: 13px; font-weight: 600; color: var(--text); }
+        .dept-panel-hint { font-size: 12px; color: var(--text-2); }
+        .dept-new { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+        .dept-new .input { width: 140px; }
+        .dept-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .dept-empty { font-size: 12px; color: var(--text-2); line-height: 1.6; }
+        .dept-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 5px 4px 11px; border-radius: var(--r-pill);
+            background: var(--surface); border: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .dept-chip-name { font-weight: 600; color: var(--text); }
+        .dept-chip-n { color: var(--text-2); font-variant-numeric: tabular-nums; }
+        .dept-chip-btn {
+            border: none; background: none; cursor: pointer; padding: 2px;
+            color: var(--text-2); border-radius: var(--r-sm); display: inline-flex;
+            transition: color .15s, background .15s;
+        }
+        .dept-chip-btn:hover { color: var(--primary); background: var(--input-bg); }
+        .dept-chip-btn.dept-chip-del:hover { color: var(--red); background: rgba(240,62,62,.08); }
+        .dept-chip-btn svg { width: 12px; height: 12px; display: block; }
+        .dept-chip-edit { width: 108px; padding: 3px 8px; font-size: 12px; }
         /* ===== 快捷日期（v4.24：常用区间一键到位，省掉手点两个日期框） ===== */
         .quickdates { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
         .qd-label { font-size: 11px; font-weight: 600; color: var(--text-2); margin-right: 2px; }
@@ -815,8 +848,8 @@
                         <button class="qd-chip" id="vqd-all" onclick="setVisitRange('all')" data-page-node-id="YyDm1JUXjyfmd9el6n4jKj">全部</button>
                     </div>
                     <div class="filters" data-page-node-id="A3nqsEI4RRC9d6LzuFCSo9">
-                        <div class="filter-group" data-page-node-id="okrwX7VfhuAGZUoc7gXnwv"><label data-page-node-id="LHCaIqqPMxikcn5PmwrXkh">业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()" data-page-node-id="lDAWtqDAgOVbTFeAWbJFiZ"><option value="" data-page-node-id="PTtjJAlShIDKOmaPtOH4GT">不限（全部）</option><option value="__group__" data-page-node-id="V5Hcbf9HrPqVlJAwb29u7E">按分组筛选...</option></select></div>
-                        <div class="filter-group" data-page-node-id="qToSI1sC80ucn827ksAtyc"><label data-page-node-id="ikbLA8Asw6Jf7VeJU8eqHj">分组</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="onVisitFilterChange()" data-page-node-id="s2AdEdzOb6Vg9OjUrSEsAe"><option value="" data-page-node-id="fNsJtc6GXYWBScf5axCjxY">不限分组</option></select></div>
+                        <div class="filter-group" data-page-node-id="okrwX7VfhuAGZUoc7gXnwv"><label data-page-node-id="LHCaIqqPMxikcn5PmwrXkh">业务员</label><select class="input" id="visit-filter-pin" style="min-width:180px;" onchange="onPinFilterChange()" data-page-node-id="lDAWtqDAgOVbTFeAWbJFiZ"><option value="" data-page-node-id="PTtjJAlShIDKOmaPtOH4GT">不限（全部）</option><option value="__group__" data-page-node-id="V5Hcbf9HrPqVlJAwb29u7E">按部门筛选...</option></select></div>
+                        <div class="filter-group" data-page-node-id="qToSI1sC80ucn827ksAtyc"><label data-page-node-id="ikbLA8Asw6Jf7VeJU8eqHj">部门</label><select class="input" id="visit-filter-group" style="min-width:140px;display:none;" onchange="onVisitFilterChange()" data-page-node-id="s2AdEdzOb6Vg9OjUrSEsAe"><option value="" data-page-node-id="fNsJtc6GXYWBScf5axCjxY">不限部门</option></select></div>
                         <div class="filter-group" data-page-node-id="Y4lgVHGr28aFUC5HrtYFG6"><label data-page-node-id="562UtnADPh9HeZaIYtP9X7">开始日期</label><input type="date" class="input" id="visit-filter-date-from" onchange="onVisitFilterChange()" data-page-node-id="2DUj5GgCzUgnGKU5TOabMf"></div>
                         <div class="filter-group" data-page-node-id="Vl05K9aNlgGqKzzTtTd9z0"><label data-page-node-id="2AFWrWJwWDRRdppRrSL5QZ">结束日期</label><input type="date" class="input" id="visit-filter-date-to" onchange="onVisitFilterChange()" data-page-node-id="MubyFUaTr4Eyj20Yuf5aac"></div>
                         <div class="filter-group" data-page-node-id="FKXqisZJkjYemn1IC1P4zn"><label data-page-node-id="6nUv3rnssCIFXdZa62z8Tt">来源</label><select class="input" id="visit-filter-source" onchange="onVisitFilterChange()" data-page-node-id="tcJy2auU60L3mXHABc5xbf"><option value="" data-page-node-id="6emeWorQg1055dAWG7wZKA">全部</option><option value="plugin" data-page-node-id="9hDhNy4FEUEdQd55wAVgPk">插件</option><option value="crm_sync" data-page-node-id="HTpY8PtKgzu1udyFUyO4rI">CRM同步</option><option value="phone" data-page-node-id="0mgGifZRA49vkJX4BvLTju">手机</option><option value="unsynced" data-page-node-id="zJHSLhHZi7L2Yu8JRlHPcv">未同步</option></select></div>
@@ -844,27 +877,34 @@
             <div id="page-pins" class="page" data-page-node-id="9SbzXYnBBjx04hp3ihQuk0">
                 <div class="card" data-page-node-id="wFb8ur4rfW2KgCPCk0GMqq">
                     <div class="card-head" data-page-node-id="7RddObY2EQRAyhTcLVZvp6">
-                        <div class="card-title" data-page-node-id="WdszUMoeQMm1x60iIttCr4"><div class="title-ico" data-page-node-id="cYgtucNCEsWjGcUPOvnNfc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="akIwlqV1o1b1Cp1RGwX3Tx"><circle cx="9" cy="8" r="3.5" data-page-node-id="oi9zLYTqYWNLV1QnzZ0DHL"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5" data-page-node-id="wq7dzoXTD0vgFiTkkvf9NY"/><circle cx="16.5" cy="9.5" r="2.5" data-page-node-id="S8iQCT0KiAEkrwHyvluIUg"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4" data-page-node-id="1VtIxkSxFNOoodx18U5hDL"/></svg></div>人员管理（PIN + 姓名 + 分组）</div>
+                        <div class="card-title" data-page-node-id="WdszUMoeQMm1x60iIttCr4"><div class="title-ico" data-page-node-id="cYgtucNCEsWjGcUPOvnNfc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="akIwlqV1o1b1Cp1RGwX3Tx"><circle cx="9" cy="8" r="3.5" data-page-node-id="oi9zLYTqYWNLV1QnzZ0DHL"/><path d="M3.5 20c.7-3.6 2.9-5.5 5.5-5.5s4.8 1.9 5.5 5.5" data-page-node-id="wq7dzoXTD0vgFiTkkvf9NY"/><circle cx="16.5" cy="9.5" r="2.5" data-page-node-id="S8iQCT0KiAEkrwHyvluIUg"/><path d="M15.5 14.6c2.3.2 4.1 1.9 5 5.4" data-page-node-id="1VtIxkSxFNOoodx18U5hDL"/></svg></div>人员管理（PIN + 姓名 + 部门）</div>
                         <div class="tool-row" data-page-node-id="l8smSJEcN96FL3aU92BQlq">
                             <button class="btn btn-sm" id="btn-refresh-roster" onclick="refreshRoster()" title="从 CRM 顾问列表重新同步人员名册（拉取失败时保留现有名册，不会清空）" data-page-node-id="RstRefreshBtn01">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="RstRefreshIco01"><path d="M20 11.5A8.5 8.5 0 1 1 17.6 5.4" data-page-node-id="RstRefreshP1001"/><path d="M20 4v7.5h-7" data-page-node-id="RstRefreshP2001"/></svg>
                                 刷新名单
                             </button>
-                            <span class="tool-label" data-page-node-id="yxitjL08sxtr6VzqREF1nV">分组</span>
-                            <select class="input" id="pin-group-filter" onchange="loadPins()" data-page-node-id="6GGuiDdH0BGfjIqmGCL4QF"><option value="" data-page-node-id="9UAsE81TPGFw7tbzpviJjz">全部</option></select>
-                            <input type="text" class="input" id="new-group-name" placeholder="新建分组" style="width:110px;" data-page-node-id="MrxVRRuy3brns9tiI6ciL2">
-                            <button class="btn btn-primary btn-sm" onclick="addGroup()" data-page-node-id="MYlkIw7KQDhgxqN0CqqBGO">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="FoL18i9xdpTzD4XuMvgsIN"><path d="M12 5v14" data-page-node-id="QQ0TMod42AbC8GMZ1S9vnG"/><path d="M5 12h14" data-page-node-id="9u0qmAQqJRUY7aJYdxMOGh"/></svg>
-                                新建
-                            </button>
-                            <button class="btn btn-danger btn-sm" onclick="delGroup()" data-page-node-id="PF1zICb3GaDAWUJFd36HN5">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="p24Sx16BTqULQwD8eoQkT7"><path d="M4 7h16" data-page-node-id="5fzHgYfqhILkECUR9yKHEt"/><path d="M10 4h4a1.5 1.5 0 011.5 1.5V7" data-page-node-id="WXwNKij2W6UUCgRqqX4Sf4"/><path d="M6.5 7l1 12a2 2 0 002 1.9h5a2 2 0 002-1.9l1-12" data-page-node-id="DHH9Q7YANQxBtnVpix2Ep7"/><path d="M10 11v6" data-page-node-id="dFHvyTvSgs4V1GFne2n3vt"/><path d="M14 11v6" data-page-node-id="dRD6XTsCkvifPzB7mv50ae"/></svg>
-                                删分组
-                            </button>
+                            <span class="tool-label" data-page-node-id="yxitjL08sxtr6VzqREF1nV">筛选</span>
+                            <select class="input" id="pin-group-filter" onchange="loadPins()" data-page-node-id="6GGuiDdH0BGfjIqmGCL4QF"><option value="" data-page-node-id="9UAsE81TPGFw7tbzpviJjz">全部部门</option></select>
                         </div>
                     </div>
+
+                    <!-- ==================== 部门管理（v4.34） ==================== -->
+                    <div class="dept-panel" data-page-node-id="DeptPanelV434">
+                        <div class="dept-panel-head" data-page-node-id="DeptPanelHead01">
+                            <span class="dept-panel-title" data-page-node-id="DeptPanelTitle01">部门</span>
+                            <span class="dept-panel-hint" id="dept-hint" data-page-node-id="DeptPanelHint01">加载中…</span>
+                            <span class="dept-new" data-page-node-id="DeptNewWrap01">
+                                <input type="text" class="input" id="new-dept-name" placeholder="新部门名称" maxlength="20" data-page-node-id="DeptNewInput01">
+                                <button class="btn btn-primary btn-sm" onclick="addDept()" data-page-node-id="DeptAddBtn01">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="DeptAddIco01"><path d="M12 5v14" data-page-node-id="DeptAddP1001"/><path d="M5 12h14" data-page-node-id="DeptAddP2001"/></svg>
+                                    新建部门
+                                </button>
+                            </span>
+                        </div>
+                        <div class="dept-list" id="dept-list" data-page-node-id="DeptList01"><div class="dept-empty">加载中…</div></div>
+                    </div>
                     <div id="pins-roster-hint" style="font-size:12px;color:var(--text-2);margin:0 0 12px;line-height:1.6;" data-page-node-id="WjFszmqOld24HiT6uDtqgl">人员名册加载中…</div>
-                    <table class="data-table" data-page-node-id="b85tDGPkFy5HWCEvCa1yw6"><thead data-page-node-id="7nTaNZsb0yCYUhstAp97rg"><tr data-page-node-id="7IF0rFQjbjFgI7zzmVVMgm"><th data-page-node-id="joE3fBO1uFfYokWlFaJtRY">PIN (手机号)</th><th data-page-node-id="ybkTXNfC3e0DnKhCrEzhsE">姓名</th><th data-page-node-id="XCNC6c8XdYP4nhfbkgBAKm">分组</th><th data-page-node-id="iKygA7cLdtmf7ck8bLad5u">更新时间</th></tr></thead>
+                    <table class="data-table" data-page-node-id="b85tDGPkFy5HWCEvCa1yw6"><thead data-page-node-id="7nTaNZsb0yCYUhstAp97rg"><tr data-page-node-id="7IF0rFQjbjFgI7zzmVVMgm"><th data-page-node-id="joE3fBO1uFfYokWlFaJtRY">PIN (手机号)</th><th data-page-node-id="ybkTXNfC3e0DnKhCrEzhsE">姓名</th><th data-page-node-id="XCNC6c8XdYP4nhfbkgBAKm">部门</th><th data-page-node-id="iKygA7cLdtmf7ck8bLad5u">更新时间</th></tr></thead>
                     <tbody id="pins-list" data-page-node-id="KMyxdgbJ1kYhAIgY58QlAa"><tr data-page-node-id="ZXDf2rwt4ne6oSGKB0UCQv"><td colspan="4" class="empty-state" data-page-node-id="HVRmp5GtLbIMCgFyOfVver"><span class="spin" data-page-node-id="TX9dygfxjt3Skalylmnu4A"></span>加载中...</td></tr></tbody></table>
                 </div>
             </div>
@@ -2780,7 +2820,7 @@
             if (dTo) url += '&d_to=' + encodeURIComponent(dTo);
             if (src) url += '&source=' + encodeURIComponent(src);
             url += '&page=' + visitPage + '&page_size=' + VISIT_PAGE_SIZE;
-            // S4修复: 按单 PIN 筛选是手机端同步用法（无需登录）；无筛选/按分组/占位符均需管理员 token
+            // S4修复: 按单 PIN 筛选是手机端同步用法（无需登录）；无筛选/按部门/占位符均需管理员 token
             if (!pinFilter || groupFilter || pinFilter === '__group__') url = withToken(url);
             try {
                 const res = await fetch(url);
@@ -2832,7 +2872,7 @@
             try {
                 const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/pins')); const d = await r.json();
                 if (!d.ok) return;
-                selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按分组筛选...</option>';
+                selPin.innerHTML = '<option value="">不限（全部）</option><option value="__group__">按部门筛选...</option>';
                 (d.pins || []).forEach(function(p) {
                     // v4.26: 名册里「未绑定」的人还没有 PIN，放进筛选框会与「不限（全部）」的 value="" 撞车，跳过
                     if (!p.pin) return;
@@ -2840,7 +2880,7 @@
                     selPin.innerHTML += '<option value="' + escA(p.pin) + '">' + esc(p.name||'') + ' (' + esc(p.pin) + ')</option>';
                 });
                 const gr = await fetch(withToken(VISIT_API_BASE + '/api/v1/groups')); const gd = await gr.json();
-                selGrp.innerHTML = '<option value="">不限分组</option>';
+                selGrp.innerHTML = '<option value="">不限部门</option>';
                 if (gd.groups) gd.groups.forEach(function(g) { selGrp.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
             } catch(e) {}
         }
@@ -3133,6 +3173,12 @@
         }
 
         // ==================== 人员管理 ====================
+        // v4.34: 部门（原「分组」）状态缓存。保存最近一次 /api/v1/groups 的结果与成员数，
+        // 供部门区块渲染、重命名、删除复用 —— 不再让「删除」去猜某个下拉框的当前选中值。
+        let _depts = [];
+        let _deptCounts = {};
+        let _deptUnassigned = 0;
+
         async function loadPins() {
             const tbody = document.getElementById('pins-list');
             try {
@@ -3149,14 +3195,38 @@
                 }
                 const pr = await prRes.json(), gr = await grRes.json();
                 if (!pr.ok) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">无数据</td></tr>'; return; }
-                const sel = document.getElementById('pin-group-filter');
-                sel.innerHTML = '<option value="">全部</option>';
                 const groups = gr.groups || [];
-                groups.forEach(function(g) { sel.innerHTML += '<option value="' + g.id + '">' + esc(g.name||'') + '</option>'; });
-                const groupFilter = sel.value;
+                _depts = groups;
+
+                // v4.34 FIX —— 这就是「部门只能加、删不掉」的根因。
+                // 此前这里是：sel.innerHTML = '<option value="">全部</option>' 后直接 sel.value 取值，
+                // 重建把选中项重置回第一项 ⇒ sel.value 恒为 ""，于是：
+                //   ① 用户选中某部门 → onchange 触发本函数 → 下拉被重建、弹回「全部」⇒ 筛选形同虚设；
+                //   ② delGroup() 读的正是这个下拉 ⇒ gid 恒为空 ⇒ 永远只会提示「请选择要删除的分组」。
+                // 现在先记旧值、重建后原样写回（该部门已被删则回落「全部」）。
+                const sel = document.getElementById('pin-group-filter');
+                const keepVal = sel.value;
+                sel.innerHTML = '<option value="">全部部门</option>';
+                groups.forEach(function(g) {
+                    sel.innerHTML += '<option value="' + escA(String(g.id)) + '">' + esc(g.name||'') + '</option>';
+                });
+                sel.value = groups.some(function(g) { return String(g.id) === String(keepVal); }) ? keepVal : '';
+
                 const allPins = pr.pins || [];
+                // 部门成员数：只统计「已绑定 PIN」的人 —— 名册里未登记的人落不了 group_id
+                _deptCounts = {};
+                _deptUnassigned = 0;
+                allPins.forEach(function(p) {
+                    if (!p.bound || !p.pin) return;
+                    if (p.group_id === null || p.group_id === undefined || p.group_id === '') { _deptUnassigned++; return; }
+                    const k = String(p.group_id);
+                    _deptCounts[k] = (_deptCounts[k] || 0) + 1;
+                });
+                renderDeptList();
+
+                const groupFilter = sel.value;
                 let pins = allPins;
-                if (groupFilter) pins = pins.filter(function(p) { return p.group_id == groupFilter; });
+                if (groupFilter) pins = pins.filter(function(p) { return String(p.group_id) === String(groupFilter); });
                 // v4.26: 名册 = 全部人员的权威集合（服务端内置），此处只做展示与统计
                 const boundN = allPins.filter(function(p) { return p.bound; }).length;
                 const hint = document.getElementById('pins-roster-hint');
@@ -3185,12 +3255,12 @@
                             'data-action="set-advisor-name" data-pin="' + pinAttr + '" style="width:110px;" ' +
                             'title="名册外人员（试岗/改名）：填成名册中的姓名即可与之绑定"></td>');
                     }
-                    // 分组列：没绑定就没有 PIN，无法落库到 advisor_names
+                    // 部门列：没绑定就没有 PIN，无法落库到 advisor_names
                     cells.push(p.bound && p.pin
                         ? '<td><select class="cell-input" data-action="set-pin-group" data-pin="' + pinAttr + '" style="padding:5px 8px;">' +
-                            '<option value="">--</option>' + groups.map(function(g){return '<option value="' + g.id + '" ' + (g.id==p.group_id?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
+                            '<option value="">--</option>' + groups.map(function(g){return '<option value="' + escA(String(g.id)) + '" ' + (String(g.id)===String(p.group_id)?'selected':'') + '>' + esc(g.name||'') + '</option>';}).join('') +
                           '</select></td>'
-                        : '<td class="td-muted" title="该人员登记后即可设置分组">—</td>');
+                        : '<td class="td-muted" title="该人员登记后即可设置部门">—</td>');
                     cells.push('<td class="td-muted">' + (p.updated_at?new Date(p.updated_at).toLocaleString('zh-CN'):'-') + '</td>');
                     return '<tr>' + cells.join('') + '</tr>';
                 }).join('');
@@ -3235,9 +3305,9 @@
             try {
                 const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/pin/set_group?pin='+encodeURIComponent(pin)+'&group_id='+encodeURIComponent(gid)));
                 const d = await r.json();
-                if (!d.ok) { toast('设置分组失败: ' + (d.message || '未知错误'), 'error'); loadPins(); return; }
-                toast('分组已更新', 'success');
-            } catch(e) { toast('设置分组失败：网络错误，请重试', 'error'); loadPins(); }
+                if (!d.ok) { toast('设置部门失败: ' + (d.message || '未知错误'), 'error'); loadPins(); return; }
+                toast('部门已更新', 'success');
+            } catch(e) { toast('设置部门失败：网络错误，请重试', 'error'); loadPins(); }
         }
 
         async function setAdvisorName(pin, name) {
@@ -3249,31 +3319,95 @@
             } catch(e) { toast('更新姓名失败：网络错误，请重试', 'error'); loadPins(); }
         }
 
-        async function addGroup() {
-            const name = document.getElementById('new-group-name').value.trim();
-            if (!name) { toast('请输入分组名', 'error'); return; }
-            try {
-                const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/group/add?name='+encodeURIComponent(name)));
-                const d = await r.json();
-                if (!d.ok) { toast('新建分组失败: ' + (d.message || '未知错误'), 'error'); return; }
-                document.getElementById('new-group-name').value = '';
-                loadPins();
-                toast('分组已创建', 'success');
-            } catch(e) { toast('新建分组失败: 网络错误', 'error'); }
+        // ==================== 部门管理（v4.34） ====================
+        // 每个部门渲染成一个 chip（名称 + 成员数 + 重命名 / 删除），
+        // 删除目标一目了然，不再要求「先去某个下拉里选中它」。
+
+        function renderDeptList() {
+            const box = document.getElementById('dept-list');
+            if (!box) return;
+            const hint = document.getElementById('dept-hint');
+            if (!_depts.length) {
+                box.innerHTML = '<div class="dept-empty">还没有部门。在右侧输入名称并点「新建部门」即可建立。</div>';
+                if (hint) hint.textContent = '共 0 个部门' + (_deptUnassigned ? ' · 未分配 ' + _deptUnassigned + ' 人' : '');
+                return;
+            }
+            box.innerHTML = _depts.map(function(g) {
+                const id = String(g.id);
+                const n = _deptCounts[id] || 0;
+                return '<span class="dept-chip" data-dept-id="' + escA(id) + '">' +
+                    '<span class="dept-chip-name">' + esc(g.name || '') + '</span>' +
+                    '<span class="dept-chip-n">' + n + ' 人</span>' +
+                    '<button class="dept-chip-btn" title="重命名" onclick="startRenameDept(' + escA(id) + ')">' + ic('pencil', 12) + '</button>' +
+                    '<button class="dept-chip-btn dept-chip-del" title="删除部门" onclick="deleteDept(' + escA(id) + ')">' + ic('trash', 12) + '</button>' +
+                '</span>';
+            }).join('');
+            if (hint) hint.textContent = '共 ' + _depts.length + ' 个部门 · 未分配 ' + _deptUnassigned + ' 人';
         }
 
-        async function delGroup() {
-            const gid = document.getElementById('pin-group-filter').value;
-            if (!gid) { toast('请选择要删除的分组', 'error'); return; }
-            // v4.21.2 (13): 自定义确认弹窗
-            if (!(await confirmDialog('删除分组不会删除人员数据，仅取消关联。确定删除分组 #' + gid + '？', '删除分组'))) return;
+        async function addDept() {
+            const el = document.getElementById('new-dept-name');
+            if (!el) return;
+            const name = (el.value || '').trim();
+            if (!name) { toast('请输入部门名称', 'error'); el.focus(); return; }
             try {
-                const r = await fetch(withToken(VISIT_API_BASE+'/api/v1/group/del?id='+encodeURIComponent(gid)));
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/group/add?name=' + encodeURIComponent(name)));
                 const d = await r.json();
-                if (!d.ok) { toast('删除分组失败: ' + (d.message || '未知错误'), 'error'); return; }
+                if (!d.ok) { toast('新建部门失败：' + (d.message || '未知错误'), 'error'); return; }
+                el.value = '';
                 loadPins();
-                toast('分组已删除', 'success');
-            } catch(e) { toast('删除分组失败: 网络错误', 'error'); }
+                toast('部门「' + name + '」已创建', 'success');
+            } catch(e) { toast('新建部门失败：网络错误', 'error'); }
+        }
+
+        // 重命名走 chip 内联编辑：点铅笔 → 该 chip 变输入框 + 保存/取消，回车保存、Esc 取消。
+        function startRenameDept(id) {
+            const chip = document.querySelector('.dept-chip[data-dept-id="' + id + '"]');
+            if (!chip) return;
+            const cur = (_depts.filter(function(g) { return String(g.id) === String(id); })[0] || {}).name || '';
+            chip.innerHTML = '<input type="text" class="input dept-chip-edit" value="' + escA(cur) + '" maxlength="20">' +
+                '<button class="dept-chip-btn" title="保存" onclick="commitRenameDept(' + escA(String(id)) + ')">' + ic('check', 12) + '</button>' +
+                '<button class="dept-chip-btn" title="取消" onclick="renderDeptList()">' + ic('x', 12) + '</button>';
+            const inp = chip.querySelector('input');
+            if (!inp) return;
+            inp.focus();
+            inp.select();
+            inp.addEventListener('keydown', function(ev) {
+                if (ev.key === 'Enter') { ev.preventDefault(); commitRenameDept(id); }
+                else if (ev.key === 'Escape') { ev.preventDefault(); renderDeptList(); }
+            });
+        }
+
+        async function commitRenameDept(id) {
+            const chip = document.querySelector('.dept-chip[data-dept-id="' + id + '"]');
+            const inp = chip ? chip.querySelector('input') : null;
+            const name = inp ? (inp.value || '').trim() : '';
+            if (!name) { toast('部门名称不能为空', 'error'); if (inp) inp.focus(); return; }
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/group/rename?id=' + encodeURIComponent(id) + '&name=' + encodeURIComponent(name)));
+                const d = await r.json();
+                if (!d.ok) { toast('重命名失败：' + (d.message || '未知错误'), 'error'); return; }
+                loadPins();
+                toast('已重命名为「' + name + '」', 'success');
+            } catch(e) { toast('重命名失败：网络错误', 'error'); }
+        }
+
+        async function deleteDept(id) {
+            const d = _depts.filter(function(g) { return String(g.id) === String(id); })[0];
+            if (!d) { toast('该部门已不存在，请刷新后重试', 'error'); loadPins(); return; }
+            const n = _deptCounts[String(id)] || 0;
+            // v4.21.2 (13): 自定义确认弹窗；v4.34 补上「下面有几个人」这个关键后果
+            const msg = '确定删除部门「' + (d.name || '') + '」？\n' +
+                (n > 0 ? '该部门下 ' + n + ' 名成员会变为「未分配」，' : '') +
+                '人员、手机号、通话记录和上门记录都不会被删除。此操作不可撤销。';
+            if (!(await confirmDialog(msg, '删除部门'))) return;
+            try {
+                const r = await fetch(withToken(VISIT_API_BASE + '/api/v1/group/del?id=' + encodeURIComponent(id)));
+                const dd = await r.json();
+                if (!dd.ok) { toast('删除部门失败：' + (dd.message || '未知错误'), 'error'); return; }
+                loadPins();
+                toast('部门「' + (d.name || '') + '」已删除', 'success');
+            } catch(e) { toast('删除部门失败：网络错误', 'error'); }
         }
 
         // ==================== 设置 ====================

@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "AutoDial 一键拨号助手",
+  "version": "6.4.0",
+  "description": "在 CRM 客户页面识别客户手机号，一键拨打并登记上门记录。",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "*://*.zhudaicms.com/*",
+    "*://*.rxhcrm.com/*",
+    "*://*.rongxinhui.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "http://101.34.65.254/*",
+    "http://262ao85kz470.vicp.fun/*",
+    "http://192.168.2.55/*",
+    "http://192.168.3.75/*",
+    "https://gist.githubusercontent.com/*",
+    "https://gitee.com/*",
+    "https://raw.giteeusercontent.com/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://guwen.zhudaicms.com/*",
+        "*://*.zhudaicms.com/*",
+        "*://*.rxhcrm.com/*",
+        "*://*.rongxinhui.com/*"
+      ],
+      "js": ["themes.js", "addr.js", "cs-00-core.js", "cs-10-theme.js", "cs-20-widgets.js", "cs-30-menu.js", "cs-40-dialogs.js", "cs-50-biz.js", "cs-60-iframe.js", "cs-70-boot.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
